@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>logFormatVersion</key>
+	<integer>12</integer>
+	<key>logs</key>
+	<dict>
+		<key>459F991D-C9C8-46B1-A1B9-48998CF12C8B</key>
+		<dict>
+			<key>className</key>
+			<string>IDECommandLineBuildLog</string>
+			<key>documentTypeString</key>
+			<string>&lt;nil&gt;</string>
+			<key>domainType</key>
+			<string>Xcode.IDEActivityLogDomainType.BuildLog</string>
+			<key>fileName</key>
+			<string>459F991D-C9C8-46B1-A1B9-48998CF12C8B.xcactivitylog</string>
+			<key>hasPrimaryLog</key>
+			<true/>
+			<key>primaryObservable</key>
+			<dict>
+				<key>highLevelStatus</key>
+				<string>S</string>
+				<key>totalNumberOfAnalyzerIssues</key>
+				<integer>0</integer>
+				<key>totalNumberOfErrors</key>
+				<integer>0</integer>
+				<key>totalNumberOfTestFailures</key>
+				<integer>0</integer>
+				<key>totalNumberOfWarnings</key>
+				<integer>0</integer>
+			</dict>
+			<key>schemeIdentifier-containerName</key>
+			<string>Sirr project</string>
+			<key>schemeIdentifier-schemeName</key>
+			<string>Sirr</string>
+			<key>schemeIdentifier-sharedScheme</key>
+			<integer>1</integer>
+			<key>signature</key>
+			<string>Cleaning project Sirr with scheme Sirr</string>
+			<key>timeStartedRecording</key>
+			<real>788108524.151649</real>
+			<key>timeStoppedRecording</key>
+			<real>788108524.95980799</real>
+			<key>title</key>
+			<string>Cleaning project Sirr with scheme Sirr</string>
+			<key>uniqueIdentifier</key>
+			<string>459F991D-C9C8-46B1-A1B9-48998CF12C8B</string>
+		</dict>
+		<key>87BE00A2-D659-4CD9-A885-97044D97EF44</key>
+		<dict>
+			<key>className</key>
+			<string>IDECommandLineBuildLog</string>
+			<key>documentTypeString</key>
+			<string>&lt;nil&gt;</string>
+			<key>domainType</key>
+			<string>Xcode.IDEActivityLogDomainType.BuildLog</string>
+			<key>fileName</key>
+			<string>87BE00A2-D659-4CD9-A885-97044D97EF44.xcactivitylog</string>
+			<key>hasPrimaryLog</key>
+			<true/>
+			<key>primaryObservable</key>
+			<dict>
+				<key>highLevelStatus</key>
+				<string>S</string>
+				<key>totalNumberOfAnalyzerIssues</key>
+				<integer>0</integer>
+				<key>totalNumberOfErrors</key>
+				<integer>0</integer>
+				<key>totalNumberOfTestFailures</key>
+				<integer>0</integer>
+				<key>totalNumberOfWarnings</key>
+				<integer>0</integer>
+			</dict>
+			<key>schemeIdentifier-containerName</key>
+			<string>Sirr project</string>
+			<key>schemeIdentifier-schemeName</key>
+			<string>Sirr</string>
+			<key>schemeIdentifier-sharedScheme</key>
+			<integer>1</integer>
+			<key>signature</key>
+			<string>Building project Sirr with scheme Sirr</string>
+			<key>timeStartedRecording</key>
+			<real>788108524.97638702</real>
+			<key>timeStoppedRecording</key>
+			<real>788108686.74128306</real>
+			<key>title</key>
+			<string>Building project Sirr with scheme Sirr</string>
+			<key>uniqueIdentifier</key>
+			<string>87BE00A2-D659-4CD9-A885-97044D97EF44</string>
+		</dict>
+	</dict>
+</dict>
+</plist>

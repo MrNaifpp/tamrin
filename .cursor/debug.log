@@ -1,0 +1,2 @@
+{"timestamp":1766437967006,"sessionId":"debug-session","location":"EventHeroDetailView.swift:scroll","data":{"height":1190,"width":621.66666666666663},"message":"Scroll content geometry","runId":"run1","hypothesisId":"H2"}
+{"location":"EventHeroDetailView.swift:title","hypothesisId":"H1","message":"Title block geometry","data":{"width":581.66666666666663,"height":225.66666666666666},"timestamp":1766437967007,"runId":"run1","sessionId":"debug-session"}

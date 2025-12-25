@@ -1,0 +1,24 @@
+{
+  "source": "/Users/naifalialshahrani/Documents/tamrin/Sirr/NewActivtyCardView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "اسم الفعالية",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 21
+        }
+      },
+      {
+        "comment": "",
+        "key": "يوم الثلاثاء، الساعة 6:00 م",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 25
+        }
+      }
+    ]
+  },
+  "version": 1
+}
