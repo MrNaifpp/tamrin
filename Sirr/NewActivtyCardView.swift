@@ -10,7 +10,7 @@ import SwiftUI
 struct NewActivtyCardView: View {
     var eventName: String = "اسم الفعالية"
     var eventDate: String = "يوم الثلاثاء، الساعة 6:00 م"
-    var imageName: ImageResource = .pic
+    var imageName: ImageResource = .card1
     
     var body: some View {
         GeometryReader { geometry in
@@ -26,7 +26,7 @@ struct NewActivtyCardView: View {
                 ZStack(alignment: .bottom) {
                     // Blurred gradient layer (lighter, more blur, smaller height)
                     Rectangle()
-                        .fill(
+                        .fill( 
                             LinearGradient(
                                 gradient: Gradient(stops: [
                                     .init(color: Color.black.opacity(0.0), location: 0.0),
@@ -62,10 +62,10 @@ struct NewActivtyCardView: View {
                 // Text overlay at bottom
                 VStack(spacing: 12) {
                     Text(eventName)
-                        .font(.system(size: 28, weight: .semibold))
+                        .font(.appHeadline)
                         .foregroundStyle(.white)
                     Text(eventDate)
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.appSubheadline)
                         .foregroundStyle(.white)
                 }
                 .padding(.bottom, 56)
@@ -75,7 +75,6 @@ struct NewActivtyCardView: View {
         .clipShape(
             RoundedRectangle(cornerRadius: 36, style: .continuous)
         )
-        .shadow(color: .black.opacity(0.2), radius: 40, x: 0, y: 10)
     }
 }
 
