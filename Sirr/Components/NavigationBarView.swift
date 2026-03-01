@@ -11,6 +11,9 @@ struct NavigationBarView: View {
     var title: String
     var showDiamondIcons: Bool = true
     var onPlusButtonTap: (() -> Void)? = nil
+    var onProfileTap: (() -> Void)? = nil
+    /// When set, the profile icon shows this image instead of the default person icon.
+    var avatarURL: String? = nil
     
     var body: some View {
         HStack(alignment: .center) {
@@ -57,18 +60,55 @@ struct NavigationBarView: View {
                     }
                 }
                 
-                // Profile icon
-                Image(systemName: "person.crop.circle.fill")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 40, height: 40)
-                    .foregroundStyle(Color.gray.opacity(0.7))
+                // Profile icon (avatar image if avatarURL exists, else person icon)
+                Group {
+                    if let onProfileTap = onProfileTap {
+                        Button(action: onProfileTap) {
+                            profileAvatarView
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        profileAvatarView
+                    }
+                }
             }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
         .frame(maxWidth: .infinity)
         .environment(\.layoutDirection, .rightToLeft)
+    }
+    
+    @ViewBuilder
+    private var profileAvatarView: some View {
+        if let urlString = avatarURL, let url = URL(string: urlString) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .failure, .empty:
+                    Image(systemName: "person.crop.circle.fill")
+                        .resizable()
+                        .scaledToFit()
+                        .foregroundStyle(Color.gray.opacity(0.7))
+                @unknown default:
+                    Image(systemName: "person.crop.circle.fill")
+                        .resizable()
+                        .scaledToFit()
+                        .foregroundStyle(Color.gray.opacity(0.7))
+                }
+            }
+            .frame(width: 40, height: 40)
+            .clipShape(Circle())
+        } else {
+            Image(systemName: "person.crop.circle.fill")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 40, height: 40)
+                .foregroundStyle(Color.gray.opacity(0.7))
+        }
     }
 }
 

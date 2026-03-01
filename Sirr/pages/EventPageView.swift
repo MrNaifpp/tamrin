@@ -15,108 +15,153 @@ enum NavigationDestination: Hashable {
 }
 
 struct EventPageView: View {
+    var authVM: AuthViewModel? = nil
+    @Binding var deepLinkEventId: UUID?
     @Namespace private var zoomNamespace
     @State private var currentPage: Int = 0
     @State private var path: [EventData] = []
     @State private var navigationPath = NavigationPath()
     @State private var selectedTab: Int = 0
+    @State private var showEditProfileSheet = false
+    @State private var events: [EventData] = []
+    @State private var eventsLoading = false
+    @State private var eventsError: String? = nil
     
-    // Sample events data - can be replaced with actual data model
-    let events: [EventData] = [
-        EventData(
-            name: "اسم الفعالية",
-            date: "يوم الثلاثاء، الساعة 6:00 م",
-            image: .card1
-        ),
-        EventData(
-            name: "",
-            date: "",
-            image: .card2
-        ),
-        EventData(
-            name: "",
-            date: "",
-            image: .card3
-        ),
-        EventData(
-            name: "",
-            date: "",
-            image: .card4
-        )
-    ]
-    
-    init() {
-            // Customize the dots color
-            UIPageControl.appearance().currentPageIndicatorTintColor = .red  // current dot
-            UIPageControl.appearance().pageIndicatorTintColor = .gray       // other dots
-        }
+    init(authVM: AuthViewModel? = nil, deepLinkEventId: Binding<UUID?> = .constant(nil)) {
+        self.authVM = authVM
+        self._deepLinkEventId = deepLinkEventId
+    }
     
     var body: some View {
         NavigationStack(path: $navigationPath) {
             GeometryReader { geometry in
-                ZStack{
-                    
-                    Image(events[currentPage].image)
-                        .scaledToFill()
-                        .frame(width: geometry.size.width, height: geometry.size.height)
-                        .ignoresSafeArea()
-                        .blur(radius: 16)
-                        .transition(.opacity)
-                        .animation(.easeInOut(duration: 0.3), value: currentPage)
-
-                        
-
-                    Color.black.opacity(0.3)
-                        .frame(width: geometry.size.width, height: geometry.size.height+100)
-                        .ignoresSafeArea()
-                    
-                    VStack {
-                        NavigationBarView(title: "القادمة", onPlusButtonTap: {
-                            navigationPath.append(NavigationDestination.newEvent)
-                        })
-                        
-                        // Page View with swipeable cards
-                        
-                        
-                        
-                        TabView(selection: $currentPage) {
-                            ForEach(Array(events.enumerated()), id: \.offset) { index, event in
-                                VStack(spacing: 0) {
-                                    Spacer(minLength: 18)
-                                    
-                                    NavigationLink(value: event) {
-                                        NewActivtyCardView(
-                                            eventName: event.name,
-                                            eventDate: event.date,
-                                            imageName: event.image
-                                        )
-                                        .matchedTransitionSource(id: event.id, in: zoomNamespace)
-                                        .frame(height: min(612, geometry.size.height * 0.75))
-                                        .padding(.horizontal, 20)
+                ZStack {
+                    if events.isEmpty && !eventsLoading {
+                        // Empty state: gradient background, message, CTA
+                        emptyStateBackground
+                            .frame(
+                                width: geometry.size.width,
+                                height: geometry.size.height + geometry.safeAreaInsets.top + geometry.safeAreaInsets.bottom
+                            )
+                            .ignoresSafeArea(edges: .all)
+                        emptyStateContent(geometry: geometry)
+                    } else {
+                        // Full-screen background image for current event (or default when loading)
+                        eventBackgroundImage(currentPage: min(currentPage, events.count - 1))
+                            .frame(
+                                width: geometry.size.width,
+                                height: geometry.size.height + geometry.safeAreaInsets.top + geometry.safeAreaInsets.bottom
+                            )
+                            .clipped()
+                            .ignoresSafeArea(edges: .all)
+                            .blur(radius: 8)
+                            .transition(.opacity)
+                            .animation(.easeInOut(duration: 0.3), value: currentPage)
+                        Color.black.opacity(0.3)
+                            .frame(
+                                width: geometry.size.width,
+                                height: geometry.size.height + geometry.safeAreaInsets.top + geometry.safeAreaInsets.bottom
+                            )
+                            .ignoresSafeArea(edges: .all)
+                        VStack {
+                            if eventsLoading && events.isEmpty {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(1.2)
+                                Spacer()
+                            } else if !events.isEmpty {
+                                TabView(selection: $currentPage) {
+                                    ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
+                                        VStack(spacing: 0) {
+                                            Spacer(minLength: 18)
+                                            NavigationLink(value: event) {
+                                                NewActivtyCardView(
+                                                    eventName: event.name,
+                                                    eventDate: event.date,
+                                                    imageURL: event.imageUrl,
+                                                    imageName: .card1
+                                                )
+                                                .matchedTransitionSource(id: event.id, in: zoomNamespace)
+                                                .frame(height: min(612, geometry.size.height * 0.75))
+                                                .padding(.horizontal, 20)
+                                            }
+                                            .buttonStyle(.plain)
+                                            Spacer(minLength: 20)
+                                        }
+                                        .frame(width: geometry.size.width)
+                                        .tag(index)
                                     }
-                                    .buttonStyle(.plain)
-                                    
-                                    Spacer(minLength: 20)
                                 }
-                                .frame(width: geometry.size.width)
-                                .tag(index)
+                                .tabViewStyle(.page(indexDisplayMode: .always))
+                                .animation(.smooth, value: currentPage)
+                                .onChange(of: currentPage) { _ in
+                                    hapticMedium()
+                                }
                             }
+                            Spacer()
                         }
-                        .tabViewStyle(.page(indexDisplayMode: .always))
-                        
-                        .animation(.smooth, value: currentPage)
-                        .onChange(of: currentPage) { _ in
-                            hapticMedium()
-                        }
-                        
-                        Spacer()
-                        
-                        // Bottom Navigation Bar
-                        // BottomNavigationBarView(selectedTab: $selectedTab)
-                        //     .padding(.bottom, geometry.safeAreaInsets.bottom > 0 ? 0 : 8)
+                        .ignoresSafeArea(.keyboard, edges: .top)
                     }
-                   
-                    .ignoresSafeArea(.keyboard, edges: .top)
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("القادمة") {
+                        Task { await authVM?.logout() }
+                    }
+                    .font(.appTitle)
+                    .foregroundStyle(Color.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    HStack(spacing: 12) {
+                        Button {
+                            navigationPath.append(NavigationDestination.newEvent)
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundStyle(.black)
+                                .frame(width: 40, height: 40)
+                                .background(Color.white)
+                                .clipShape(Circle())
+                                .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+                        }
+                        .buttonStyle(.plain)
+                        Button {
+                            showEditProfileSheet = true
+                        } label: {
+                            eventPageProfileAvatar
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                }
+            }
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .environment(\.layoutDirection, .rightToLeft)
+            .onAppear {
+                #if canImport(UIKit)
+                UIPageControl.appearance().currentPageIndicatorTintColor = .red
+                UIPageControl.appearance().pageIndicatorTintColor = .gray
+                #endif
+                Task {
+                    await authVM?.loadCurrentProfile()
+                    await loadEvents()
+                }
+            }
+            .onChange(of: deepLinkEventId) { newId in
+                guard let eventId = newId else { return }
+                Task {
+                    do {
+                        let record = try await EventService.shared.getEventById(eventId)
+                        let eventData = EventData.from(record: record)
+                        navigationPath.append(eventData)
+                    } catch {
+                        print("[DeepLink] Failed to load event: \(error.localizedDescription)")
+                    }
+                    deepLinkEventId = nil
                 }
             }
             .navigationDestination(for: EventData.self) { event in
@@ -126,7 +171,7 @@ struct EventPageView: View {
                         navigationPath.removeLast()
                     },
                     onEnroll: {
-                        // Hook for enroll action
+                        Task { await loadEvents() }
                     }
                 )
                 .navigationTransition(.zoom(sourceID: event.id, in: zoomNamespace))
@@ -137,11 +182,109 @@ struct EventPageView: View {
                     NewEventView()
                 }
             }
+            .sheet(isPresented: $showEditProfileSheet) {
+                EditProfileSheet(
+                    authVM: authVM ?? AuthViewModel(),
+                    isPresented: $showEditProfileSheet
+                )
+                .presentationDetents([.fraction(0.5)])
+                .presentationDragIndicator(.visible)
+            }
         }
     }
 }
 
-// MARK: - Haptics
+// MARK: - Events loading & empty state
+private extension EventPageView {
+    func loadEvents() async {
+        eventsLoading = true
+        eventsError = nil
+        defer { eventsLoading = false }
+        do {
+            let records = try await EventService.shared.getEventsForCurrentUser()
+            events = records.map { EventData.from(record: $0) }
+            if currentPage >= events.count && !events.isEmpty {
+                currentPage = events.count - 1
+            } else if events.isEmpty {
+                currentPage = 0
+            }
+        } catch {
+            eventsError = error.localizedDescription
+            events = []
+        }
+    }
+
+    var emptyStateBackground: some View {
+        LinearGradient(
+            gradient: Gradient(colors: [
+                Color(red: 0.55, green: 0.23, blue: 0.36),
+                Color(red: 0.10, green: 0.30, blue: 0.23)
+            ]),
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    func emptyStateContent(geometry: GeometryProxy) -> some View {
+        VStack(spacing: 24) {
+            Spacer()
+            Text("لا توجد فعاليات")
+                .font(.appTitle)
+                .foregroundStyle(.white)
+            Text("أنشئ فعالية أو انضم إلى واحدة")
+                .font(.appBody)
+                .foregroundStyle(.white.opacity(0.9))
+                .multilineTextAlignment(.center)
+            Button {
+                navigationPath.append(NavigationDestination.newEvent)
+            } label: {
+                Text("إنشاء فعالية")
+                    .font(.headline)
+                    .foregroundStyle(.black)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 54)
+                    .background(RoundedRectangle(cornerRadius: 27, style: .continuous).fill(Color.white))
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 48)
+            .padding(.top, 16)
+            Spacer()
+        }
+    }
+
+    @ViewBuilder
+    func eventBackgroundImage(currentPage: Int) -> some View {
+        if currentPage >= 0, currentPage < events.count,
+           let resource = EventData.imageResource(for: events[currentPage].imageUrl) {
+            Image(resource)
+                .resizable()
+                .scaledToFill()
+                .aspectRatio(4/3, contentMode: .fill)
+        } else if currentPage >= 0, currentPage < events.count,
+                  let urlString = events[currentPage].imageUrl,
+                  urlString.hasPrefix("http"),
+                  let url = URL(string: urlString) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                case .failure, .empty:
+                    Image(.card1).resizable().scaledToFill()
+                @unknown default:
+                    Image(.card1).resizable().scaledToFill()
+                }
+            }
+            .aspectRatio(4/3, contentMode: .fill)
+        } else {
+            Image(.card1)
+                .resizable()
+                .scaledToFill()
+                .aspectRatio(4/3, contentMode: .fill)
+        }
+    }
+}
+
+// MARK: - Haptics & Toolbar helpers
 private extension EventPageView {
     func hapticMedium() {
         #if canImport(UIKit)
@@ -149,6 +292,38 @@ private extension EventPageView {
         generator.prepare()
         generator.impactOccurred()
         #endif
+    }
+
+    @ViewBuilder
+    var eventPageProfileAvatar: some View {
+        if let urlString = authVM?.currentProfile?.avatarUrl, let url = URL(string: urlString) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .failure, .empty:
+                    Image(systemName: "person.crop.circle.fill")
+                        .resizable()
+                        .scaledToFit()
+                        .foregroundStyle(Color.gray.opacity(0.7))
+                @unknown default:
+                    Image(systemName: "person.crop.circle.fill")
+                        .resizable()
+                        .scaledToFit()
+                        .foregroundStyle(Color.gray.opacity(0.7))
+                }
+            }
+            .frame(width: 40, height: 40)
+            .clipShape(Circle())
+        } else {
+            Image(systemName: "person.crop.circle.fill")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 40, height: 40)
+                .foregroundStyle(Color.gray.opacity(0.7))
+        }
     }
 }
 
@@ -223,4 +398,3 @@ private struct BottomNavItem: View {
 #Preview {
     EventPageView()
 }
-

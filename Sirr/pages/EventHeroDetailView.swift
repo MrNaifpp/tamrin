@@ -6,6 +6,8 @@
 //
 
 import SwiftUI
+internal import Auth
+import Supabase
 
 struct EventHeroDetailView: View {
     let event: EventData
@@ -13,30 +15,54 @@ struct EventHeroDetailView: View {
     var onEnroll: () -> Void
 
     @State private var isEnrolled = false
+    @State private var isLeavingEvent = false
     @State private var showEnrollmentSheet = false
+    @State private var isRegistrationLocked: Bool
+    @State private var isTogglingLock = false
+    @State private var currentUserId: UUID?
+    @State private var participants: [ParticipantRecord] = []
+    @State private var participantsLoading = false
+
+    init(event: EventData, onClose: @escaping () -> Void, onEnroll: @escaping () -> Void) {
+        self.event = event
+        self.onClose = onClose
+        self.onEnroll = onEnroll
+        self._isRegistrationLocked = State(initialValue: event.registrationLocked)
+    }
+
+    private var isOwner: Bool {
+        guard let uid = currentUserId else { return false }
+        return event.creatorId == uid
+    }
     
-    // Sample participants
-    private let participants: [String] = [
-        "محمد معلا",
-        "عبدالله قحطاني",
-        "عبدالمحسن",
-        "مراد الجهني",
-        "باسل العسكر",
-        "أحمد رشوان",
-        "عبدالرحمن الظاهر",
-        "حسن الشهري",
-        "خالد المسلم"
-    ]
+    private var eventHeroBackgroundImage: some View {
+        Group {
+            if let resource = EventData.imageResource(for: event.imageUrl) {
+                Image(resource).resizable().scaledToFill()
+            } else if let urlString = event.imageUrl,
+                      urlString.hasPrefix("http"),
+                      let url = URL(string: urlString) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image): image.resizable().scaledToFill()
+                    case .failure, .empty: Image(.card1).resizable().scaledToFill()
+                    @unknown default: Image(.card1).resizable().scaledToFill()
+                    }
+                }
+            } else {
+                Image(.card1).resizable().scaledToFill()
+            }
+        }
+    }
+
 
     var body: some View {
         ZStack(alignment: .top) {
             // Background
             GeometryReader { proxy in
-                Image(event.image)
-                   
+                eventHeroBackgroundImage
                     .scaledToFill()
                     .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
-                   
                     .blur(radius: 14)
                     .allowsHitTesting(false)
             }
@@ -63,108 +89,198 @@ struct EventHeroDetailView: View {
                     .padding(.horizontal, 24)
                     .padding(.top, 8)
                     
-                    // Enroll button (pill)
-                    Button {
-                        if isEnrolled {
-                            isEnrolled = false
-                        } else {
-                            showEnrollmentSheet = true
-                        }
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: isEnrolled ? "minus" : "plus")
-                                .foregroundStyle(isEnrolled ? Color.white : Color.black)
-                            Text(isEnrolled ? "الإعتــذار من التمريــــن" : "سجل في التمرين")
-                                .font(.appBody)
-                                .foregroundStyle(isEnrolled ? Color.white : Color.black)
-                        }
-                        .font(.appBodySemibold)
-                        .foregroundStyle(Color.white)
-                        .frame(maxWidth: .infinity, minHeight: 54)
-                        .background(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .fill(isEnrolled ? Color.red : Color.white)
-                                .shadow(color: .black.opacity(0.35), radius: 8, y: 8)
-                                
-                        )
-                    }
-                    .sheet(isPresented: $showEnrollmentSheet) {
-                        EnrollmentSheetView(
-                            event: event,
-                            onEnroll: {
-                                isEnrolled = true
-                                showEnrollmentSheet = false
-                                onEnroll()
+                    if isOwner {
+                        // Owner actions
+                        HStack(spacing: 12) {
+                            Button {
+                                guard !isTogglingLock else { return }
+                                isTogglingLock = true
+                                Task {
+                                    defer { isTogglingLock = false }
+                                    do {
+                                        let newValue = try await EventService.shared.toggleRegistrationLock(eventId: event.id)
+                                        isRegistrationLocked = newValue
+                                    } catch {
+                                        print("[ToggleLock] Error — \(error.localizedDescription)")
+                                    }
+                                }
+                            } label: {
+                                ActionChip(
+                                    icon: isRegistrationLocked ? "lock.open.fill" : "lock.fill",
+                                    title: isRegistrationLocked ? "فتح التسجيل" : "قفل التسجيل",
+                                    style: .solid
+                                )
+                                .opacity(isTogglingLock ? 0.5 : 1.0)
                             }
-                        )
+                            .buttonStyle(.plain)
+                            .disabled(isTogglingLock)
+
+                            ShareLink(item: "sirr://event/\(event.id.uuidString)") {
+                                ActionChip(icon: "square.and.arrow.up.fill", title: "مشاركة", style: .translucent)
+                            }
+                            .buttonStyle(.plain)
+
+                            Button {
+                                // Settings action placeholder
+                            } label: {
+                                ActionChip(icon: "gearshape.fill", title: "الإعدادات", style: .translucent)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    } else {
+                        // Participant: enroll / unenroll button
+                        if isRegistrationLocked && !isEnrolled {
+                            HStack(spacing: 10) {
+                                Image(systemName: "lock.fill")
+                                    .foregroundStyle(.white.opacity(0.7))
+                                Text("التسجيل مغلق")
+                                    .font(.appBody)
+                                    .foregroundStyle(.white.opacity(0.7))
+                            }
+                            .font(.appBodySemibold)
+                            .frame(maxWidth: .infinity, minHeight: 54)
+                            .background(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .fill(Color.gray.opacity(0.4))
+                            )
+                        } else {
+                            Button {
+                                if isEnrolled {
+                                    handleLeaveEvent()
+                                } else {
+                                    showEnrollmentSheet = true
+                                }
+                            } label: {
+                                HStack(spacing: 10) {
+                                    if isLeavingEvent {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    } else {
+                                        Image(systemName: isEnrolled ? "minus" : "plus")
+                                            .foregroundStyle(isEnrolled ? Color.white : Color.black)
+                                        Text(isEnrolled ? "اعتذار عن التمرين" : "سجل في التمرين")
+                                            .font(.appBody)
+                                            .foregroundStyle(isEnrolled ? Color.white : Color.black)
+                                    }
+                                }
+                                .font(.appBodySemibold)
+                                .foregroundStyle(Color.white)
+                                .frame(maxWidth: .infinity, minHeight: 54)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                        .fill(isEnrolled ? Color.red : Color.white)
+                                        .shadow(color: .black.opacity(0.35), radius: 8, y: 8)
+                                )
+                            }
+                            .disabled(isLeavingEvent)
+                            .sheet(isPresented: $showEnrollmentSheet) {
+                                EnrollmentSheetView(
+                                    event: event,
+                                    onEnroll: {
+                                        isEnrolled = true
+                                        showEnrollmentSheet = false
+                                        Task { await loadParticipants() }
+                                        onEnroll()
+                                    }
+                                )
+                            }
+                        }
                     }
-                    
-                    // Quick actions (glass chips)
-                    // if isEnrolled {
-                    //     HStack(spacing: 12) {
-                    //         ActionChip(icon: "lock.fill", title: "قفل التسجيل", style: .solid)
-                    //         ActionChip(icon: "gearshape.fill", title: "إعدادات", style: .translucent)
-                    //         ActionChip(icon: "square.and.arrow.up.fill", title: "مشاركة", style: .translucent)
-                    //     }
-                    // }
                     
                     // Progress card (glass)
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Text("نسبة اكتمال التمرين")
-                                .font(.appCallout)
-                                .foregroundStyle(.white)
-                            Spacer()
-                            Text("9/16")
-                                .font(.appCallout)
-                                .foregroundStyle(.white.opacity(0.9))
+                    if let max = event.maxParticipants, max > 0 {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Text("نسبة اكتمال التمرين")
+                                    .font(.appCallout)
+                                    .foregroundStyle(.white)
+                                Spacer()
+                                Text("\(participants.count)/\(max)")
+                                    .font(.appCallout)
+                                    .foregroundStyle(.white.opacity(0.9))
+                            }
+
+                            ProgressView(value: Double(participants.count), total: Double(max))
+                                .frame(height: 20)
+                                .tint(.green)
                         }
-                        
-                        ProgressView(value: 9, total: 16)
-                            .frame(height: 20)
-                            .tint(.green)
-                            
+                        .padding()
+                        .background(Color.white.opacity(0.2))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .stroke(.white.opacity(0.2), lineWidth: 1)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .shadow(color: .black.opacity(0.25), radius: 12, y: 6)
                     }
-                    .padding()
-                    .background(Color.white.opacity(0.2))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(.white.opacity(0.2), lineWidth: 1)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .shadow(color: .black.opacity(0.25), radius: 12, y: 6)
-                    
+
                     // Participants list (glass rows)
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("القائمة")
-                            .font(.appBodySemibold)
-                            .foregroundStyle(.white.opacity(0.9))
-                        
-                        ForEach(participants, id: \.self) { name in
-                            HStack(spacing: 12) {
-                                Image(systemName: "person.crop.circle.fill")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 38, height: 38)
-                                    .foregroundStyle(.white.opacity(0.9))
-                                
-                                Text(name)
-                                    .font(.appBodyMedium)
-                                    .foregroundStyle(.white)
-                                
-                                Spacer()
-                                
-                                
+                        HStack {
+                            Text("القائمة")
+                                .font(.appBodySemibold)
+                                .foregroundStyle(.white.opacity(0.9))
+                            Spacer()
+                            Text("\(participants.count)")
+                                .font(.appBody)
+                                .foregroundStyle(.white.opacity(0.6))
+                        }
+
+                        if participantsLoading {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .frame(maxWidth: .infinity, minHeight: 60)
+                        } else if participants.isEmpty {
+                            Text("لا يوجد مشاركين بعد")
+                                .font(.appBody)
+                                .foregroundStyle(.white.opacity(0.5))
+                                .frame(maxWidth: .infinity, minHeight: 60)
+                        } else {
+                            ForEach(participants) { participant in
+                                HStack(spacing: 12) {
+                                    if let avatarUrl = participant.avatarUrl, let url = URL(string: avatarUrl) {
+                                        AsyncImage(url: url) { phase in
+                                            switch phase {
+                                            case .success(let image):
+                                                image.resizable().scaledToFill()
+                                            default:
+                                                Image(systemName: "person.crop.circle.fill")
+                                                    .resizable().scaledToFit()
+                                                    .foregroundStyle(.white.opacity(0.9))
+                                            }
+                                        }
+                                        .frame(width: 38, height: 38)
+                                        .clipShape(Circle())
+                                    } else {
+                                        Image(systemName: "person.crop.circle.fill")
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(width: 38, height: 38)
+                                            .foregroundStyle(.white.opacity(0.9))
+                                    }
+
+                                    Text(participant.displayName ?? "مشارك")
+                                        .font(.appBodyMedium)
+                                        .foregroundStyle(.white)
+
+                                    Spacer()
+
+                                    if participant.userId == event.creatorId {
+                                        Text("المنظم")
+                                            .font(.appCaption)
+                                            .foregroundStyle(.white.opacity(0.6))
+                                    }
+                                }
+                                .padding(.vertical, 12)
+                                .padding(.horizontal, 14)
+                                .background(Color.white.opacity(0.2))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .stroke(.white.opacity(0.18), lineWidth: 1)
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
                             }
-                            .padding(.vertical, 12)
-                            .padding(.horizontal, 14)
-                            .background(Color.white.opacity(0.2))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .stroke(.white.opacity(0.18), lineWidth: 1)
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
                         }
                     }
                     .padding(.bottom, 32)
@@ -179,7 +295,40 @@ struct EventHeroDetailView: View {
             .padding(.bottom, 24)
         }
         }
-       
+        .onAppear {
+            Task {
+                let client = SupabaseClientManager.shared.client
+                currentUserId = try? await client.auth.session.user.id
+                await loadParticipants()
+            }
+        }
+    }
+
+    private func loadParticipants() async {
+        participantsLoading = true
+        defer { participantsLoading = false }
+        do {
+            participants = try await EventService.shared.getEventParticipants(eventId: event.id)
+            if let uid = currentUserId {
+                isEnrolled = participants.contains { $0.userId == uid }
+            }
+        } catch {
+            print("[Participants] Error — \(error.localizedDescription)")
+        }
+    }
+
+    private func handleLeaveEvent() {
+        isLeavingEvent = true
+        Task {
+            defer { isLeavingEvent = false }
+            do {
+                try await EventService.shared.leaveEvent(eventId: event.id)
+                isEnrolled = false
+                await loadParticipants()
+            } catch {
+                print("[LeaveEvent] Error — \(error.localizedDescription)")
+            }
+        }
     }
 }
 
@@ -269,18 +418,40 @@ struct EnrollmentSheetView: View {
     @State private var showAddParticipant: Bool = false
     @State private var newParticipantName: String = ""
     @State private var participants: [String] = []
+    @State private var isProcessingPayment = false
+    @State private var paymentError: String?
     
     // Sample events for preview (including current event in the middle)
     private var allEvents: [EventData] {
         [
-            EventData(name: "اسم الفعالية", date: "يوم الثلاثاء، الساعة 6:00 م", image: .card1),
+            EventData(id: UUID(), name: "اسم الفعالية", date: "يوم الثلاثاء، الساعة 6:00 م", imageUrl: nil),
             event,
-            EventData(name: "التمرين", date: "يوم الاثنين", image: .actnew)
+            EventData(id: UUID(), name: "التمرين", date: "يوم الاثنين", imageUrl: nil)
         ]
     }
     
     // Current user
     private let userName = "محمد معلا"
+
+    private var enrollmentEventImage: some View {
+        Group {
+            if let resource = EventData.imageResource(for: event.imageUrl) {
+                Image(resource).resizable().scaledToFill()
+            } else if let urlString = event.imageUrl,
+                      urlString.hasPrefix("http"),
+                      let url = URL(string: urlString) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image): image.resizable().scaledToFill()
+                    case .failure, .empty: Image(.card1).resizable().scaledToFill()
+                    @unknown default: Image(.card1).resizable().scaledToFill()
+                    }
+                }
+            } else {
+                Image(.card1).resizable().scaledToFill()
+            }
+        }
+    }
     
     var body: some View {
         ZStack {
@@ -321,9 +492,7 @@ struct EnrollmentSheetView: View {
                 VStack(spacing: 0) {
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: 24) {
-                            Image(event.image)
-                                .resizable()
-                                .scaledToFill()
+                            enrollmentEventImage
                                 .frame(width: 140, height: 100)
                                 .clipped()
                                 .cornerRadius(16)
@@ -339,7 +508,23 @@ struct EnrollmentSheetView: View {
                                 .font(.appBody)
                                 .foregroundStyle(.white.opacity(0.9))
                                 .padding(.top, 8)
-                            
+
+                            if event.pricePerPerson > 0 {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "creditcard.fill")
+                                        .foregroundStyle(.white.opacity(0.8))
+                                    Text(String(format: "%.0f ر.س / شخص", event.pricePerPerson))
+                                        .font(.appBodySemibold)
+                                        .foregroundStyle(.white.opacity(0.9))
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .fill(Color.white.opacity(0.12))
+                                )
+                            }
+
                             // Instructional text
                             HStack {
                                 Text("اضغط على اسمك لإكمال التسجيل")
@@ -477,21 +662,37 @@ struct EnrollmentSheetView: View {
                     }
                     
                     // Register button at bottom
-                    VStack {
+                    VStack(spacing: 8) {
                         Button {
-                            onEnroll()
-                            dismiss()
+                            handleEnroll()
                         } label: {
-                            Text("سجل")
-                                .font(.appBodySemibold)
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .background(isNameSelected ? Color.blue : Color.blue.opacity(0.5))
-                                .clipShape(RoundedRectangle(cornerRadius: 44, style: .continuous))
-                                .shadow(color: isNameSelected ? .black.opacity(0.3) : .clear, radius: 8, y: 4)
+                            HStack(spacing: 8) {
+                                if isProcessingPayment {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                } else {
+                                    if event.pricePerPerson > 0 {
+                                        Image(systemName: "apple.logo")
+                                            .foregroundStyle(.white)
+                                    }
+                                    Text(event.pricePerPerson > 0 ? "سجل — Apple Pay" : "سجل")
+                                        .font(.appBodySemibold)
+                                        .foregroundStyle(.white)
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(isNameSelected ? Color.blue : Color.blue.opacity(0.5))
+                            .clipShape(RoundedRectangle(cornerRadius: 44, style: .continuous))
+                            .shadow(color: isNameSelected ? .black.opacity(0.3) : .clear, radius: 8, y: 4)
                         }
-                        .disabled(!isNameSelected)
+                        .disabled(!isNameSelected || isProcessingPayment)
+
+                        if let paymentError {
+                            Text(paymentError)
+                                .font(.appCaption)
+                                .foregroundStyle(.red)
+                        }
                     }
                     .padding(.horizontal, 16)
                     .padding(.bottom, 32)
@@ -500,5 +701,41 @@ struct EnrollmentSheetView: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+    }
+
+    private func handleEnroll() {
+        if event.pricePerPerson > 0 {
+            isProcessingPayment = true
+            paymentError = nil
+            Task {
+                defer { isProcessingPayment = false }
+
+                guard PaymentService.isApplePayAvailable else {
+                    paymentError = "Apple Pay غير متاح على هذا الجهاز"
+                    return
+                }
+
+                let authorized = await PaymentService.shared.requestPayment(
+                    amount: event.pricePerPerson,
+                    eventName: event.name
+                )
+
+                guard authorized else {
+                    paymentError = "تم إلغاء الدفع"
+                    return
+                }
+
+                do {
+                    try await EventService.shared.joinEvent(eventId: event.id)
+                    onEnroll()
+                    dismiss()
+                } catch {
+                    paymentError = error.localizedDescription
+                }
+            }
+        } else {
+            onEnroll()
+            dismiss()
+        }
     }
 }

@@ -7,6 +7,10 @@
 
 import SwiftUI
 
+extension Notification.Name {
+    static let deepLinkReceived = Notification.Name("deepLinkReceived")
+}
+
 @main
 struct SirrApp: App {
     init() {
@@ -67,6 +71,9 @@ struct SirrApp: App {
         WindowGroup {
             ContentView()
                 .applyAppFont()
+                .onOpenURL { url in
+                    NotificationCenter.default.post(name: .deepLinkReceived, object: url)
+                }
         }
     }
     

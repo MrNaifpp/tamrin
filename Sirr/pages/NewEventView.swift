@@ -32,6 +32,8 @@ struct NewEventView: View {
     @State private var showEndDateDialog: Bool = false
     @State private var showLocationDialog: Bool = false
     @State private var showImageSelectionDialog: Bool = false
+    @State private var isCreating = false
+    @State private var createError: String? = nil
     @State private var tempPriceValue: String = ""
     @State private var tempPeopleValue: String = ""
     @State private var tempLocationValue: String = ""
@@ -239,20 +241,67 @@ struct NewEventView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(action: {
-                    dismiss()
+                    Task { await submitCreateEvent() }
                 }, label: {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.black)
-                        .clipShape(Circle())
-                        .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                    Group {
+                        if isCreating {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                                .scaleEffect(0.9)
+                        } else {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(.black)
+                                .clipShape(Circle())
+                                .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                        }
+                    }
                 })
                 .foregroundStyle(isFormValid ? .blue : .black)
-                .disabled(!isFormValid)
+                .disabled(!isFormValid || isCreating)
                 .opacity(isFormValid ? 1 : 0.3)
             }
         }
-      
+        .alert("خطأ", isPresented: Binding(get: { createError != nil }, set: { if !$0 { createError = nil } })) {
+            Button("حسناً") { createError = nil }
+        } message: {
+            if let msg = createError { Text(msg) }
+        }
+    }
+
+    /// Asset name for DB (card1, card2, card3, card4). No upload; home page shows from assets.
+    private func assetNameForSelectedImage() -> String? {
+        guard let r = selectedImageResource else { return nil }
+        if r == .card1 { return "card1" }
+        if r == .card2 { return "card2" }
+        if r == .card3 { return "card3" }
+        if r == .card4 { return "card4" }
+        return nil
+    }
+
+    private func submitCreateEvent() async {
+        isCreating = true
+        createError = nil
+        defer { isCreating = false }
+        do {
+            let computedPricePerPerson: Double = (numberOfPeople > 0) ? Double(fieldValue) / Double(numberOfPeople) : 0
+            let event = try await EventService.shared.createEvent(
+                name: exerciseName,
+                location: exerciseLocation,
+                description: description,
+                startDate: startDate ?? Date(),
+                endDate: endDate,
+                imageUrl: assetNameForSelectedImage(),
+                maxParticipants: numberOfPeople > 0 ? numberOfPeople : nil,
+                totalPrice: fieldValue,
+                pricePerPerson: computedPricePerPerson
+            )
+            print("[CreateEvent] Success — id: \(event.id), name: \(event.name)")
+            dismiss()
+        } catch {
+            print("[CreateEvent] Error — \(error.localizedDescription)")
+            createError = error.localizedDescription
+        }
     }
 
      // MARK: - Number Input Dialog
@@ -301,7 +350,7 @@ struct NewEventView: View {
                             .clipShape(Circle())
                     }
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 0)
                 .padding(.top, 20)
                 .padding(.bottom, 24)
                 
@@ -366,12 +415,10 @@ struct NewEventView: View {
                             .clipShape(Capsule())
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 32)
+                .padding(.bottom, 20)
             }
             .frame(maxWidth: 340)
            
-            .padding(.horizontal, 20)
         }
         .presentationDetents([.medium])
         .presentationDragIndicator(.visible)

@@ -10,17 +10,45 @@ import SwiftUI
 struct NewActivtyCardView: View {
     var eventName: String = "اسم الفعالية"
     var eventDate: String = "يوم الثلاثاء، الساعة 6:00 م"
+    /// When non-nil, load image from URL; otherwise use imageName.
+    var imageURL: String? = nil
     var imageName: ImageResource = .card1
     
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .bottom) {
-                // Background image
-                Image(imageName)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .clipped()
+                // Background image — same aspect ratio for all cards (4:3)
+                Group {
+                    if let resource = EventData.imageResource(for: imageURL) {
+                        Image(resource)
+                            .resizable()
+                            .scaledToFill()
+                    } else if let urlString = imageURL, urlString.hasPrefix("http"), let url = URL(string: urlString) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                            case .failure, .empty:
+                                Image(imageName)
+                                    .resizable()
+                                    .scaledToFill()
+                            @unknown default:
+                                Image(imageName)
+                                    .resizable()
+                                    .scaledToFill()
+                            }
+                        }
+                    } else {
+                        Image(imageName)
+                            .resizable()
+                            .scaledToFill()
+                    }
+                }
+                .aspectRatio(4/3, contentMode: .fill)
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .clipped()
                 
                 // Bottom gradient overlay with blur to separate image and text
                 ZStack(alignment: .bottom) {
