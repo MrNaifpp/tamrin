@@ -13,63 +13,63 @@ struct NewActivtyCardView: View {
     var imageName: ImageResource = .card1
     
     var body: some View {
-        GeometryReader { geometry in
+        GeometryReader { proxy in
             ZStack(alignment: .bottom) {
-                // Background image
                 Image(imageName)
                     .resizable()
                     .scaledToFill()
-                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .frame(width: proxy.size.width, height: proxy.size.height)
                     .clipped()
                 
-                // Bottom gradient overlay with blur to separate image and text
                 ZStack(alignment: .bottom) {
-                    // Blurred gradient layer (lighter, more blur, smaller height)
-                    Rectangle()
-                        .fill( 
-                            LinearGradient(
-                                gradient: Gradient(stops: [
-                                    .init(color: Color.black.opacity(0.0), location: 0.0),
-                                    .init(color: Color.black.opacity(0.12), location: 0.35),
-                                    .init(color: Color.black.opacity(0.28), location: 0.65),
-                                    .init(color: Color.black.opacity(0.45), location: 1.0)
-                                ]),
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .blur(radius: 22)
-                        .frame(height: max(geometry.size.height * 0.32, 160))
-                        .allowsHitTesting(false)
-                    
-                    // Sharper gradient for text readability (still light)
                     Rectangle()
                         .fill(
                             LinearGradient(
                                 gradient: Gradient(stops: [
                                     .init(color: Color.black.opacity(0.0), location: 0.0),
-                                    .init(color: Color.black.opacity(0.18), location: 0.45),
-                                    .init(color: Color.black.opacity(0.5), location: 1.0)
+                                    .init(color: Color.black.opacity(0.03), location: 0.35),
+                                    .init(color: Color.black.opacity(0.10), location: 0.68),
+                                    .init(color: Color.black.opacity(0.18), location: 1.0)
                                 ]),
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
                         )
-                        .frame(height: max(geometry.size.height * 0.28, 140))
+                        .blur(radius: 20)
+                        .frame(height: 226)
+                        .allowsHitTesting(false)
+                    
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(stops: [
+                                    .init(color: Color.black.opacity(0.0), location: 0.0),
+                                    .init(color: Color.black.opacity(0.08), location: 0.46),
+                                    .init(color: Color.black.opacity(0.28), location: 1.0)
+                                ]),
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .frame(height: 226)
                         .allowsHitTesting(false)
                 }
                 
-                // Text overlay at bottom
-                VStack(spacing: 12) {
+                VStack(spacing: 8) {
                     Text(eventName)
-                        .font(.appHeadline)
+                        .font(.appFont(size: 28, weight: .semibold))
                         .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.9)
+                    
                     Text(eventDate)
-                        .font(.appSubheadline)
-                        .foregroundStyle(.white)
+                        .font(.appFont(size: 20, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .multilineTextAlignment(.center)
                 }
+                .frame(width: 206)
                 .padding(.bottom, 56)
-                .padding(.horizontal, 24)
             }
         }
         .clipShape(

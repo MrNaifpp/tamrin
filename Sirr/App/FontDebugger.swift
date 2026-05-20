@@ -6,15 +6,21 @@
 //
 
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+private typealias PlatformFont = UIFont
+#elseif canImport(AppKit)
+import AppKit
+private typealias PlatformFont = NSFont
+#endif
 
 struct FontDebugger {
     /// Print all available fonts in the console
     static func printAllFonts() {
         print("\n========== AVAILABLE FONTS ==========")
-        for family in UIFont.familyNames.sorted() {
+        for family in availableFamilyNames() {
             print("📦 Font Family: \(family)")
-            let names = UIFont.fontNames(forFamilyName: family)
+            let names = fontNames(forFamilyName: family)
             for fontName in names {
                 print("   ✓ \(fontName)")
             }
@@ -34,7 +40,7 @@ struct FontDebugger {
         ]
         
         for fontName in fontsToCheck {
-            if UIFont(name: fontName, size: 18) != nil {
+            if PlatformFont(name: fontName, size: 18) != nil {
                 print("✅ \(fontName) - LOADED")
             } else {
                 print("❌ \(fontName) - NOT FOUND")
@@ -47,6 +53,29 @@ struct FontDebugger {
     static func runAllChecks() {
         verifyCustomFonts()
         printAllFonts()
+    }
+
+    private static func availableFamilyNames() -> [String] {
+        #if canImport(UIKit)
+        return UIFont.familyNames.sorted()
+        #elseif canImport(AppKit)
+        return NSFontManager.shared.availableFontFamilies.sorted()
+        #else
+        return []
+        #endif
+    }
+
+    private static func fontNames(forFamilyName family: String) -> [String] {
+        #if canImport(UIKit)
+        return UIFont.fontNames(forFamilyName: family)
+        #elseif canImport(AppKit)
+        return NSFontManager.shared.availableMembers(ofFontFamily: family)?
+            .compactMap { member in
+                member.count > 0 ? member[0] as? String : nil
+            } ?? []
+        #else
+        return []
+        #endif
     }
 }
 
@@ -92,5 +121,4 @@ struct FontDebugView: View {
 #Preview {
     FontDebugView()
 }
-
 

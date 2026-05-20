@@ -10,19 +10,19 @@ import SwiftUI
 import UIKit
 #endif
 
+#if os(iOS)
+
 enum NavigationDestination: Hashable {
     case newEvent
 }
 
 struct EventPageView: View {
+    @State private var scrollPosition: UUID?
     @Namespace private var zoomNamespace
     @State private var currentPage: Int = 0
-    @State private var path: [EventData] = []
     @State private var navigationPath = NavigationPath()
-    @State private var selectedTab: Int = 0
     
-    // Sample events data - can be replaced with actual data model
-    let events: [EventData] = [
+    private let events: [EventData] = [
         EventData(
             name: "اسم الفعالية",
             date: "يوم الثلاثاء، الساعة 6:00 م",
@@ -37,53 +37,53 @@ struct EventPageView: View {
             name: "",
             date: "",
             image: .card3
-        ),
-        EventData(
-            name: "",
-            date: "",
-            image: .card4
         )
     ]
     
     init() {
-            // Customize the dots color
-            UIPageControl.appearance().currentPageIndicatorTintColor = .red  // current dot
-            UIPageControl.appearance().pageIndicatorTintColor = .gray       // other dots
-        }
+        #if canImport(UIKit)
+        UIPageControl.appearance().currentPageIndicatorTintColor = .red
+        UIPageControl.appearance().pageIndicatorTintColor = .gray
+        #endif
+    }
     
     var body: some View {
         NavigationStack(path: $navigationPath) {
             GeometryReader { geometry in
-                ZStack{
-                    
-                    Image(events[currentPage].image)
+                let activeEvent = events[safe: currentPage] ?? events[0]
+                
+                ZStack {
+                    Image(activeEvent.image)
+                        .resizable()
                         .scaledToFill()
                         .frame(width: geometry.size.width, height: geometry.size.height)
                         .ignoresSafeArea()
-                        .blur(radius: 16)
+                        .blur(radius: 34)
                         .transition(.opacity)
-                        .animation(.easeInOut(duration: 0.3), value: currentPage)
-
-                        
-
-                    Color.black.opacity(0.3)
-                        .frame(width: geometry.size.width, height: geometry.size.height+100)
+                        .animation(.easeInOut(duration: 0.28), value: currentPage)
+                    
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.black.opacity(0.14),
+                                    Color.black.opacity(0.24),
+                                    Color.black.opacity(0.34)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
                         .ignoresSafeArea()
                     
-                    VStack {
-                        NavigationBarView(title: "القادمة", onPlusButtonTap: {
-                            navigationPath.append(NavigationDestination.newEvent)
-                        })
+                    VStack() {
+                        header
+                            .padding(.horizontal, 24)
+//                            .padding(.top, max(geometry.safeAreaInsets.top, 20) + 10)
                         
-                        // Page View with swipeable cards
-                        
-                        
-                        
-                        TabView(selection: $currentPage) {
-                            ForEach(Array(events.enumerated()), id: \.offset) { index, event in
-                                VStack(spacing: 0) {
-                                    Spacer(minLength: 18)
-                                    
+                        ScrollView(.horizontal) {
+                            LazyHStack(spacing: 12) {
+                                ForEach(events) { event in
                                     NavigationLink(value: event) {
                                         NewActivtyCardView(
                                             eventName: event.name,
@@ -91,31 +91,39 @@ struct EventPageView: View {
                                             imageName: event.image
                                         )
                                         .matchedTransitionSource(id: event.id, in: zoomNamespace)
-                                        .frame(height: min(612, geometry.size.height * 0.75))
-                                        .padding(.horizontal, 20)
+                                        .frame(width: min(362, geometry.size.width - 40), height: 612)
+                                        .shadow(color: .black.opacity(0.25), radius: 30, y: 8)
                                     }
                                     .buttonStyle(.plain)
-                                    
-                                    Spacer(minLength: 20)
+                                    .id(event.id)
                                 }
-                                .frame(width: geometry.size.width)
-                                .tag(index)
+                            }
+                            .padding(.horizontal, 20)
+                            .scrollTargetLayout()
+                        }
+                        .scrollTargetBehavior(.viewAligned)
+                        .scrollPosition(id: $scrollPosition)
+                        .scrollIndicators(.hidden)
+                        .padding(.top, 36)
+                        .safeAreaPadding(.bottom, 24)
+                        .onAppear {
+                            if scrollPosition == nil {
+                                scrollPosition = events.first?.id
                             }
                         }
-                        .tabViewStyle(.page(indexDisplayMode: .always))
-                        
-                        .animation(.smooth, value: currentPage)
-                        .onChange(of: currentPage) { _ in
+                        .onChange(of: scrollPosition) { _, newValue in
+                            guard
+                                let newValue,
+                                let newIndex = events.firstIndex(where: { $0.id == newValue }),
+                                newIndex != currentPage
+                            else { return }
+                            
+                            currentPage = newIndex
                             hapticMedium()
                         }
                         
-                        Spacer()
-                        
-                        // Bottom Navigation Bar
-                        // BottomNavigationBarView(selectedTab: $selectedTab)
-                        //     .padding(.bottom, geometry.safeAreaInsets.bottom > 0 ? 0 : 8)
+                        Spacer(minLength: 0)
                     }
-                   
                     .ignoresSafeArea(.keyboard, edges: .top)
                 }
             }
@@ -137,6 +145,58 @@ struct EventPageView: View {
                     NewEventView()
                 }
             }
+            .toolbar(.hidden, for: .navigationBar)
+        }
+        .environment(\.layoutDirection, .rightToLeft)
+    }
+    
+    private var header: some View {
+        HStack(alignment: .center) {
+            HStack(spacing: 6) {
+                Text("القادمة")
+                    .font(.system(size: 32))
+                    .fontWeight(.semibold)
+//                    .font(size: 32, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.top, 2)
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .padding(.top, 2)
+            }
+            
+            Spacer(minLength: 12)
+
+            HStack(spacing: 8) {
+                Button {
+                    navigationPath.append(NavigationDestination.newEvent)
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.black.opacity(0.20))
+                        
+                        Circle()
+                            .stroke(Color.white.opacity(0.10), lineWidth: 0.5)
+                        
+                        Image(systemName: "plus")
+                            .font(.system(size: 19, weight: .medium))
+                            .foregroundStyle(.white)
+                    }
+                    .frame(width: 44, height: 44)
+                    .shadow(color: .black.opacity(0.1), radius: 20)
+                }
+                .buttonStyle(.plain)
+
+                Circle()
+                    .fill(Color.white.opacity(0.32))
+                    .frame(width: 40, height: 40)
+                    .overlay {
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundStyle(.white)
+                    }
+            }
         }
     }
 }
@@ -149,6 +209,13 @@ private extension EventPageView {
         generator.prepare()
         generator.impactOccurred()
         #endif
+    }
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        guard indices.contains(index) else { return nil }
+        return self[index]
     }
 }
 
@@ -223,4 +290,18 @@ private struct BottomNavItem: View {
 #Preview {
     EventPageView()
 }
+#else
+struct EventPageView: View {
+    var body: some View {
+        ContentUnavailableView(
+            "واجهة iOS فقط",
+            systemImage: "iphone",
+            description: Text("هذه الشاشة الأصلية أبقيناها لأجهزة iPhone، بينما النسخة المكتبية انتقلت إلى واجهة Desktop الجديدة.")
+        )
+    }
+}
 
+#Preview {
+    EventPageView()
+}
+#endif

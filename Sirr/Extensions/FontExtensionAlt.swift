@@ -6,6 +6,11 @@
 //
 
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 // Alternative font configurations to try if main one doesn't work
 extension Font {
@@ -41,15 +46,19 @@ extension Font {
         
         // Test each possible name
         for fontName in possibleNames {
+            #if canImport(UIKit)
             if UIFont(name: fontName, size: size) != nil {
                 return Font.custom(fontName, size: size)
             }
+            #elseif canImport(AppKit)
+            if NSFont(name: fontName, size: size) != nil {
+                return Font.custom(fontName, size: size)
+            }
+            #endif
         }
         
         // Fallback to system
-        print("⚠️ Custom font not found, using system font")
         return Font.system(size: size, weight: weight)
     }
 }
-
 

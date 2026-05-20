@@ -12,6 +12,8 @@ import CoreLocation
 import UIKit
 #endif
 
+#if os(iOS)
+
 struct NewEventView: View {
     @Environment(\.dismiss) var dismiss
     
@@ -369,9 +371,11 @@ struct NewEventView: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 32)
             }
-            .frame(maxWidth: 340)
-           
-            .padding(.horizontal, 20)
+            .frame(maxWidth: .infinity)
+            .sheet(isPresented: /*@START_MENU_TOKEN@*//*@PLACEHOLDER=Is Presented@*/.constant(false)/*@END_MENU_TOKEN@*/) { 
+                /*@START_MENU_TOKEN@*//*@PLACEHOLDER=Content@*/Text("Sheet Content")/*@END_MENU_TOKEN@*/
+            }
+            .padding(.horizontal, 4)
         }
         .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
@@ -835,7 +839,7 @@ struct NewEventView: View {
                     GridItem(.flexible(), spacing: 12),
                     GridItem(.flexible(), spacing: 12)
                 ], spacing: 12) {
-                    ForEach([ImageResource.card1, .card2, .card3, .card4], id: \.self) { imageResource in
+                    ForEach([ImageResource.card1, .card2, .card3], id: \.self) { imageResource in
                         Button {
                             selectedImageResource = imageResource
                             isPresented.wrappedValue = false
@@ -1489,3 +1493,18 @@ struct MapLocationPickerView: View {
         NewEventView()
     }
 }
+#else
+struct NewEventView: View {
+    var body: some View {
+        ContentUnavailableView(
+            "إنشاء التمرين متاح على iOS فقط",
+            systemImage: "plus.circle",
+            description: Text("واجهة macOS الحالية تستخدم النظام المكتبي الجديد بدل نموذج الإدخال القديم الخاص بتطبيق الهاتف.")
+        )
+    }
+}
+
+#Preview {
+    NewEventView()
+}
+#endif

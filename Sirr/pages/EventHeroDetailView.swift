@@ -7,6 +7,8 @@
 
 import SwiftUI
 
+#if os(iOS)
+
 struct EventHeroDetailView: View {
     let event: EventData
     var onClose: () -> Void
@@ -27,234 +29,323 @@ struct EventHeroDetailView: View {
         "حسن الشهري",
         "خالد المسلم"
     ]
+    private let supervisorName = "محمد معلا"
+    private let progressCurrent = 9
+    private let progressTotal = 16
 
     var body: some View {
-        ZStack(alignment: .top) {
-            // Background
-            GeometryReader { proxy in
-                Image(event.image)
-                   
-                    .scaledToFill()
-                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
-                   
-                    .blur(radius: 14)
-                    .allowsHitTesting(false)
+        GeometryReader { proxy in
+            ZStack(alignment: .top) {
+                backgroundLayer(proxy: proxy)
+
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        heroSection(proxy: proxy)
+
+                        VStack(spacing: 12) {
+                            if isEnrolled {
+                                actionRow
+                                    .padding(.top, -16)
+                            } else {
+                                enrollButton
+                                    .padding(.top, -16)
+                            }
+
+                            progressCard
+
+                            if isEnrolled {
+                                labeledSection(title: "المشرف") {
+                                    DetailParticipantRow(name: supervisorName)
+                                }
+                            }
+
+                            labeledSection(title: "القائمة") {
+                                VStack(spacing: 8) {
+                                    ForEach(participants, id: \.self) { name in
+                                        DetailParticipantRow(name: name)
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 28)
+                    }
+                }
             }
             .ignoresSafeArea()
-            
-            
-        // Content
-        ZStack(alignment: .bottom) {
-            // Rounded glass container for content
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 20) {
-                    // Header: title & date
-                    VStack(spacing: 8) {
-                        Text(event.name)
-                            .font(.appLargeTitle)
-                            .foregroundStyle(.white)
-                            .multilineTextAlignment(.center)
-                        
-                        Text(event.date)
-                            .font(.appBodySemibold)
-                            .foregroundStyle(.white.opacity(0.9))
-                            .multilineTextAlignment(.center)
+            .sheet(isPresented: $showEnrollmentSheet) {
+                EnrollmentSheetView(
+                    event: event,
+                    onEnroll: {
+                        isEnrolled = true
+                        showEnrollmentSheet = false
+                        onEnroll()
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.top, 8)
-                    
-                    // Enroll button (pill)
-                    Button {
-                        if isEnrolled {
-                            isEnrolled = false
-                        } else {
-                            showEnrollmentSheet = true
-                        }
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: isEnrolled ? "minus" : "plus")
-                                .foregroundStyle(isEnrolled ? Color.white : Color.black)
-                            Text(isEnrolled ? "الإعتــذار من التمريــــن" : "سجل في التمرين")
-                                .font(.appBody)
-                                .foregroundStyle(isEnrolled ? Color.white : Color.black)
-                        }
-                        .font(.appBodySemibold)
-                        .foregroundStyle(Color.white)
-                        .frame(maxWidth: .infinity, minHeight: 54)
-                        .background(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .fill(isEnrolled ? Color.red : Color.white)
-                                .shadow(color: .black.opacity(0.35), radius: 8, y: 8)
-                                
+                )
+            }
+        }
+        .environment(\.layoutDirection, .rightToLeft)
+    }
+
+    @ViewBuilder
+    private func backgroundLayer(proxy: GeometryProxy) -> some View {
+        ZStack {
+            Image(event.image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .ignoresSafeArea()
+                .blur(radius: 18)
+                .allowsHitTesting(false)
+
+            LinearGradient(
+                colors: [
+                    Color.black.opacity(0.08),
+                    Color.black.opacity(0.20),
+                    Color.black.opacity(0.36)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                Spacer(minLength: 320)
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.black.opacity(0.0),
+                                Color.black.opacity(0.42)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
                         )
-                    }
-                    .sheet(isPresented: $showEnrollmentSheet) {
-                        EnrollmentSheetView(
-                            event: event,
-                            onEnroll: {
-                                isEnrolled = true
-                                showEnrollmentSheet = false
-                                onEnroll()
-                            }
-                        )
-                    }
-                    
-                    // Quick actions (glass chips)
-                    // if isEnrolled {
-                    //     HStack(spacing: 12) {
-                    //         ActionChip(icon: "lock.fill", title: "قفل التسجيل", style: .solid)
-                    //         ActionChip(icon: "gearshape.fill", title: "إعدادات", style: .translucent)
-                    //         ActionChip(icon: "square.and.arrow.up.fill", title: "مشاركة", style: .translucent)
-                    //     }
-                    // }
-                    
-                    // Progress card (glass)
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Text("نسبة اكتمال التمرين")
-                                .font(.appCallout)
-                                .foregroundStyle(.white)
-                            Spacer()
-                            Text("9/16")
-                                .font(.appCallout)
-                                .foregroundStyle(.white.opacity(0.9))
-                        }
-                        
-                        ProgressView(value: 9, total: 16)
-                            .frame(height: 20)
-                            .tint(.green)
-                            
-                    }
-                    .padding()
-                    .background(Color.white.opacity(0.2))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(.white.opacity(0.2), lineWidth: 1)
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .shadow(color: .black.opacity(0.25), radius: 12, y: 6)
-                    
-                    // Participants list (glass rows)
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("القائمة")
-                            .font(.appBodySemibold)
-                            .foregroundStyle(.white.opacity(0.9))
-                        
-                        ForEach(participants, id: \.self) { name in
-                            HStack(spacing: 12) {
-                                Image(systemName: "person.crop.circle.fill")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 38, height: 38)
-                                    .foregroundStyle(.white.opacity(0.9))
-                                
-                                Text(name)
-                                    .font(.appBodyMedium)
-                                    .foregroundStyle(.white)
-                                
-                                Spacer()
-                                
-                                
-                            }
-                            .padding(.vertical, 12)
-                            .padding(.horizontal, 14)
-                            .background(Color.white.opacity(0.2))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .stroke(.white.opacity(0.18), lineWidth: 1)
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
-                        }
-                    }
-                    .padding(.bottom, 32)
+                    .frame(height: proxy.size.height)
+                    .blur(radius: 30)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func heroSection(proxy: GeometryProxy) -> some View {
+        ZStack(alignment: .topTrailing) {
+            Image(event.image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: proxy.size.width, height: 520)
+                .clipped()
+                .overlay(alignment: .bottom) {
+                    LinearGradient(
+                        colors: [
+                            Color.black.opacity(0.0),
+                            Color.black.opacity(0.15),
+                            Color.black.opacity(0.45)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 230)
                 }
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.horizontal, 20)
+
+            Button(action: onClose) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.28))
+
+                    Circle()
+                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 40, height: 40)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 76)
+            .padding(.trailing, 16)
+
+            VStack(spacing: 4) {
+                Spacer()
+
+                VStack(spacing: 0) {
+                    Text(event.name)
+                        .font(.appFont(size: 28, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+
+                    Text(event.date)
+                        .font(.appFont(size: 20, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.55))
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                }
+                .frame(width: 206)
                 .padding(.bottom, 28)
             }
-            .background(Color.clear)
-            .padding(.horizontal, 14)
-            .padding(.top, 160)
-            .padding(.bottom, 24)
-        }
-        }
-       
-    }
-}
-
-//////////////////////////////////////////////////
-// MARK: - Components
-//////////////////////////////////////////////////
-
-private struct IconButton: View {
-    let system: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: system)
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 40, height: 40)
-                .background(.ultraThinMaterial)
-                .overlay(
-                    Circle()
-                        .stroke(.white.opacity(0.25), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
-                .clipShape(Circle())
+            .frame(height: 520)
+            .frame(maxWidth: .infinity)
         }
     }
-}
 
-// Small helper chip
-private struct ActionChip: View {
-    enum Style {
-        case translucent  // Translucent green background with white icons/text
-        case solid        // Solid light gray background with black icons/text, wider
-    }
-    
-    var icon: String
-    var title: String
-    var style: Style = .translucent
-    
-    var body: some View {
-        VStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.appSubheadline)
-            Text(title)
-                .font(.appCaption)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
+    private var enrollButton: some View {
+        Button {
+            showEnrollmentSheet = true
+        } label: {
+            HStack(spacing: 8) {
+                Text("سجــــل في التمريــــن")
+                    .font(.appFont(size: 20, weight: .regular))
+                    .foregroundStyle(.black)
+
+                Image(systemName: "plus")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.black)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 56)
+            .background(Color.white.opacity(0.88))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .shadow(color: .black.opacity(0.16), radius: 16, y: 8)
         }
-        .foregroundStyle(style == .translucent ? Color.white : Color.black)
-        .frame(maxWidth: style == .solid ? 120 : 60)
-        .frame(minWidth: style == .solid ? 80 : 40)
-        
-        .padding(.horizontal, style == .solid ? 16 : 8)
-        .padding(.vertical, 12)
-        .background(
-            ZStack {
-                if style == .translucent {
-                    // Translucent green background with glass effect
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.green.opacity(0.25))
-                } else {
-                    // Solid light gray background
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color.white)
+        .buttonStyle(.plain)
+    }
+
+    private var actionRow: some View {
+        HStack(spacing: 8) {
+            DetailActionCard(
+                title: "قفــل التسجيـــل",
+                systemImage: "lock.fill",
+                isPrimary: true
+            )
+            .frame(maxWidth: .infinity)
+
+            DetailActionCard(
+                title: "مشاركـــة",
+                systemImage: "square.and.arrow.up.fill",
+                isPrimary: false
+            )
+            .frame(width: 92)
+
+            DetailActionCard(
+                title: "الإعدادات",
+                systemImage: "gearshape.fill",
+                isPrimary: false
+            )
+            .frame(width: 92)
+        }
+    }
+
+    private var progressCard: some View {
+        VStack(spacing: 14) {
+            HStack {
+                Text("نسبــة إكتمــال التمريـــن")
+                    .font(.appFont(size: 18, weight: .semibold))
+                    .foregroundStyle(.white)
+
+                Spacer()
+
+                Text("\(progressTotal)\\\(progressCurrent)")
+                    .font(.appFont(size: 16, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.9))
+            }
+
+            GeometryReader { proxy in
+                ZStack(alignment: .trailing) {
+                    Capsule()
+                        .fill(Color.white.opacity(0.20))
+
+                    Capsule()
+                        .fill(Color(red: 0.24, green: 0.72, blue: 0.34))
+                        .frame(width: proxy.size.width * progressRatio)
                 }
             }
+            .frame(height: 12)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 16)
+        .background(Color.white.opacity(0.10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.white.opacity(0.05), lineWidth: 1)
         )
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    private var progressRatio: CGFloat {
+        guard progressTotal > 0 else { return 0 }
+        return CGFloat(progressCurrent) / CGFloat(progressTotal)
+    }
+
+    private func labeledSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .trailing, spacing: 12) {
+            Text(title)
+                .font(.appFont(size: 20, weight: .medium))
+                .foregroundStyle(.white.opacity(0.5))
+                .frame(maxWidth: .infinity, alignment: .trailing)
+
+            content()
+        }
+    }
+}
+
+private struct DetailActionCard: View {
+    var title: String
+    var systemImage: String
+    var isPrimary: Bool
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Image(systemName: systemImage)
+                .font(.system(size: 18, weight: .semibold))
+
+            Text(title)
+                .font(.appFont(size: 16, weight: .semibold))
+                .multilineTextAlignment(.center)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .foregroundStyle(isPrimary ? Color.black : Color.white.opacity(0.85))
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .background(isPrimary ? Color.white.opacity(0.82) : Color.white.opacity(0.10))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(style == .translucent ? Color.white.opacity(0.15) : Color.clear, lineWidth: 1)
+                .stroke(Color.white.opacity(isPrimary ? 0.0 : 0.06), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+    }
+}
+
+private struct DetailParticipantRow: View {
+    let name: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(name)
+                .font(.appFont(size: 20, weight: .medium))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+
+            Circle()
+                .fill(Color.white.opacity(0.28))
+                .frame(width: 40, height: 40)
+                .overlay {
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(.white)
+                }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color.white.opacity(0.05))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(0.05), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 
@@ -475,6 +566,7 @@ struct EnrollmentSheetView: View {
                         .padding(.top, 24)
                         .padding(.bottom, 24)
                     }
+                    .frame(maxWidth: .infinity)
                     
                     // Register button at bottom
                     VStack {
@@ -502,3 +594,18 @@ struct EnrollmentSheetView: View {
         .presentationDragIndicator(.visible)
     }
 }
+#else
+struct EventHeroDetailView: View {
+    let event: EventData
+    var onClose: () -> Void
+    var onEnroll: () -> Void
+
+    var body: some View {
+        ContentUnavailableView(
+            "تفاصيل الفعالية متاحة على iOS فقط",
+            systemImage: "rectangle.portrait.on.rectangle.portrait",
+            description: Text("الشاشة الأصلية الخاصة بانتقالات الهاتف ما زالت محفوظة، لكن النسخة المكتبية تستخدم تدفقًا مختلفًا بالكامل.")
+        )
+    }
+}
+#endif

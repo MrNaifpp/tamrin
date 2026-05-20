@@ -8,10 +8,8 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var showFontTest = false
-    
     var body: some View {
-        EventPageView()
+        GuidanceDesktopView()
     }
 }
 

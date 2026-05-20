@@ -6,6 +6,11 @@
 //
 
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 struct QuickFontTest: View {
     var body: some View {
@@ -58,8 +63,8 @@ struct QuickFontTest: View {
         .onAppear {
             // Print all available fonts
             print("\n============ ALL FONTS ============")
-            for family in UIFont.familyNames.sorted() {
-                let fonts = UIFont.fontNames(forFamilyName: family)
+            for family in availableFamilies() {
+                let fonts = availableFontNames(for: family)
                 if !fonts.isEmpty {
                     print("Family: \(family)")
                     for font in fonts {
@@ -70,10 +75,32 @@ struct QuickFontTest: View {
             print("===================================\n")
         }
     }
+
+    private func availableFamilies() -> [String] {
+        #if canImport(UIKit)
+        return UIFont.familyNames.sorted()
+        #elseif canImport(AppKit)
+        return NSFontManager.shared.availableFontFamilies.sorted()
+        #else
+        return []
+        #endif
+    }
+
+    private func availableFontNames(for family: String) -> [String] {
+        #if canImport(UIKit)
+        return UIFont.fontNames(forFamilyName: family)
+        #elseif canImport(AppKit)
+        return NSFontManager.shared.availableMembers(ofFontFamily: family)?
+            .compactMap { member in
+                member.count > 0 ? member[0] as? String : nil
+            } ?? []
+        #else
+        return []
+        #endif
+    }
 }
 
 #Preview {
     QuickFontTest()
 }
-
 

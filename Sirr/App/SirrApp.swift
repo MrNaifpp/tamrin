@@ -6,78 +6,72 @@
 //
 
 import SwiftUI
+import CoreText
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 @main
 struct SirrApp: App {
+    private let isRunningForPreviews: Bool
+
     init() {
-        // Configure app-wide font settings
+        isRunningForPreviews = ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
+
+        guard !isRunningForPreviews else {
+            return
+        }
+
+        registerBundledFonts()
         setupAppFont()
-        
-        // DEBUG: Check if font files are in bundle
-        print("\n📦 CHECKING BUNDLE FOR FONT FILES:")
-        let fontFiles = [
-            "TheYearofHandicrafts-Regular.otf",
-            "TheYearofHandicrafts-Medium.otf",
-            "TheYearofHandicrafts-SemiBold.otf",
-            "TheYearofHandicrafts-Bold.otf",
-            "TheYearofHandicrafts-Black.otf"
-        ]
-        
-        for fileName in fontFiles {
-            if let fontURL = Bundle.main.url(forResource: fileName.replacingOccurrences(of: ".otf", with: ""), withExtension: "otf") {
-                print("✅ \(fileName) found in bundle at: \(fontURL.lastPathComponent)")
-                
-                // Try to register the font
-                if let fontDataProvider = CGDataProvider(url: fontURL as CFURL),
-                   let font = CGFont(fontDataProvider) {
-                    var error: Unmanaged<CFError>?
-                    if CTFontManagerRegisterGraphicsFont(font, &error) {
-                        if let postScriptName = font.postScriptName {
-                            print("   📝 Registered as: \(postScriptName)")
-                        }
-                    } else if let error = error?.takeRetainedValue() {
-                        print("   ⚠️ Registration error: \(error)")
-                    }
-                }
-            } else {
-                print("❌ \(fileName) NOT in bundle")
-            }
-        }
-        
-        print("\n🔍 FONT DEBUG INFO:")
-        let fontsToTest = [
-            "TheYearofHandicrafts-Regular",
-            "TheYearofHandicrafts-Medium",
-            "TheYearofHandicrafts-SemiBold",
-            "TheYearofHandicrafts-Bold",
-            "TheYearofHandicrafts-Black"
-        ]
-        
-        for fontName in fontsToTest {
-            if let font = UIFont(name: fontName, size: 18) {
-                print("✅ \(fontName) → LOADED (actual: \(font.fontName))")
-            } else {
-                print("❌ \(fontName) → NOT FOUND")
-            }
-        }
-        print("📋 Check console for complete font list\n")
     }
     
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .applyAppFont()
+                .environment(\.layoutDirection, .rightToLeft)
+                .environment(\.locale, Locale(identifier: "ar_SA"))
+#if os(macOS)
+                .frame(minWidth: 1240, minHeight: 820)
+#endif
         }
+#if os(macOS)
+        .defaultSize(width: 1440, height: 900)
+        .windowToolbarStyle(.unified(showsTitle: false))
+#endif
     }
     
     private func setupAppFont() {
-        // Fonts are loaded via Info.plist (INFOPLIST_KEY_UIAppFonts in build settings)
-        // Set default font for UI components - TheYearofHandicrafts (عام الحرف)
+        #if canImport(UIKit)
+        UIView.appearance().semanticContentAttribute = .forceRightToLeft
         if let customFont = UIFont(name: "TheYearofHandicrafts-Regular", size: 18) {
             UILabel.appearance().font = customFont
             UITextField.appearance().font = customFont
             UITextView.appearance().font = customFont
         }
+        #endif
+    }
+
+    private func registerBundledFonts() {
+        let fontFiles = [
+            "TheYearofHandicrafts-Regular",
+            "TheYearofHandicrafts-Medium",
+            "TheYearofHandicrafts-SemiBold",
+            "TheYearofHandicrafts-Bold",
+            "TheYearofHandicrafts-Black"
+        ]
+
+        for fileName in fontFiles {
+            guard let fontURL = Bundle.main.url(forResource: fileName, withExtension: "otf"),
+                  let fontDataProvider = CGDataProvider(url: fontURL as CFURL),
+                  let font = CGFont(fontDataProvider) else {
+                continue
+            }
+
+            CTFontManagerRegisterGraphicsFont(font, nil)
+        }
     }
 }
-
