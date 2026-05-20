@@ -194,6 +194,22 @@ final class AuthService {
         }
     }
 
+    /// Exchange an Apple identity token for a Supabase session. Returns true if new user.
+    func signInWithApple(idToken: String, nonce: String) async throws -> Bool {
+        do {
+            try await client.auth.signInWithIdToken(
+                credentials: .init(provider: .apple, idToken: idToken, nonce: nonce)
+            )
+            let isNew = await isNewUserFromUsersTable()
+            authLogger.info("API signInWithApple succeeded (isNewUser: \(isNew))")
+            return isNew
+        } catch {
+            authLogger.error("API signInWithApple failed: \(error.localizedDescription)")
+            if let e = error as? URLError { authLogger.error("URLError: \(String(describing: e))") }
+            throw error
+        }
+    }
+
     // Verify OTP and establish session. Returns true if new user (no row in users table).
     func verifyOTP(email: String, token: String) async throws -> Bool {
         do {

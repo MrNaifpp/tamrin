@@ -69,7 +69,7 @@ struct SirrApp: App {
     
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
                 .applyAppFont()
                 .onOpenURL { url in
                     NotificationCenter.default.post(name: .deepLinkReceived, object: url)

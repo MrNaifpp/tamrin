@@ -8,6 +8,7 @@
 import Foundation
 import Supabase
 import Combine
+import AuthenticationServices
 import os
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Sirr", category: "Auth")
@@ -126,6 +127,28 @@ class AuthViewModel: ObservableObject {
             logger.error("Verify OTP failed: \(error.localizedDescription)")
             if let urlError = error as? URLError { logger.error("URLError: \(String(describing: urlError))") }
             errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Launch native Apple sign-in sheet and exchange the identity token for a Supabase session.
+    func signInWithApple() async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        do {
+            let appleResult = try await AppleSignInCoordinator().signIn()
+            let isNew = try await AuthService.shared.signInWithApple(
+                idToken: appleResult.idToken,
+                nonce: appleResult.nonce
+            )
+            isAuthenticated = true
+            isNewUserAfterOTP = isNew
+            logger.info("Apple sign-in succeeded (isNewUser: \(isNew))")
+        } catch {
+            if (error as NSError).code == ASAuthorizationError.canceled.rawValue { return }
+            logger.error("Apple sign-in failed: \(error.localizedDescription)")
+            if let urlError = error as? URLError { logger.error("URLError: \(String(describing: urlError))") }
+            errorMessage = "تعذر تسجيل الدخول عبر Apple. حاول مرة أخرى."
         }
     }
 

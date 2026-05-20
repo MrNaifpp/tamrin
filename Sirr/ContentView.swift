@@ -28,7 +28,7 @@ struct ContentView: View {
                     EventPageView(authVM: appState.authVM, deepLinkEventId: $appState.deepLinkEventId)
                 } else {
                     NavigationStack(path: $authPath) {
-                        LoginOnbord(onNavigateToLogin: { authPath.append(AuthScreen.login) })
+                        LoginOnbord(vm: appState.authVM, onNavigateToLogin: { authPath.append(AuthScreen.login) })
                             .navigationDestination(for: AuthScreen.self) { screen in
                                 if screen == .login {
                                     LoginView(vm: appState.authVM)
