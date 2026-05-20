@@ -7,56 +7,64 @@
 
 import SwiftUI
 
-struct ContentView: View {
-    @State var number: Int = 29
-    @State var isbig: Bool = false
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                Text("number is \(number)")
-                    .foregroundStyle(Color.red)
-                    .bold()
-                    .padding(.all,12)
-                    .background(Color.background)
-                    .cornerRadius(12)
-                    .shadow(radius: 20, x: 0, y: 0)
-                    .contentTransition(.numericText())
-                    .animation(.smooth, value: number)
-                    .animation(.bouncy, value: isbig)
-                    .scaleEffect(isbig ? 2 : 1)
-                ActivityCardView(name: "التمرين", date: "يوم الاثنين", image: Image(.actnew))
-                ActivityCardView(name: "التمرين الأسبوعي", date: "يوم السبت", image: Image(.act))
-                NewActivtyCardView()
+enum AuthScreen: Hashable {
+    case login
+    case signup
+}
 
-                HStack {
-                    
-                    Image(systemName: "plus")
-                        .onTapGesture {
-                            number = number + 1
-                        }
-                    Image(systemName: "minus")
-                        .onTapGesture {
-                            number = number - 1
-                        }
-                    Image(systemName: "xmark")
-                        .onTapGesture {
-                            if isbig {
-                                isbig = false
+struct ContentView: View {
+    @StateObject private var appState = AppState()
+    @State private var authPath = NavigationPath()
+    @State private var pendingLoginForEvent = false
+
+    var body: some View {
+        ZStack {
+            Group {
+                if appState.isLoggedIn, appState.authVM.isNewUserAfterOTP {
+                    SignupView(vm: appState.authVM, onBack: nil, isPostOTP: true, onComplete: {
+                        appState.authVM.clearNewUserAfterOTP()
+                    })
+                } else if appState.isLoggedIn {
+                    EventPageView(authVM: appState.authVM, deepLinkEventId: $appState.deepLinkEventId)
+                } else {
+                    NavigationStack(path: $authPath) {
+                        LoginOnbord(vm: appState.authVM, onNavigateToLogin: { authPath.append(AuthScreen.login) })
+                            .navigationDestination(for: AuthScreen.self) { screen in
+                                if screen == .login {
+                                    LoginView(vm: appState.authVM)
+                                } else if screen == .signup {
+                                    SignupView(vm: appState.authVM, onBack: { authPath.removeLast() })
+                                }
                             }
-                            else {
-                                isbig = true
-                            }
-                        }
-                    
+                    }
                 }
             }
-            .padding(20)
 
+            if let deepId = appState.deepLinkEventId, !appState.isLoggedIn {
+                SharedEventView(
+                    eventId: deepId,
+                    isLoggedIn: false,
+                    onDismiss: {
+                        appState.deepLinkEventId = nil
+                    },
+                    onRequestLogin: {
+                        pendingLoginForEvent = true
+                        appState.deepLinkEventId = nil
+                        authPath.append(AuthScreen.login)
+                    }
+                )
+                .transition(.move(edge: .bottom))
+            }
         }
-
-        
+        .animation(.easeInOut(duration: 0.3), value: appState.deepLinkEventId != nil)
+        .onReceive(NotificationCenter.default.publisher(for: .deepLinkReceived)) { notification in
+            if let url = notification.object as? URL {
+                appState.handleDeepLink(url)
+            }
+        }
     }
 }
+
 
 #Preview {
     ContentView()

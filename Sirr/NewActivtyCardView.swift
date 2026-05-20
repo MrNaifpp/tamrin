@@ -8,33 +8,101 @@
 import SwiftUI
 
 struct NewActivtyCardView: View {
+    var eventName: String = "اسم الفعالية"
+    var eventDate: String = "يوم الثلاثاء، الساعة 6:00 م"
+    /// When non-nil, load image from URL; otherwise use imageName.
+    var imageURL: String? = nil
+    var imageName: ImageResource = .card1
+    
     var body: some View {
-        Rectangle()
-            .frame(height: 612)
-            .overlay {
-                Image(.pic)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            }
-            .overlay(alignment: .bottom) {
-                VStack(alignment: .center, spacing: 12) {
-                    Text("اسم الفعالية")
-                        .font(.system(size: 28))
-                        .fontWeight(.semibold)
+        GeometryReader { geometry in
+            ZStack(alignment: .bottom) {
+                // Background image — same aspect ratio for all cards (4:3)
+                Group {
+                    if let resource = EventData.imageResource(for: imageURL) {
+                        Image(resource)
+                            .resizable()
+                            .scaledToFill()
+                    } else if let urlString = imageURL, urlString.hasPrefix("http"), let url = URL(string: urlString) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                            case .failure, .empty:
+                                Image(imageName)
+                                    .resizable()
+                                    .scaledToFill()
+                            @unknown default:
+                                Image(imageName)
+                                    .resizable()
+                                    .scaledToFill()
+                            }
+                        }
+                    } else {
+                        Image(imageName)
+                            .resizable()
+                            .scaledToFill()
+                    }
+                }
+                .aspectRatio(4/3, contentMode: .fill)
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .clipped()
+                
+                // Bottom gradient overlay with blur to separate image and text
+                ZStack(alignment: .bottom) {
+                    // Blurred gradient layer (lighter, more blur, smaller height)
+                    Rectangle()
+                        .fill( 
+                            LinearGradient(
+                                gradient: Gradient(stops: [
+                                    .init(color: Color.black.opacity(0.0), location: 0.0),
+                                    .init(color: Color.black.opacity(0.12), location: 0.35),
+                                    .init(color: Color.black.opacity(0.28), location: 0.65),
+                                    .init(color: Color.black.opacity(0.45), location: 1.0)
+                                ]),
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .blur(radius: 22)
+                        .frame(height: max(geometry.size.height * 0.32, 160))
+                        .allowsHitTesting(false)
+                    
+                    // Sharper gradient for text readability (still light)
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(stops: [
+                                    .init(color: Color.black.opacity(0.0), location: 0.0),
+                                    .init(color: Color.black.opacity(0.18), location: 0.45),
+                                    .init(color: Color.black.opacity(0.5), location: 1.0)
+                                ]),
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .frame(height: max(geometry.size.height * 0.28, 140))
+                        .allowsHitTesting(false)
+                }
+                
+                // Text overlay at bottom
+                VStack(spacing: 12) {
+                    Text(eventName)
+                        .font(.appHeadline)
                         .foregroundStyle(.white)
-                    Text("يوم الثلاثاء، الساعة 6:00 م")
-                        .font(.system(size: 18))
-                        .fontWeight(.medium)
+                    Text(eventDate)
+                        .font(.appSubheadline)
                         .foregroundStyle(.white)
                 }
-                .padding(56)
+                .padding(.bottom, 56)
+                .padding(.horizontal, 24)
             }
-            .clipShape(
-                RoundedRectangle(cornerRadius: 36, style: .continuous)
-            )
-            .shadow(color: .black.opacity(0.2), radius: 40)
-
-
+        }
+        .clipShape(
+            RoundedRectangle(cornerRadius: 36, style: .continuous)
+        )
     }
 }
 

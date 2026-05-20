@@ -2,6 +2,13 @@
 #
 # gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
 
+## Secrets — never commit
+*.p8
+AuthKey*.p8
+genetare-apple.js
+.env
+.env.*
+
 ## User settings
 xcuserdata/
 
