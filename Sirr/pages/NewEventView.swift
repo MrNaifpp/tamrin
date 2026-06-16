@@ -37,6 +37,12 @@ struct NewEventView: View {
     @State private var tempPriceValue: String = ""
     @State private var tempPeopleValue: String = ""
     @State private var tempLocationValue: String = ""
+
+    // STC Pay guardrail state — shown when user tries to save a paid event without a profile number.
+    @State private var showSTCPayGuardrail: Bool = false
+    @State private var guardrailInput: String = ""
+    @State private var guardrailError: String? = nil
+    @State private var isSavingGuardrailNumber = false
     
     // Map location selection state
     @State private var selectedCoordinate: CLLocationCoordinate2D? = nil
@@ -267,6 +273,103 @@ struct NewEventView: View {
         } message: {
             if let msg = createError { Text(msg) }
         }
+        .sheet(isPresented: $showSTCPayGuardrail) {
+            stcPayGuardrailSheet
+        }
+    }
+
+    /// Sheet shown when the user tries to save a paid event without a profile STC Pay number.
+    private var stcPayGuardrailSheet: some View {
+        ZStack {
+            Color(white: 0.10).ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                HStack {
+                    Spacer()
+                    Button {
+                        showSTCPayGuardrail = false
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 40, height: 40)
+                            .background(Color.white.opacity(0.12))
+                            .clipShape(Circle())
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+
+                Spacer().frame(height: 24)
+
+                Image(systemName: "creditcard.circle.fill")
+                    .font(.system(size: 56))
+                    .foregroundStyle(.white)
+
+                Text("أضف رقم STC Pay")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.top, 16)
+
+                Text("لاستلام مدفوعات الفعاليات المدفوعة، أضف رقم STC Pay الخاص بك.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color(white: 0.8))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 28)
+                    .padding(.top, 8)
+
+                TextField(
+                    "",
+                    text: $guardrailInput,
+                    prompt: Text("مثل 05XXXXXXXX").foregroundColor(Color(white: 0.5))
+                )
+                .keyboardType(.phonePad)
+                .textContentType(.telephoneNumber)
+                .font(.system(size: 16))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 18)
+                .frame(height: 52)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.white.opacity(0.12))
+                )
+                .padding(.horizontal, 24)
+                .padding(.top, 24)
+
+                if let err = guardrailError {
+                    Text(err)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.red)
+                        .padding(.top, 8)
+                }
+
+                Spacer()
+
+                Button {
+                    Task { await saveSTCPayAndContinue() }
+                } label: {
+                    HStack {
+                        if isSavingGuardrailNumber { ProgressView().tint(.black) }
+                        Text("حفظ ومتابعة")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(.black)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 54)
+                    .background(
+                        RoundedRectangle(cornerRadius: 28, style: .continuous)
+                            .fill(Color.white)
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(isSavingGuardrailNumber || guardrailInput.trimmingCharacters(in: .whitespaces).isEmpty)
+                .opacity(guardrailInput.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 32)
+            }
+        }
+        .environment(\.layoutDirection, .rightToLeft)
+        .presentationDetents([.medium])
     }
 
     /// Asset name for DB (card1, card2, card3, card4). No upload; home page shows from assets.
@@ -283,6 +386,22 @@ struct NewEventView: View {
         isCreating = true
         createError = nil
         defer { isCreating = false }
+
+        // Guardrail: paid event requires the creator's STC Pay number on profile.
+        if fieldValue > 0 {
+            do {
+                let profile = try await AuthService.shared.getCurrentUserProfile()
+                let number = profile?.stcPayNumber?.trimmingCharacters(in: .whitespaces) ?? ""
+                if number.isEmpty {
+                    showSTCPayGuardrail = true
+                    return
+                }
+            } catch {
+                createError = "تعذر التحقق من رقم STC Pay الخاص بك"
+                return
+            }
+        }
+
         do {
             let computedPricePerPerson: Double = (numberOfPeople > 0) ? Double(fieldValue) / Double(numberOfPeople) : 0
             let event = try await EventService.shared.createEvent(
@@ -301,6 +420,27 @@ struct NewEventView: View {
         } catch {
             print("[CreateEvent] Error — \(error.localizedDescription)")
             createError = error.localizedDescription
+        }
+    }
+
+    /// Save the STC Pay number from the guardrail sheet, then proceed with event creation.
+    private func saveSTCPayAndContinue() async {
+        guardrailError = nil
+        let trimmed = guardrailInput.trimmingCharacters(in: .whitespaces)
+        guard let canonical = STCPay.normalize(trimmed) else {
+            guardrailError = "رقم STC Pay غير صالح"
+            return
+        }
+        isSavingGuardrailNumber = true
+        defer { isSavingGuardrailNumber = false }
+        do {
+            try await AuthService.shared.updateSTCPayNumber(canonical)
+            showSTCPayGuardrail = false
+            guardrailInput = ""
+            // Re-attempt event creation now that the number is saved.
+            await submitCreateEvent()
+        } catch {
+            guardrailError = "تعذر حفظ الرقم. حاول مرة أخرى."
         }
     }
 

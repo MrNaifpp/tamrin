@@ -26,6 +26,8 @@ struct EventHeroDetailView: View {
     @State private var showWaitlistSheet = false
     @State private var hasPendingPayment = false
     @State private var isCancellingPending = false
+    @State private var actionInFlight: UUID? = nil
+    @State private var ownerActionError: String? = nil
 
     init(event: EventData, onClose: @escaping () -> Void, onEnroll: @escaping () -> Void) {
         self.event = event
@@ -278,38 +280,88 @@ struct EventHeroDetailView: View {
                                 .frame(maxWidth: .infinity, minHeight: 60)
                         } else {
                             ForEach(participants) { participant in
-                                HStack(spacing: 12) {
-                                    if let avatarUrl = participant.avatarUrl, let url = URL(string: avatarUrl) {
-                                        AsyncImage(url: url) { phase in
-                                            switch phase {
-                                            case .success(let image):
-                                                image.resizable().scaledToFill()
-                                            default:
-                                                Image(systemName: "person.crop.circle.fill")
-                                                    .resizable().scaledToFit()
-                                                    .foregroundStyle(.white.opacity(0.9))
+                                VStack(spacing: 0) {
+                                    HStack(spacing: 12) {
+                                        if let avatarUrl = participant.avatarUrl, let url = URL(string: avatarUrl) {
+                                            AsyncImage(url: url) { phase in
+                                                switch phase {
+                                                case .success(let image):
+                                                    image.resizable().scaledToFill()
+                                                default:
+                                                    Image(systemName: "person.crop.circle.fill")
+                                                        .resizable().scaledToFit()
+                                                        .foregroundStyle(.white.opacity(0.9))
+                                                }
                                             }
-                                        }
-                                        .frame(width: 38, height: 38)
-                                        .clipShape(Circle())
-                                    } else {
-                                        Image(systemName: "person.crop.circle.fill")
-                                            .resizable()
-                                            .scaledToFit()
                                             .frame(width: 38, height: 38)
-                                            .foregroundStyle(.white.opacity(0.9))
+                                            .clipShape(Circle())
+                                        } else {
+                                            Image(systemName: "person.crop.circle.fill")
+                                                .resizable()
+                                                .scaledToFit()
+                                                .frame(width: 38, height: 38)
+                                                .foregroundStyle(.white.opacity(0.9))
+                                        }
+
+                                        Text(participant.displayName ?? "مشارك")
+                                            .font(.appBodyMedium)
+                                            .foregroundStyle(.white)
+
+                                        Spacer()
+
+                                        if participant.userId == event.creatorId {
+                                            Text("المنظم")
+                                                .font(.appCaption)
+                                                .foregroundStyle(.white.opacity(0.6))
+                                        } else if participant.isPending {
+                                            Text("بانتظار التأكيد")
+                                                .font(.appCaption)
+                                                .foregroundStyle(.yellow)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.yellow.opacity(0.18))
+                                                .clipShape(Capsule())
+                                        }
                                     }
 
-                                    Text(participant.displayName ?? "مشارك")
-                                        .font(.appBodyMedium)
-                                        .foregroundStyle(.white)
+                                    if isOwner && participant.isPending {
+                                        HStack(spacing: 10) {
+                                            Button {
+                                                handleOwnerConfirm(participant: participant)
+                                            } label: {
+                                                HStack(spacing: 6) {
+                                                    if actionInFlight == participant.userId {
+                                                        ProgressView().tint(.black)
+                                                    }
+                                                    Text("تأكيد")
+                                                        .font(.appCaption)
+                                                        .foregroundStyle(.black)
+                                                }
+                                                .frame(maxWidth: .infinity, minHeight: 36)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                                        .fill(Color.green)
+                                                )
+                                            }
+                                            .buttonStyle(.plain)
+                                            .disabled(actionInFlight != nil)
 
-                                    Spacer()
-
-                                    if participant.userId == event.creatorId {
-                                        Text("المنظم")
-                                            .font(.appCaption)
-                                            .foregroundStyle(.white.opacity(0.6))
+                                            Button {
+                                                handleOwnerReject(participant: participant)
+                                            } label: {
+                                                Text("رفض")
+                                                    .font(.appCaption)
+                                                    .foregroundStyle(.white)
+                                                    .frame(maxWidth: .infinity, minHeight: 36)
+                                                    .background(
+                                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                                            .fill(Color.red.opacity(0.8))
+                                                    )
+                                            }
+                                            .buttonStyle(.plain)
+                                            .disabled(actionInFlight != nil)
+                                        }
+                                        .padding(.top, 8)
                                     }
                                 }
                                 .padding(.vertical, 12)
@@ -321,6 +373,12 @@ struct EventHeroDetailView: View {
                                 )
                                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                                 .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
+                            }
+
+                            if let err = ownerActionError {
+                                Text(err)
+                                    .font(.appCaption)
+                                    .foregroundStyle(.red)
                             }
                         }
                     }
@@ -405,6 +463,46 @@ struct EventHeroDetailView: View {
                 await loadParticipants()
             } catch {
                 print("[CancelPending] Error — \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func handleOwnerConfirm(participant: ParticipantRecord) {
+        guard let creatorId = currentUserId else { return }
+        actionInFlight = participant.userId
+        ownerActionError = nil
+        Task {
+            defer { actionInFlight = nil }
+            do {
+                try await STCPayService.shared.confirmPayment(
+                    eventId: event.id,
+                    joinerId: participant.userId,
+                    creatorId: creatorId
+                )
+                await loadParticipants()
+            } catch {
+                ownerActionError = "تعذر تأكيد الدفعة"
+                print("[ConfirmPayment] Error — \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func handleOwnerReject(participant: ParticipantRecord) {
+        guard let creatorId = currentUserId else { return }
+        actionInFlight = participant.userId
+        ownerActionError = nil
+        Task {
+            defer { actionInFlight = nil }
+            do {
+                _ = try await STCPayService.shared.rejectPayment(
+                    eventId: event.id,
+                    joinerId: participant.userId,
+                    creatorId: creatorId
+                )
+                await loadParticipants()
+            } catch {
+                ownerActionError = "تعذر رفض الدفعة"
+                print("[RejectPayment] Error — \(error.localizedDescription)")
             }
         }
     }
