@@ -214,6 +214,36 @@ class AuthViewModel: ObservableObject {
         }
     }
 
+    /// Save the user's STC Pay number on their profile. Pass the raw input the user typed;
+    /// normalization happens here. Sets `errorMessage` on validation failure.
+    func saveSTCPayNumber(rawInput: String) async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        guard let canonical = STCPay.normalize(rawInput) else {
+            errorMessage = "رقم STC Pay غير صالح"
+            logger.error("Save STC Pay number failed: invalid input")
+            return
+        }
+        do {
+            try await AuthService.shared.updateSTCPayNumber(canonical)
+            // Reflect locally without a roundtrip.
+            if let profile = currentProfile {
+                currentProfile = UserRecord(
+                    userId: profile.userId,
+                    name: profile.name,
+                    position: profile.position,
+                    avatarUrl: profile.avatarUrl,
+                    stcPayNumber: canonical
+                )
+            }
+            logger.info("Save STC Pay number succeeded")
+        } catch {
+            logger.error("Save STC Pay number failed: \(error.localizedDescription)")
+            errorMessage = error.localizedDescription
+        }
+    }
+
     /// Update profile (name, position, optional new avatar). Reloads currentProfile on success.
     func updateProfile(name: String, position: String, imageData: Data?) async {
         isLoading = true
@@ -236,7 +266,8 @@ class AuthViewModel: ObservableObject {
                 userId: session.user.id,
                 name: name,
                 position: position,
-                avatarUrl: avatarUrl
+                avatarUrl: avatarUrl,
+                stcPayNumber: currentProfile?.stcPayNumber
             )
             logger.info("Update profile succeeded")
         } catch {

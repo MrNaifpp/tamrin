@@ -1,0 +1,48 @@
+{
+  "source": "/Users/naifalialshahrani/Documents/tamrin/Sirr/features/profile/EditProfileSheet.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "عدل حسابك",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 34
+        }
+      },
+      {
+        "comment": "",
+        "key": "عرف بنفسك، هذا اسمك وصورتك اللي بيشوفونها الناس.",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 37
+        }
+      },
+      {
+        "comment": "",
+        "key": "الاسم",
+        "location": {
+          "startingColumn": 65,
+          "startingLine": 104
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 104
+        }
+      },
+      {
+        "comment": "",
+        "key": "حفظ",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 130
+        }
+      }
+    ]
+  },
+  "version": 1
+}

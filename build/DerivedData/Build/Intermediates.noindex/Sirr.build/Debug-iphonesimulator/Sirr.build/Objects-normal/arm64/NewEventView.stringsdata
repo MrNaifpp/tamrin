@@ -1,0 +1,264 @@
+{
+  "source": "/Users/naifalialshahrani/Documents/tamrin/Sirr/pages/NewEventView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "خطأ",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 265
+        }
+      },
+      {
+        "comment": "",
+        "key": "موقع التمرين",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 101
+        }
+      },
+      {
+        "comment": "",
+        "key": "وصف التمرين",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 123
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 129
+        }
+      },
+      {
+        "comment": "",
+        "key": "حسناً",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 266
+        }
+      },
+      {
+        "comment": "",
+        "key": "0",
+        "location": {
+          "startingColumn": 61,
+          "startingLine": 361
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 361
+        }
+      },
+      {
+        "comment": "",
+        "key": "حذف",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 395
+        }
+      },
+      {
+        "comment": "",
+        "key": "حفظ",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 409
+        }
+      },
+      {
+        "comment": "",
+        "key": "اختيار صورة",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 460
+        }
+      },
+      {
+        "comment": "",
+        "key": "اسم التمرين",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 482
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 488
+        }
+      },
+      {
+        "comment": "",
+        "key": "إعدادات إضافية",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 513
+        }
+      },
+      {
+        "comment": "",
+        "key": "يبدأ",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 546
+        }
+      },
+      {
+        "comment": "",
+        "key": "ينتهي",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 576
+        }
+      },
+      {
+        "comment": "",
+        "key": "القطة",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 633
+        }
+      },
+      {
+        "comment": "",
+        "key": "الموافقة على اللاعبين",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 660
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 666
+        }
+      },
+      {
+        "comment": "",
+        "key": "قيمة الملعب",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 697
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 705
+        }
+      },
+      {
+        "comment": "",
+        "key": "العدد",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 738
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 745
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 806
+        }
+      },
+      {
+        "comment": "",
+        "key": "حفظ",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 820
+        }
+      },
+      {
+        "comment": "",
+        "key": "اختيار صورة",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 854
+        }
+      },
+      {
+        "comment": "",
+        "key": "اختر صورة للتمرين",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 858
+        }
+      },
+      {
+        "comment": "",
+        "key": "أدخل الموقع",
+        "location": {
+          "startingColumn": 58,
+          "startingLine": 1134
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 1134
+        }
+      },
+      {
+        "comment": "",
+        "key": "ابحث عن موقع",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 1028
+        }
+      },
+      {
+        "comment": "",
+        "key": "جاري البحث...",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1158
+        }
+      },
+      {
+        "comment": "",
+        "key": "حذف",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1173
+        }
+      },
+      {
+        "comment": "",
+        "key": "حفظ",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1187
+        }
+      }
+    ]
+  },
+  "version": 1
+}

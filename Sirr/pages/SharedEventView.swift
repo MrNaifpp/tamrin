@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import Supabase
 
 struct SharedEventView: View {
     let eventId: UUID
@@ -20,6 +21,9 @@ struct SharedEventView: View {
     @State private var isJoining = false
     @State private var joinSuccess = false
     @State private var joinError: String?
+    @State private var hasPendingPayment = false
+    @State private var stcPaySheetNumber: String?
+    @State private var showWaitlistSheet = false
 
     var body: some View {
         ZStack {
@@ -31,7 +35,25 @@ struct SharedEventView: View {
                 eventDetailView(event)
             }
         }
-        .task { await loadEvent() }
+        .task {
+            await loadEvent()
+            await refreshOwnStatus()
+        }
+        .sheet(isPresented: Binding(
+            get: { stcPaySheetNumber != nil },
+            set: { if !$0 { stcPaySheetNumber = nil } }
+        )) {
+            if let number = stcPaySheetNumber, let event {
+                STCPaySheet(eventName: event.name, amount: event.pricePerPerson, stcPayNumber: number)
+            }
+        }
+        .sheet(isPresented: $showWaitlistSheet) {
+            if let event {
+                STCPayWaitlistSheet(eventName: event.name, onJoin: {
+                    await joinWaitlistAction(event)
+                })
+            }
+        }
     }
 
     // MARK: - Loading
@@ -146,6 +168,30 @@ struct SharedEventView: View {
                             RoundedRectangle(cornerRadius: 18, style: .continuous)
                                 .fill(Color.green.opacity(0.3))
                         )
+                    } else if hasPendingPayment {
+                        VStack(spacing: 10) {
+                            HStack(spacing: 10) {
+                                Image(systemName: "hourglass")
+                                    .foregroundStyle(.yellow)
+                                Text("بانتظار تأكيد صاحب الحدث")
+                                    .font(.appBodySemibold)
+                                    .foregroundStyle(.white)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 54)
+                            .background(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .fill(Color.yellow.opacity(0.25))
+                            )
+                            Button {
+                                cancelPendingAction(event)
+                            } label: {
+                                Text("إلغاء الطلب")
+                                    .font(.appCaption)
+                                    .foregroundStyle(.white.opacity(0.85))
+                                    .underline()
+                            }
+                            .disabled(isJoining)
+                        }
                     } else if event.registrationLocked {
                         HStack(spacing: 10) {
                             Image(systemName: "lock.fill")
@@ -173,9 +219,9 @@ struct SharedEventView: View {
                                     ProgressView()
                                         .progressViewStyle(CircularProgressViewStyle(tint: .black))
                                 } else {
-                                    Image(systemName: event.pricePerPerson > 0 ? "apple.logo" : "plus")
+                                    Image(systemName: event.pricePerPerson > 0 ? "creditcard.fill" : "plus")
                                         .foregroundStyle(.black)
-                                    Text(event.pricePerPerson > 0 ? "ادفع وانضم — Apple Pay" : "انضم للتمرين")
+                                    Text(event.pricePerPerson > 0 ? "ادفع عبر STC Pay" : "انضم للتمرين")
                                         .font(.appBody)
                                         .foregroundStyle(.black)
                                 }
@@ -250,27 +296,88 @@ struct SharedEventView: View {
             defer { isJoining = false }
 
             if event.pricePerPerson > 0 {
-                let authorized = await PaymentService.shared.requestPayment(
-                    amount: event.pricePerPerson,
-                    eventName: event.name
-                )
-                guard authorized else {
-                    joinError = "تم إلغاء الدفع"
-                    return
+                await submitSTCPayPayment(for: event)
+            } else {
+                do {
+                    try await EventService.shared.joinEvent(eventId: event.id)
+                    joinSuccess = true
+                } catch {
+                    let msg = error.localizedDescription
+                    if msg.contains("closed") || msg.contains("locked") {
+                        joinError = "التسجيل مغلق لهذه الفعالية"
+                    } else {
+                        joinError = "فشل في الانضمام: \(msg)"
+                    }
                 }
             }
+        }
+    }
 
+    private func submitSTCPayPayment(for event: EventData) async {
+        do {
+            let session = try await SupabaseClientManager.shared.client.auth.session
+            let userId = session.user.id
+            let result = try await STCPayService.shared.submitPayment(eventId: event.id, userId: userId)
+            switch result {
+            case .submitted(_, let number):
+                hasPendingPayment = true
+                stcPaySheetNumber = number
+            case .seatsFull:
+                showWaitlistSheet = true
+            case .alreadyJoined(let status):
+                if status == .confirmed { joinSuccess = true }
+                else if status == .pending { hasPendingPayment = true }
+                else { joinError = "أنت مسجل بالفعل في هذه الفعالية" }
+            case .creatorMissingNumber:
+                joinError = "صاحب الفعالية لم يضف رقم STC Pay بعد"
+            case .registrationClosed:
+                joinError = "التسجيل مغلق لهذه الفعالية"
+            }
+        } catch {
+            joinError = "فشل في الانضمام: \(error.localizedDescription)"
+        }
+    }
+
+    private func cancelPendingAction(_ event: EventData) {
+        isJoining = true
+        joinError = nil
+        Task {
+            defer { isJoining = false }
             do {
-                try await EventService.shared.joinEvent(eventId: event.id)
-                joinSuccess = true
+                let session = try await SupabaseClientManager.shared.client.auth.session
+                _ = try await STCPayService.shared.cancelPending(eventId: event.id, userId: session.user.id)
+                hasPendingPayment = false
             } catch {
-                let msg = error.localizedDescription
-                if msg.contains("closed") || msg.contains("locked") {
-                    joinError = "التسجيل مغلق لهذه الفعالية"
-                } else {
-                    joinError = "فشل في الانضمام: \(msg)"
+                joinError = "تعذر إلغاء الطلب"
+            }
+        }
+    }
+
+    private func joinWaitlistAction(_ event: EventData) async {
+        do {
+            let session = try await SupabaseClientManager.shared.client.auth.session
+            try await STCPayService.shared.joinWaitlist(eventId: event.id, userId: session.user.id)
+        } catch {
+            joinError = "تعذر الانضمام لقائمة الانتظار"
+        }
+    }
+
+    /// Look up the current user's row in event_participants so we can show
+    /// the pending pill or the confirmed pill when the view loads.
+    private func refreshOwnStatus() async {
+        guard isLoggedIn else { return }
+        do {
+            let session = try await SupabaseClientManager.shared.client.auth.session
+            let participants = try await EventService.shared.getEventParticipants(eventId: eventId)
+            if let mine = participants.first(where: { $0.userId == session.user.id }) {
+                if mine.isPending {
+                    hasPendingPayment = true
+                } else if mine.isConfirmed {
+                    joinSuccess = true
                 }
             }
+        } catch {
+            // Non-fatal — the join button will still work.
         }
     }
 }

@@ -1,0 +1,144 @@
+{
+  "source": "/Users/naifalialshahrani/Documents/tamrin/Sirr/pages/EventHeroDetailView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "التسجيل مغلق",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 136
+        }
+      },
+      {
+        "comment": "",
+        "key": "اعتذار عن التمرين",
+        "location": {
+          "startingColumn": 59,
+          "startingLine": 161
+        }
+      },
+      {
+        "comment": "",
+        "key": "سجل في التمرين",
+        "location": {
+          "startingColumn": 96,
+          "startingLine": 161
+        }
+      },
+      {
+        "comment": "",
+        "key": "نسبة اكتمال التمرين",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 194
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld/%lld",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 198
+        }
+      },
+      {
+        "comment": "",
+        "key": "لا يوجد مشاركين بعد",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 234
+        }
+      },
+      {
+        "comment": "",
+        "key": "القائمة",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 220
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 224
+        }
+      },
+      {
+        "comment": "",
+        "key": "المنظم",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 269
+        }
+      },
+      {
+        "comment": "",
+        "key": "سجل في التمرين",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 477
+        }
+      },
+      {
+        "comment": "",
+        "key": "اضغط على اسمك لإكمال التسجيل",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 530
+        }
+      },
+      {
+        "comment": "",
+        "key": "بسجل معي أحد",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 603
+        }
+      },
+      {
+        "comment": "",
+        "key": "الاسم كامل",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 618
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 47,
+          "startingLine": 617
+        }
+      },
+      {
+        "comment": "",
+        "key": "بسجل واحد زيادة",
+        "location": {
+          "startingColumn": 50,
+          "startingLine": 645
+        }
+      },
+      {
+        "comment": "",
+        "key": "سجل — Apple Pay",
+        "location": {
+          "startingColumn": 69,
+          "startingLine": 678
+        }
+      },
+      {
+        "comment": "",
+        "key": "سجل",
+        "location": {
+          "startingColumn": 94,
+          "startingLine": 678
+        }
+      }
+    ]
+  },
+  "version": 1
+}

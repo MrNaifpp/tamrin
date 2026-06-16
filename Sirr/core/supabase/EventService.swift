@@ -51,14 +51,24 @@ struct ParticipantRecord: Codable, Identifiable {
     let joinedAt: String?
     let displayName: String?
     let avatarUrl: String?
+    let paymentStatus: PaymentStatus?
+    let paidToNumber: String?
 
     var id: UUID { userId }
+
+    /// True if the row represents a confirmed seat (free join or paid + confirmed).
+    var isConfirmed: Bool { (paymentStatus ?? .confirmed) == .confirmed }
+
+    /// True if the row is awaiting creator confirmation.
+    var isPending: Bool { paymentStatus == .pending }
 
     enum CodingKeys: String, CodingKey {
         case userId = "user_id"
         case joinedAt = "joined_at"
         case displayName = "display_name"
         case avatarUrl = "avatar_url"
+        case paymentStatus = "payment_status"
+        case paidToNumber = "paid_to_number"
     }
 }
 

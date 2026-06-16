@@ -1,0 +1,72 @@
+{
+  "source": "/Users/naifalialshahrani/Documents/tamrin/Sirr/features/profile/EditProfileSheet.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "عدل حسابك",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 47
+        }
+      },
+      {
+        "comment": "",
+        "key": "عرف بنفسك، هذا اسمك وصورتك اللي بيشوفونها الناس.",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 50
+        }
+      },
+      {
+        "comment": "",
+        "key": "الاسم",
+        "location": {
+          "startingColumn": 65,
+          "startingLine": 117
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 117
+        }
+      },
+      {
+        "comment": "",
+        "key": "رقم STC Pay (مثل 05XXXXXXXX)",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 134
+        }
+      },
+      {
+        "comment": "",
+        "key": "هذا الرقم يستلم مدفوعات الفعاليات المدفوعة.",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 155
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 132
+        }
+      },
+      {
+        "comment": "",
+        "key": "حفظ",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 197
+        }
+      }
+    ]
+  },
+  "version": 1
+}

@@ -19,8 +19,21 @@ struct EditProfileSheet: View {
     @State private var name: String = ""
     @State private var selectedItem: PhotosPickerItem?
     @State private var selectedImageData: Data?
+    @State private var stcPayInput: String = ""
+    @State private var stcPayError: String? = nil
 
     private let sheetBackground = Color(white: 0.18)
+
+    private var normalizedSTCPay: String? {
+        let trimmed = stcPayInput.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        return STCPay.normalize(trimmed)
+    }
+
+    private var isSTCPayInputValid: Bool {
+        let trimmed = stcPayInput.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty || STCPay.isValid(trimmed)
+    }
 
     var body: some View {
         NavigationStack {
@@ -113,18 +126,72 @@ struct EditProfileSheet: View {
                             .padding(.horizontal, 24)
                             .padding(.top, 24)
 
+                        // STC Pay number — used to receive payments from joiners on paid events.
+                        VStack(alignment: .trailing, spacing: 6) {
+                            TextField(
+                                "",
+                                text: $stcPayInput,
+                                prompt: Text("رقم STC Pay (مثل 05XXXXXXXX)").foregroundColor(Color(white: 0.5))
+                            )
+                            .keyboardType(.phonePad)
+                            .textContentType(.telephoneNumber)
+                            .font(.system(size: 16))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 18)
+                            .frame(height: 52)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .fill(Color(white: 0.25))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(isSTCPayInputValid ? Color.clear : Color.red.opacity(0.7), lineWidth: 1)
+                            )
+                            if let err = stcPayError {
+                                Text(err)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.red)
+                            } else {
+                                Text("هذا الرقم يستلم مدفوعات الفعاليات المدفوعة.")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Color(white: 0.6))
+                            }
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.top, 16)
+
                         // Save button
                         Button {
                             Task {
+                                stcPayError = nil
+
+                                let trimmed = stcPayInput.trimmingCharacters(in: .whitespaces)
+                                if !trimmed.isEmpty && STCPay.normalize(trimmed) == nil {
+                                    stcPayError = "رقم STC Pay غير صالح"
+                                    return
+                                }
+
                                 await authVM.updateProfile(
                                     name: name.trimmingCharacters(in: .whitespaces),
                                     position: authVM.currentProfile?.position ?? "",
                                     imageData: selectedImageData
                                 )
-                                if authVM.errorMessage == nil {
-                                    isPresented = false
-                                    dismiss()
+                                guard authVM.errorMessage == nil else { return }
+
+                                // Persist STC Pay number if it changed.
+                                let newCanonical = trimmed.isEmpty ? nil : STCPay.normalize(trimmed)
+                                if newCanonical != authVM.currentProfile?.stcPayNumber {
+                                    do {
+                                        try await AuthService.shared.updateSTCPayNumber(newCanonical)
+                                        await authVM.loadCurrentProfile()
+                                    } catch {
+                                        stcPayError = "تعذر حفظ رقم STC Pay"
+                                        return
+                                    }
                                 }
+
+                                isPresented = false
+                                dismiss()
                             }
                         } label: {
                             Text("حفظ")
@@ -163,6 +230,9 @@ struct EditProfileSheet: View {
                 Task {
                     await authVM.loadCurrentProfile()
                     name = authVM.currentProfile?.name ?? ""
+                    if let stc = authVM.currentProfile?.stcPayNumber {
+                        stcPayInput = STCPay.displayForm(stc)
+                    }
                 }
             }
         }

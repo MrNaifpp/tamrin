@@ -22,6 +22,10 @@ struct EventHeroDetailView: View {
     @State private var currentUserId: UUID?
     @State private var participants: [ParticipantRecord] = []
     @State private var participantsLoading = false
+    @State private var stcPaySheetNumber: String?
+    @State private var showWaitlistSheet = false
+    @State private var hasPendingPayment = false
+    @State private var isCancellingPending = false
 
     init(event: EventData, onClose: @escaping () -> Void, onEnroll: @escaping () -> Void) {
         self.event = event
@@ -143,6 +147,33 @@ struct EventHeroDetailView: View {
                                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                                     .fill(Color.gray.opacity(0.4))
                             )
+                        } else if hasPendingPayment {
+                            VStack(spacing: 10) {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "hourglass")
+                                        .foregroundStyle(.yellow)
+                                    Text("بانتظار تأكيد صاحب الحدث")
+                                        .font(.appBody)
+                                        .foregroundStyle(.white)
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 54)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                        .fill(Color.yellow.opacity(0.25))
+                                )
+                                Button {
+                                    handleCancelPending()
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        if isCancellingPending { ProgressView().tint(.white) }
+                                        Text("إلغاء الطلب")
+                                            .font(.appCaption)
+                                            .foregroundStyle(.white.opacity(0.85))
+                                            .underline()
+                                    }
+                                }
+                                .disabled(isCancellingPending)
+                            }
                         } else {
                             Button {
                                 if isEnrolled {
@@ -181,6 +212,16 @@ struct EventHeroDetailView: View {
                                         showEnrollmentSheet = false
                                         Task { await loadParticipants() }
                                         onEnroll()
+                                    },
+                                    onSubmittedPayment: { number in
+                                        showEnrollmentSheet = false
+                                        hasPendingPayment = true
+                                        stcPaySheetNumber = number
+                                        Task { await loadParticipants() }
+                                    },
+                                    onSeatsFull: {
+                                        showEnrollmentSheet = false
+                                        showWaitlistSheet = true
                                     }
                                 )
                             }
@@ -302,6 +343,24 @@ struct EventHeroDetailView: View {
                 await loadParticipants()
             }
         }
+        .sheet(isPresented: Binding(
+            get: { stcPaySheetNumber != nil },
+            set: { if !$0 { stcPaySheetNumber = nil } }
+        )) {
+            if let number = stcPaySheetNumber {
+                STCPaySheet(eventName: event.name, amount: event.pricePerPerson, stcPayNumber: number)
+            }
+        }
+        .sheet(isPresented: $showWaitlistSheet) {
+            STCPayWaitlistSheet(eventName: event.name, onJoin: {
+                guard let uid = currentUserId else { return }
+                do {
+                    try await STCPayService.shared.joinWaitlist(eventId: event.id, userId: uid)
+                } catch {
+                    print("[Waitlist] Error — \(error.localizedDescription)")
+                }
+            })
+        }
     }
 
     private func loadParticipants() async {
@@ -309,8 +368,12 @@ struct EventHeroDetailView: View {
         defer { participantsLoading = false }
         do {
             participants = try await EventService.shared.getEventParticipants(eventId: event.id)
-            if let uid = currentUserId {
-                isEnrolled = participants.contains { $0.userId == uid }
+            if let uid = currentUserId, let mine = participants.first(where: { $0.userId == uid }) {
+                isEnrolled = mine.isConfirmed
+                hasPendingPayment = mine.isPending
+            } else {
+                isEnrolled = false
+                hasPendingPayment = false
             }
         } catch {
             print("[Participants] Error — \(error.localizedDescription)")
@@ -327,6 +390,21 @@ struct EventHeroDetailView: View {
                 await loadParticipants()
             } catch {
                 print("[LeaveEvent] Error — \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func handleCancelPending() {
+        guard let uid = currentUserId else { return }
+        isCancellingPending = true
+        Task {
+            defer { isCancellingPending = false }
+            do {
+                _ = try await STCPayService.shared.cancelPending(eventId: event.id, userId: uid)
+                hasPendingPayment = false
+                await loadParticipants()
+            } catch {
+                print("[CancelPending] Error — \(error.localizedDescription)")
             }
         }
     }
@@ -411,7 +489,9 @@ private struct ActionChip: View {
 struct EnrollmentSheetView: View {
     let event: EventData
     let onEnroll: () -> Void
-    
+    var onSubmittedPayment: ((String) -> Void)? = nil
+    var onSeatsFull: (() -> Void)? = nil
+
     @Environment(\.dismiss) private var dismiss
     @State private var currentPage: Int = 0
     @State private var isNameSelected: Bool = false
@@ -672,10 +752,10 @@ struct EnrollmentSheetView: View {
                                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                 } else {
                                     if event.pricePerPerson > 0 {
-                                        Image(systemName: "apple.logo")
+                                        Image(systemName: "creditcard.fill")
                                             .foregroundStyle(.white)
                                     }
-                                    Text(event.pricePerPerson > 0 ? "سجل — Apple Pay" : "سجل")
+                                    Text(event.pricePerPerson > 0 ? "ادفع عبر STC Pay" : "سجل")
                                         .font(.appBodySemibold)
                                         .foregroundStyle(.white)
                                 }
@@ -709,26 +789,30 @@ struct EnrollmentSheetView: View {
             paymentError = nil
             Task {
                 defer { isProcessingPayment = false }
-
-                guard PaymentService.isApplePayAvailable else {
-                    paymentError = "Apple Pay غير متاح على هذا الجهاز"
-                    return
-                }
-
-                let authorized = await PaymentService.shared.requestPayment(
-                    amount: event.pricePerPerson,
-                    eventName: event.name
-                )
-
-                guard authorized else {
-                    paymentError = "تم إلغاء الدفع"
-                    return
-                }
-
                 do {
-                    try await EventService.shared.joinEvent(eventId: event.id)
-                    onEnroll()
-                    dismiss()
+                    let session = try await SupabaseClientManager.shared.client.auth.session
+                    let result = try await STCPayService.shared.submitPayment(
+                        eventId: event.id,
+                        userId: session.user.id
+                    )
+                    switch result {
+                    case .submitted(_, let number):
+                        onSubmittedPayment?(number)
+                        dismiss()
+                    case .seatsFull:
+                        onSeatsFull?()
+                        dismiss()
+                    case .alreadyJoined(let status):
+                        switch status {
+                        case .confirmed: paymentError = "أنت مسجل بالفعل في هذه الفعالية"
+                        case .pending: paymentError = "لديك طلب دفع قيد التأكيد"
+                        case .rejected: paymentError = "تم رفض طلبك سابقاً"
+                        }
+                    case .creatorMissingNumber:
+                        paymentError = "صاحب الفعالية لم يضف رقم STC Pay بعد"
+                    case .registrationClosed:
+                        paymentError = "التسجيل مغلق لهذه الفعالية"
+                    }
                 } catch {
                     paymentError = error.localizedDescription
                 }

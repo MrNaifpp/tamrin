@@ -1,0 +1,80 @@
+{
+  "source": "/Users/naifalialshahrani/Documents/tamrin/Sirr/App/QuickFontTest.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Font Test - اختبار الخط",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 14
+        }
+      },
+      {
+        "comment": "",
+        "key": "System Font (Default):",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 20
+        }
+      },
+      {
+        "comment": "",
+        "key": "مرحباً بكم في التطبيق - Welcome",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 23
+        }
+      },
+      {
+        "comment": "",
+        "key": "Custom Font (appFont Regular):",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 30
+        }
+      },
+      {
+        "comment": "",
+        "key": "مرحباً بكم في التطبيق - Welcome",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 33
+        }
+      },
+      {
+        "comment": "",
+        "key": "Custom Font (appFont Bold):",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 38
+        }
+      },
+      {
+        "comment": "",
+        "key": "مرحباً بكم في التطبيق - Welcome",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 41
+        }
+      },
+      {
+        "comment": "",
+        "key": "Direct Font Name Test:",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 48
+        }
+      },
+      {
+        "comment": "",
+        "key": "مرحباً بكم في التطبيق - Welcome",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 51
+        }
+      }
+    ]
+  },
+  "version": 1
+}
