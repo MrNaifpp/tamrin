@@ -88,7 +88,7 @@ struct EventHeroDetailView: View {
                             .multilineTextAlignment(.center)
                         
                         Text(event.date)
-                            .font(.appBodySemibold)
+                            .font(.appFont(size: 18, weight: .bold))
                             .foregroundStyle(.white.opacity(0.9))
                             .multilineTextAlignment(.center)
                     }
@@ -608,8 +608,8 @@ struct EnrollmentSheetView: View {
         ]
     }
     
-    // Current user
-    private let userName = "محمد معلا"
+    // Current user's display name (loaded from profile)
+    @State private var userName: String = ""
 
     private var enrollmentEventImage: some View {
         Group {
@@ -723,12 +723,12 @@ struct EnrollmentSheetView: View {
                                         .frame(width: 40, height: 40)
                                         .foregroundStyle(.white.opacity(0.9))
                                     
-                                    Text(userName)
+                                    Text(userName.isEmpty ? "…" : userName)
                                         .font(.appBodySemibold)
                                         .foregroundStyle(.white)
-                                    
+
                                     Spacer()
-                                    
+
                                     if isNameSelected {
                                         Image(systemName: "checkmark.circle.fill")
                                             .foregroundStyle(.green)
@@ -879,6 +879,13 @@ struct EnrollmentSheetView: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+        .task { await loadUserName() }
+    }
+
+    private func loadUserName() async {
+        if let profile = try? await AuthService.shared.getCurrentUserProfile() {
+            userName = profile.name
+        }
     }
 
     private func handleEnroll() {

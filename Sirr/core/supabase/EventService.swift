@@ -25,6 +25,8 @@ struct EventRecord: Codable {
     let registrationLocked: Bool?
     let totalPrice: Int?
     let pricePerPerson: Double?
+    let latitude: Double?
+    let longitude: Double?
     let createdAt: Date?
 
     enum CodingKeys: String, CodingKey {
@@ -40,8 +42,18 @@ struct EventRecord: Codable {
         case registrationLocked = "registration_locked"
         case totalPrice = "total_price"
         case pricePerPerson = "price_per_person"
+        case latitude
+        case longitude
         case createdAt = "created_at"
     }
+}
+
+/// A distinct location the current user has used before (name + coordinates), for quick re-selection.
+struct SavedLocation: Identifiable, Hashable {
+    let name: String
+    let latitude: Double
+    let longitude: Double
+    var id: String { "\(name)|\(latitude)|\(longitude)" }
 }
 
 
@@ -136,7 +148,9 @@ final class EventService {
         imageUrl: String?,
         maxParticipants: Int?,
         totalPrice: Int = 0,
-        pricePerPerson: Double = 0
+        pricePerPerson: Double = 0,
+        latitude: Double? = nil,
+        longitude: Double? = nil
     ) async throws -> EventRecord {
         let session: Session
         do {
@@ -160,6 +174,8 @@ final class EventService {
         if let maxParticipants { params["p_max_participants"] = "\(maxParticipants)" }
         if totalPrice > 0 { params["p_total_price"] = "\(totalPrice)" }
         if pricePerPerson > 0 { params["p_price_per_person"] = "\(pricePerPerson)" }
+        if let latitude { params["p_latitude"] = "\(latitude)" }
+        if let longitude { params["p_longitude"] = "\(longitude)" }
 
         let response = try await client
             .rpc("create_event", params: params)
@@ -184,6 +200,39 @@ final class EventService {
 
         eventLogger.info("API createEvent succeeded (id: \(event.id))")
         return event
+    }
+
+    /// Distinct locations (name + coordinates) the current user has used in their own events.
+    /// Used to let creators quick-pick a previously-entered place. Only rows with coordinates are returned.
+    func getPreviousLocations() async throws -> [SavedLocation] {
+        let session = try await client.auth.session
+        let userId = session.user.id
+
+        struct LocationRow: Decodable {
+            let location: String
+            let latitude: Double?
+            let longitude: Double?
+        }
+        let rows: [LocationRow] = try await client
+            .from("events")
+            .select("location, latitude, longitude")
+            .eq("creator_id", value: userId)
+            .order("created_at", ascending: false)
+            .execute()
+            .value
+
+        var seen = Set<String>()
+        var result: [SavedLocation] = []
+        for row in rows {
+            let name = row.location.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty, let lat = row.latitude, let lon = row.longitude else { continue }
+            let key = name.lowercased()
+            if seen.contains(key) { continue }
+            seen.insert(key)
+            result.append(SavedLocation(name: name, latitude: lat, longitude: lon))
+        }
+        eventLogger.info("API getPreviousLocations succeeded (count: \(result.count))")
+        return result
     }
 
     /// Fetch a single event by ID. Uses SECURITY DEFINER RPC so anyone with the link can view.

@@ -90,10 +90,10 @@ struct NewActivtyCardView: View {
                 // Text overlay at bottom
                 VStack(spacing: 12) {
                     Text(eventName)
-                        .font(.appHeadline)
+                        .font(.appFont(size: 28, weight: .bold))
                         .foregroundStyle(.white)
                     Text(eventDate)
-                        .font(.appSubheadline)
+                        .font(.appFont(size: 20, weight: .bold))
                         .foregroundStyle(.white)
                 }
                 .padding(.bottom, 56)

@@ -179,7 +179,12 @@ struct EventPageView: View {
             .navigationDestination(for: NavigationDestination.self) { destination in
                 switch destination {
                 case .newEvent:
-                    NewEventView()
+                    NewEventView(onCreated: { newEvent in
+                        // Pop the create form and open the newly created event's detail.
+                        Task { await loadEvents() }
+                        if !navigationPath.isEmpty { navigationPath.removeLast() }
+                        navigationPath.append(newEvent)
+                    })
                 }
             }
             .sheet(isPresented: $showEditProfileSheet) {
