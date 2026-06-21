@@ -13,6 +13,7 @@ extension Notification.Name {
 
 @main
 struct SirrApp: App {
+    @UIApplicationDelegateAdaptor(PushAppDelegate.self) private var pushDelegate
     init() {
         // Configure app-wide font settings
         setupAppFont()
