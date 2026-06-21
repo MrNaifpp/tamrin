@@ -332,3 +332,10 @@ s3_region = "env(S3_REGION)"
 s3_access_key = "env(S3_ACCESS_KEY)"
 # Configures AWS_SECRET_ACCESS_KEY for S3 bucket
 s3_secret_key = "env(S3_SECRET_KEY)"
+
+[functions.send-push]
+# Called server-to-server by the push_outbox pg_net trigger using our own
+# shared secret (SEND_PUSH_SECRET), not a Supabase JWT. Disable the gateway's
+# JWT verification so the request reaches the function; the function's own
+# Authorization bearer check is the security gate.
+verify_jwt = false
