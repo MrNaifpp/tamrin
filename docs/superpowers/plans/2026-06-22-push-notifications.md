@@ -860,103 +860,20 @@ git commit -m "feat(ios): tap push -> deep-link to event detail"
 
 ---
 
-### Task 9: Secret handling — stop tracking `AuthKey.p8`
+## Out of Scope for This Plan
 
-**Files:**
-- Delete (untrack): `AuthKey.p8`
-- Modify: `.gitignore`
+Per the user's decision, the following are **not** part of this plan:
 
-**Interfaces:** none (ops). The key's contents now live only in the Edge Function env / Supabase secret.
+- **Untracking / rotating `AuthKey.p8`** — the committed key stays as-is for staging. Move it into Supabase secrets and rotate it during the production cutover.
+- **Deploying to staging + on-device end-to-end verification** — to be run separately once the code lands. Note: because the Simulator cannot obtain a real APNs token, a full delivery test requires deploying the function (`supabase functions deploy send-push`), setting the staging secrets + DB GUCs (see `docs/superpowers/plans/push-db-settings.md`), and testing on a physical device.
 
-- [ ] **Step 1: Confirm the key is already loaded into the function env**
-
-The `APNS_AUTH_KEY` value was set from `AuthKey.p8` in Task 4 Step 7. For staging, set it as a deployed secret (Task 10 Step 1). Verify you have a copy outside git before untracking.
-
-- [ ] **Step 2: Untrack the file and ignore `*.p8`**
-
-```bash
-cd /Users/naifalialshahrani/Documents/tamrin
-git rm --cached AuthKey.p8
-printf "\n*.p8\n" >> .gitignore
-```
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add .gitignore
-git commit -m "chore(security): stop tracking AuthKey.p8 (lives in Supabase secrets)"
-```
-
-> Rotation of the (historically leaked) key is deferred to the production cutover per the spec — not part of this staging pass.
-
----
-
-### Task 10: Deploy to staging + end-to-end device verification
-
-**Files:** none (deploy + manual test).
-
-- [ ] **Step 1: Deploy the function and set staging secrets**
-
-Run:
-```bash
-cd /Users/naifalialshahrani/Documents/tamrin
-supabase functions deploy send-push
-supabase secrets set \
-  SEND_PUSH_SECRET="<random staging secret>" \
-  APNS_KEY_ID="<key id>" \
-  APNS_TEAM_ID="<team id>" \
-  APNS_BUNDLE_ID="com.businessech.tmrin" \
-  APNS_HOST="https://api.sandbox.push.apple.com" \
-  APNS_AUTH_KEY="$(cat /path/to/AuthKey.p8)"
-```
-Expected: deploy succeeds; secrets set.
-
-- [ ] **Step 2: Push migrations + set staging DB GUCs**
-
-Run:
-```bash
-supabase db push
-```
-Then, against the staging DB, run the two `alter database` statements from `docs/superpowers/plans/push-db-settings.md` (Staging section), using the SAME secret value as `SEND_PUSH_SECRET`. Open a new connection afterward.
-
-- [ ] **Step 3: Install the app on a REAL device (Simulator cannot get an APNs token)**
-
-Build/run on a physical device signed with a profile that includes the Push Notifications capability.
-
-- [ ] **Step 4: Verify token registration (creator)**
-
-As the creator account, save an STC Pay number / create a paid event → accept the permission prompt. Then check:
-```bash
-psql "<staging connection>" -c \
-  "select user_id, platform, updated_at from public.device_tokens order by updated_at desc limit 3;"
-```
-Expected: a row for the creator's user_id, `platform = 'ios'`.
-
-- [ ] **Step 5: Verify the end-to-end push**
-
-As a different (joiner) account on a second device or via the app, submit a payment for that creator's event. Within a few seconds:
-- The creator's device shows a banner: **"طلب دفع جديد لحدث {event name}"**.
-- Check the outbox flipped to sent:
-```bash
-psql "<staging connection>" -c \
-  "select type, status, sent_at, last_error from public.push_outbox order by created_at desc limit 3;"
-```
-Expected: latest row `status = 'sent'`, `sent_at` populated, `last_error` null.
-
-- [ ] **Step 6: Verify tap → event**
-
-Tap the banner on the creator's device.
-Expected: the app opens directly to that event's detail screen (via the existing deep-link routing).
-
-- [ ] **Step 7: Final commit / branch wrap**
-
-No code change here; ensure all prior task commits are present. The thin slice is complete when Steps 4–6 pass.
+This plan therefore ends at Task 8: all code written, the app builds, the Edge Function's copy mapping is unit-tested, and SQL behavior is verified locally — but the push is not yet proven delivered to a device.
 
 ---
 
 ## Self-Review Notes
 
-- **Spec coverage:** server-driven model (Tasks 2–4), outbox + logging (Tasks 1, 4), thin slice = one type (Task 2), contextual permission both roles (Task 7), copy only in Edge Function (Task 4 `copy.ts`), tap→deep link (Task 8), secret handling + rotation deferred (Task 9), real-device testing (Task 10) — all mapped.
+- **Spec coverage:** server-driven model (Tasks 2–4), outbox + logging (Tasks 1, 4), thin slice = one type (Task 2), contextual permission both roles (Task 7), copy only in Edge Function (Task 4 `copy.ts`), tap→deep link (Task 8) — all mapped. Secret untracking and on-device verification are explicitly out of scope (see above).
 - **Deferred items** (other 5 types, retry of failed rows, prod APNs host switch) are intentionally absent, per the spec's Out-of-Scope.
 - **Type consistency:** `PushManager.shared` / `requestAuthorizationAndRegister()` / `upsertToken(_:)` and `copyFor(type:eventName:)` used identically across the tasks that define and consume them.
-- **iOS testing note:** the repo has no XCTest target, so iOS tasks verify via `xcodebuild` + on-device steps rather than unit tests (follows existing codebase patterns). SQL and the Edge Function get real automated checks.
+- **iOS testing note:** the repo has no XCTest target, so iOS tasks verify via `xcodebuild` rather than unit tests (follows existing codebase patterns). SQL and the Edge Function get real automated checks.
