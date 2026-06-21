@@ -63,6 +63,7 @@ final class STCPayService {
                 throw NSError(domain: "STCPayService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Malformed submitted payload"])
             }
             stcPayLogger.info("submit_payment submitted (eventId: \(eventId))")
+            await PushManager.shared.requestAuthorizationAndRegister()
             return .submitted(creatorId: creatorId, paidToNumber: number)
         case "seats_full":
             stcPayLogger.info("submit_payment seats_full (eventId: \(eventId))")

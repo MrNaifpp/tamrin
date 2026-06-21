@@ -468,6 +468,7 @@ struct NewEventView: View {
         defer { isSavingGuardrailNumber = false }
         do {
             try await AuthService.shared.updateSTCPayNumber(canonical)
+            await PushManager.shared.requestAuthorizationAndRegister()
             showSTCPayGuardrail = false
             guardrailInput = ""
             // Re-attempt event creation now that the number is saved.
