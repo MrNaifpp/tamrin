@@ -142,9 +142,10 @@ Receives `{ outbox_id }`. Steps:
 `AuthKey.p8` is currently committed at the repo root — a live APNs signing key in git history. Plan:
 - Move its contents into the `APNS_AUTH_KEY` Supabase secret.
 - `git rm` the file; add `*.p8` to `.gitignore`.
-- **Rotate the key** in the Apple Developer portal, since it has already been in history.
 
 The app never needs the file; only the Edge Function does.
+
+**Key rotation deferred to prod.** This work targets the staging environment, where the committed key is acceptable. Revoking the leaked key and issuing a new one in the Apple Developer portal is handled as part of the production cutover, not this pass.
 
 ## iOS Client
 
