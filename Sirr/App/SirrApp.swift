@@ -71,6 +71,11 @@ struct SirrApp: App {
                 .onOpenURL { url in
                     DeepLinkRouter.shared.submit(url)
                 }
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    if let url = activity.webpageURL {
+                        DeepLinkRouter.shared.submit(url)
+                    }
+                }
         }
     }
     

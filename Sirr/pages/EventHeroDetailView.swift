@@ -121,7 +121,7 @@ struct EventHeroDetailView: View {
                             .buttonStyle(.plain)
                             .disabled(isTogglingLock)
 
-                            ShareLink(item: "sirr://event/\(event.id.uuidString)") {
+                            ShareLink(item: "https://dreams-hub.com/event/\(event.id.uuidString)") {
                                 ActionChip(icon: "square.and.arrow.up.fill", title: "مشاركة", style: .translucent)
                             }
                             .buttonStyle(.plain)
