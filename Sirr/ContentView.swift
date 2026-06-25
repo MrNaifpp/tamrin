@@ -40,7 +40,7 @@ struct ContentView: View {
                 }
             }
 
-            if let deepId = appState.deepLinkEventId, !appState.isLoggedIn {
+            if let deepId = appState.deepLinkEventId, !appState.isLoggedIn, appState.sessionChecked {
                 SharedEventView(
                     eventId: deepId,
                     isLoggedIn: false,
@@ -57,10 +57,10 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: appState.deepLinkEventId != nil)
-        .onReceive(NotificationCenter.default.publisher(for: .deepLinkReceived)) { notification in
-            if let url = notification.object as? URL {
-                appState.handleDeepLink(url)
-            }
+        .onReceive(DeepLinkRouter.shared.$pendingURL) { url in
+            guard let url else { return }
+            appState.handleDeepLink(url)
+            DeepLinkRouter.shared.clear()
         }
     }
 }

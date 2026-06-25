@@ -7,10 +7,6 @@
 
 import SwiftUI
 
-extension Notification.Name {
-    static let deepLinkReceived = Notification.Name("deepLinkReceived")
-}
-
 @main
 struct SirrApp: App {
     @UIApplicationDelegateAdaptor(PushAppDelegate.self) private var pushDelegate
@@ -73,7 +69,7 @@ struct SirrApp: App {
             RootView()
                 .applyAppFont()
                 .onOpenURL { url in
-                    NotificationCenter.default.post(name: .deepLinkReceived, object: url)
+                    DeepLinkRouter.shared.submit(url)
                 }
         }
     }

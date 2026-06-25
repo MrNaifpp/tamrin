@@ -45,7 +45,7 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
         guard let eventId = info["event_id"] as? String,
               let url = URL(string: "sirr://event/\(eventId)") else { return }
         await MainActor.run {
-            NotificationCenter.default.post(name: .deepLinkReceived, object: url)
+            DeepLinkRouter.shared.submit(url)
         }
     }
 }

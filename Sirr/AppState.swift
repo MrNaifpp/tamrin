@@ -12,6 +12,9 @@ import Foundation
 class AppState: ObservableObject {
     @Published var isLoggedIn = false
     @Published var deepLinkEventId: UUID?
+    /// False until the initial session check completes. Used to avoid flashing
+    /// the logged-out deep-link sheet to a user who turns out to be signed in.
+    @Published var sessionChecked = false
     let authVM = AuthViewModel()
     private var cancellables = Set<AnyCancellable>()
 
@@ -21,6 +24,7 @@ class AppState: ObservableObject {
             .store(in: &cancellables)
         Task {
             await authVM.checkSession()
+            sessionChecked = true
         }
     }
 

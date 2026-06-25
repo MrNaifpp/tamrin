@@ -151,18 +151,19 @@ struct EventPageView: View {
                     await loadEvents()
                 }
             }
-            .onChange(of: deepLinkEventId) { newId in
-                guard let eventId = newId else { return }
-                Task {
-                    do {
-                        let record = try await EventService.shared.getEventById(eventId)
-                        let eventData = EventData.from(record: record)
-                        navigationPath.append(eventData)
-                    } catch {
-                        print("[DeepLink] Failed to load event: \(error.localizedDescription)")
-                    }
-                    deepLinkEventId = nil
+            // .task(id:) runs both when the view first appears with a value
+            // already set (cold-launch / post-login mount) and whenever the id
+            // changes later (warm tap). .onChange would miss the initial value.
+            .task(id: deepLinkEventId) {
+                guard let eventId = deepLinkEventId else { return }
+                do {
+                    let record = try await EventService.shared.getEventById(eventId)
+                    let eventData = EventData.from(record: record)
+                    navigationPath.append(eventData)
+                } catch {
+                    print("[DeepLink] Failed to load event: \(error.localizedDescription)")
                 }
+                deepLinkEventId = nil
             }
             .navigationDestination(for: EventData.self) { event in
                 EventHeroDetailView(
