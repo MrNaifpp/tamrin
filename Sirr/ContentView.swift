@@ -15,7 +15,9 @@ enum AuthScreen: Hashable {
 struct ContentView: View {
     @StateObject private var appState = AppState()
     @State private var authPath = NavigationPath()
-    @State private var pendingLoginForEvent = false
+    /// Event the user was trying to join when prompted to log in. Held across
+    /// the login flow so we can route to it once authenticated.
+    @State private var pendingEventId: UUID?
 
     var body: some View {
         ZStack {
@@ -48,7 +50,8 @@ struct ContentView: View {
                         appState.deepLinkEventId = nil
                     },
                     onRequestLogin: {
-                        pendingLoginForEvent = true
+                        // Remember the event so we can open it after login.
+                        pendingEventId = deepId
                         appState.deepLinkEventId = nil
                         // Land on LoginOnbord (the real login entry with Apple /
                         // Google sign-in), not the bare email LoginView. Clearing
@@ -60,6 +63,13 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: appState.deepLinkEventId != nil)
+        .onChange(of: appState.isLoggedIn) { loggedIn in
+            // Resume the deep-link event after the user logs in. Re-driving
+            // deepLinkEventId lets EventPageView's .task(id:) open the detail.
+            guard loggedIn, let id = pendingEventId else { return }
+            pendingEventId = nil
+            appState.deepLinkEventId = id
+        }
         .onReceive(DeepLinkRouter.shared.$pendingURL) { url in
             guard let url else { return }
             appState.handleDeepLink(url)
