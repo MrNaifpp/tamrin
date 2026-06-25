@@ -50,7 +50,10 @@ struct ContentView: View {
                     onRequestLogin: {
                         pendingLoginForEvent = true
                         appState.deepLinkEventId = nil
-                        authPath.append(AuthScreen.login)
+                        // Land on LoginOnbord (the real login entry with Apple /
+                        // Google sign-in), not the bare email LoginView. Clearing
+                        // the sheet reveals the onboarding root of the stack.
+                        authPath = NavigationPath()
                     }
                 )
                 .transition(.move(edge: .bottom))
