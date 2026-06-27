@@ -61,12 +61,14 @@ struct NewEventView: View {
     
     // Form validation
     var isFormValid: Bool {
-        !exerciseName.isEmpty &&
+        guard let start = startDate, let end = endDate else { return false }
+        return !exerciseName.isEmpty &&
         !exerciseLocation.isEmpty &&
         selectedCoordinate != nil &&
         !description.isEmpty &&
         fieldValue > 0 &&
-        numberOfPeople > 0
+        numberOfPeople > 0 &&
+        end > start
     }
     
     // Dismiss the keyboard so presenting/closing the date sheet doesn't restore focus to a text field.
