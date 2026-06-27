@@ -117,58 +117,33 @@ struct LoginOnbord: View {
                         .padding(.horizontal, 24)
                         .padding(.bottom, 16)
 
-                        HStack(spacing: 16) {
-                           
-
-                            Button {} label: {
-                                Image(systemName: "g.circle.fill")
-                                    .font(.system(size: 26))
-                                    .foregroundStyle(Color(white: 0.55))
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: 54)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 27, style: .continuous)
-                                            .fill(Color(white: 0.95))
-                                    )
-                                    .overlay(alignment: .topTrailing) {
-                                        Text("قريباً")
-                                            .font(.system(size: 10, weight: .semibold))
-                                            .foregroundStyle(.white)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 3)
-                                            .background(
-                                                Capsule()
-                                                    .fill(Color(red: 0.35, green: 0.72, blue: 0.45))
-                                            )
-                                            .offset(x: 6, y: -6)
-                                    }
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(true)
-                            .opacity(0.8)
-                            Button {
-                                Task { await vm.signInWithApple() }
-                            } label: {
-                                Group {
-                                    if vm.isLoading {
-                                        ProgressView()
-                                            .progressViewStyle(CircularProgressViewStyle(tint: .black))
-                                    } else {
+                        Button {
+                            Task { await vm.signInWithApple() }
+                        } label: {
+                            Group {
+                                if vm.isLoading {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                                } else {
+                                    HStack(spacing: 8) {
                                         Image(systemName: "apple.logo")
-                                            .font(.system(size: 24, weight: .medium))
-                                            .foregroundStyle(.black)
+                                            .font(.system(size: 22, weight: .medium))
+                                        Text("المتابعة عبر Apple")
+                                            .font(.headline)
+                                            .fontWeight(.semibold)
                                     }
+                                    .foregroundStyle(.black)
                                 }
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 54)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 27, style: .continuous)
-                                        .fill(Color(white: 0.95))
-                                )
                             }
-                            .buttonStyle(.plain)
-                            .disabled(vm.isLoading)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 54)
+                            .background(
+                                RoundedRectangle(cornerRadius: 27, style: .continuous)
+                                    .fill(Color(white: 0.95))
+                            )
                         }
+                        .buttonStyle(.plain)
+                        .disabled(vm.isLoading)
                         .padding(.horizontal, 24)
                         .padding(.bottom, 24)
                     }
