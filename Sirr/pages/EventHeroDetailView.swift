@@ -305,7 +305,7 @@ struct EventHeroDetailView: View {
                                                 .foregroundStyle(.white.opacity(0.9))
                                         }
 
-                                        Text(participant.displayName ?? "مشارك")
+                                        Text(participant.displayName ?? participant.guestName ?? "ضيف")
                                             .font(.appBodyMedium)
                                             .foregroundStyle(.white)
 
