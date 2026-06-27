@@ -3,6 +3,10 @@
 -- ============================================================================
 -- submit_payment: insert the joiner's row + one row per guest (null user_id).
 -- ============================================================================
+-- Drop the previous 2-arg overload; the new signature adds p_guest_names, so
+-- create-or-replace would otherwise leave the stale non-group-aware version.
+drop function if exists public.submit_payment(uuid, uuid);
+
 create or replace function public.submit_payment(
   p_event_id uuid,
   p_user_id uuid,
