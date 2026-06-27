@@ -64,9 +64,16 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.3), value: appState.deepLinkEventId != nil)
         .onChange(of: appState.isLoggedIn) { loggedIn in
+            guard loggedIn else {
+                // Signed out: drop any stale deep-link so the SharedEventView
+                // overlay doesn't reappear over the login screen and error out.
+                appState.deepLinkEventId = nil
+                pendingEventId = nil
+                return
+            }
             // Resume the deep-link event after the user logs in. Re-driving
             // deepLinkEventId lets EventPageView's .task(id:) open the detail.
-            guard loggedIn, let id = pendingEventId else { return }
+            guard let id = pendingEventId else { return }
             pendingEventId = nil
             appState.deepLinkEventId = id
         }
