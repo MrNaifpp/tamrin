@@ -13,29 +13,6 @@ import os
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Sirr", category: "Auth")
 
-// #region agent log
-private func _debugLog(_ message: String, location: String, hypothesisId: String, data: [String: Any] = [:]) {
-    var payload: [String: Any] = [
-        "timestamp": Int(Date().timeIntervalSince1970 * 1000),
-        "message": message,
-        "location": location,
-        "hypothesisId": hypothesisId
-    ]
-    if !data.isEmpty { payload["data"] = data }
-    guard let body = try? JSONSerialization.data(withJSONObject: payload),
-          let url = URL(string: "http://127.0.0.1:7243/ingest/bf54f446-5152-40ef-97c8-8f28ab5705d5") else { return }
-    var req = URLRequest(url: url)
-    req.httpMethod = "POST"
-    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    req.httpBody = body
-    URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
-}
-/// Call from views for debug instrumentation (e.g. LoginOTPView.onAppear).
-func agentLog(_ message: String, location: String, hypothesisId: String, data: [String: Any] = [:]) {
-    _debugLog(message, location: location, hypothesisId: hypothesisId, data: data)
-}
-// #endregion
-
 @MainActor
 class AuthViewModel: ObservableObject {
     @Published var isAuthenticated = false
@@ -91,9 +68,6 @@ class AuthViewModel: ObservableObject {
     }
 
     func requestOTP(email: String) async {
-        // #region agent log
-        _debugLog("requestOTP entered", location: "AuthViewModel.requestOTP", hypothesisId: "H1_H2_H4_H5", data: ["isAuthenticated": isAuthenticated])
-        // #endregion
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
@@ -119,9 +93,6 @@ class AuthViewModel: ObservableObject {
             let isNewUser = try await AuthService.shared.verifyOTP(email: email, token: token)
             isAuthenticated = true
             isNewUserAfterOTP = isNewUser
-            // #region agent log
-            _debugLog("verifyOTP succeeded", location: "AuthViewModel.verifyOTP", hypothesisId: "order", data: ["isNewUser": isNewUser])
-            // #endregion
             logger.info("Verify OTP succeeded (isNewUser: \(isNewUser))")
         } catch {
             logger.error("Verify OTP failed: \(error.localizedDescription)")

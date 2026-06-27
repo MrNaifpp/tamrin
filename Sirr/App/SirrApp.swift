@@ -13,55 +13,6 @@ struct SirrApp: App {
     init() {
         // Configure app-wide font settings
         setupAppFont()
-        
-        // DEBUG: Check if font files are in bundle
-        print("\n📦 CHECKING BUNDLE FOR FONT FILES:")
-        let fontFiles = [
-            "TheYearofHandicrafts-Regular.otf",
-            "TheYearofHandicrafts-Medium.otf",
-            "TheYearofHandicrafts-SemiBold.otf",
-            "TheYearofHandicrafts-Bold.otf",
-            "TheYearofHandicrafts-Black.otf"
-        ]
-        
-        for fileName in fontFiles {
-            if let fontURL = Bundle.main.url(forResource: fileName.replacingOccurrences(of: ".otf", with: ""), withExtension: "otf") {
-                print("✅ \(fileName) found in bundle at: \(fontURL.lastPathComponent)")
-                
-                // Try to register the font
-                if let fontDataProvider = CGDataProvider(url: fontURL as CFURL),
-                   let font = CGFont(fontDataProvider) {
-                    var error: Unmanaged<CFError>?
-                    if CTFontManagerRegisterGraphicsFont(font, &error) {
-                        if let postScriptName = font.postScriptName {
-                            print("   📝 Registered as: \(postScriptName)")
-                        }
-                    } else if let error = error?.takeRetainedValue() {
-                        print("   ⚠️ Registration error: \(error)")
-                    }
-                }
-            } else {
-                print("❌ \(fileName) NOT in bundle")
-            }
-        }
-        
-        print("\n🔍 FONT DEBUG INFO:")
-        let fontsToTest = [
-            "TheYearofHandicrafts-Regular",
-            "TheYearofHandicrafts-Medium",
-            "TheYearofHandicrafts-SemiBold",
-            "TheYearofHandicrafts-Bold",
-            "TheYearofHandicrafts-Black"
-        ]
-        
-        for fontName in fontsToTest {
-            if let font = UIFont(name: fontName, size: 18) {
-                print("✅ \(fontName) → LOADED (actual: \(font.fontName))")
-            } else {
-                print("❌ \(fontName) → NOT FOUND")
-            }
-        }
-        print("📋 Check console for complete font list\n")
     }
     
     var body: some Scene {
