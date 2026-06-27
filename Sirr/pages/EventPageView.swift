@@ -110,33 +110,22 @@ struct EventPageView: View {
                         Task { await authVM?.logout() }
                     }
                     .font(.appTitle)
-                    .foregroundStyle(Color.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 12) {
+                    HStack(spacing: 8) {
                         Button {
                             navigationPath.append(NavigationDestination.newEvent)
                         } label: {
                             Image(systemName: "plus")
-                                .font(.system(size: 18, weight: .medium))
-                                .foregroundStyle(.black)
-                                .frame(width: 40, height: 40)
-                                .background(Color.white)
-                                .clipShape(Circle())
-                                .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(.primary)
                         }
-                        .buttonStyle(.plain)
                         Button {
                             showEditProfileSheet = true
                         } label: {
                             eventPageProfileAvatar
                         }
-                        .buttonStyle(.plain)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
                 }
             }
             .toolbarBackground(.hidden, for: .navigationBar)
@@ -323,13 +312,13 @@ private extension EventPageView {
                         .foregroundStyle(Color.gray.opacity(0.7))
                 }
             }
-            .frame(width: 40, height: 40)
+            .frame(width: 28, height: 28)
             .clipShape(Circle())
         } else {
             Image(systemName: "person.crop.circle.fill")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 40, height: 40)
+                .frame(width: 28, height: 28)
                 .foregroundStyle(Color.gray.opacity(0.7))
         }
     }
