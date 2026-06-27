@@ -59,28 +59,37 @@ struct SavedLocation: Identifiable, Hashable {
 
 /// Row from get_event_participants RPC.
 struct ParticipantRecord: Codable, Identifiable {
-    let userId: UUID
+    let participantId: UUID
+    let userId: UUID?
     let joinedAt: String?
     let displayName: String?
     let avatarUrl: String?
     let paymentStatus: PaymentStatus?
     let paidToNumber: String?
+    let guestName: String?
+    let addedBy: UUID?
 
-    var id: UUID { userId }
+    var id: UUID { participantId }
 
-    /// True if the row represents a confirmed seat (free join or paid + confirmed).
+    /// True if this row is a guest (no account) added by a paying joiner.
+    var isGuest: Bool { userId == nil }
+
+    /// True if the row represents a confirmed seat.
     var isConfirmed: Bool { (paymentStatus ?? .confirmed) == .confirmed }
 
     /// True if the row is awaiting creator confirmation.
     var isPending: Bool { paymentStatus == .pending }
 
     enum CodingKeys: String, CodingKey {
+        case participantId = "participant_id"
         case userId = "user_id"
         case joinedAt = "joined_at"
         case displayName = "display_name"
         case avatarUrl = "avatar_url"
         case paymentStatus = "payment_status"
         case paidToNumber = "paid_to_number"
+        case guestName = "guest_name"
+        case addedBy = "added_by"
     }
 }
 
@@ -298,7 +307,7 @@ final class EventService {
         let session = try await client.auth.session
         let userId = session.user.id
         let participants = try await getEventParticipants(eventId: eventId)
-        return participants.contains { $0.userId == userId }
+        return participants.contains { $0.userId == userId && !$0.isGuest }
     }
 
     /// Leave an event as the current user.

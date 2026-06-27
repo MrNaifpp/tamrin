@@ -16,10 +16,9 @@ private let stcPayLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Si
 /// Result of `submit_payment`. The RPC encodes status as a string so we can
 /// route to the appropriate UI without throwing.
 enum SubmitPaymentResult {
-    /// Payment was submitted; pending row exists. `creatorId` is included so
-    /// the caller can fire a push to the creator. `paidToNumber` is the
-    /// snapshot used for display.
-    case submitted(creatorId: UUID, paidToNumber: String)
+    /// Payment was submitted; pending rows exist (joiner + guests). `groupSize`
+    /// is the number of seats paid for (1 + guests).
+    case submitted(creatorId: UUID, paidToNumber: String, groupSize: Int)
     /// Event is full. UI should pivot to the waitlist sheet.
     case seatsFull
     /// User already has a row for this event (any status).
@@ -40,11 +39,12 @@ final class STCPayService {
     static let shared = STCPayService()
     private let client = SupabaseClientManager.shared.client
 
-    /// Submit a paid-event payment. Inserts the joiner's pending row server-side.
-    func submitPayment(eventId: UUID, userId: UUID) async throws -> SubmitPaymentResult {
-        let params: [String: String] = [
-            "p_event_id": eventId.uuidString,
-            "p_user_id": userId.uuidString
+    /// Submit a paid-event payment for the joiner plus optional named guests.
+    func submitPayment(eventId: UUID, userId: UUID, guestNames: [String] = []) async throws -> SubmitPaymentResult {
+        let params: [String: AnyJSON] = [
+            "p_event_id": .string(eventId.uuidString),
+            "p_user_id": .string(userId.uuidString),
+            "p_guest_names": .array(guestNames.map { .string($0) })
         ]
         let response = try await client.rpc("submit_payment", params: params).execute()
         let payload = try Self.decodeJSON(response.data)
@@ -62,9 +62,10 @@ final class STCPayService {
             else {
                 throw NSError(domain: "STCPayService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Malformed submitted payload"])
             }
-            stcPayLogger.info("submit_payment submitted (eventId: \(eventId))")
+            let groupSize = (payload["group_size"] as? Int) ?? 1
+            stcPayLogger.info("submit_payment submitted (eventId: \(eventId), group: \(groupSize))")
             await PushManager.shared.requestAuthorizationAndRegister()
-            return .submitted(creatorId: creatorId, paidToNumber: number)
+            return .submitted(creatorId: creatorId, paidToNumber: number, groupSize: groupSize)
         case "seats_full":
             stcPayLogger.info("submit_payment seats_full (eventId: \(eventId))")
             return .seatsFull

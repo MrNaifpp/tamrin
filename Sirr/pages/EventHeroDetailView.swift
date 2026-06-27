@@ -23,6 +23,7 @@ struct EventHeroDetailView: View {
     @State private var participants: [ParticipantRecord] = []
     @State private var participantsLoading = false
     @State private var stcPaySheetNumber: String?
+    @State private var stcPaySheetGroupSize: Int = 1
     @State private var showWaitlistSheet = false
     @State private var hasPendingPayment = false
     @State private var isCancellingPending = false
@@ -215,10 +216,11 @@ struct EventHeroDetailView: View {
                                         Task { await loadParticipants() }
                                         onEnroll()
                                     },
-                                    onSubmittedPayment: { number in
+                                    onSubmittedPayment: { number, groupSize in
                                         showEnrollmentSheet = false
                                         hasPendingPayment = true
                                         stcPaySheetNumber = number
+                                        stcPaySheetGroupSize = groupSize
                                         Task { await loadParticipants() }
                                     },
                                     onSeatsFull: {
@@ -309,7 +311,15 @@ struct EventHeroDetailView: View {
 
                                         Spacer()
 
-                                        if participant.userId == event.creatorId {
+                                        if participant.isGuest {
+                                            Text("ضيف")
+                                                .font(.appCaption)
+                                                .foregroundStyle(.white.opacity(0.6))
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.white.opacity(0.12))
+                                                .clipShape(Capsule())
+                                        } else if participant.userId == event.creatorId {
                                             Text("المنظم")
                                                 .font(.appCaption)
                                                 .foregroundStyle(.white.opacity(0.6))
@@ -324,7 +334,7 @@ struct EventHeroDetailView: View {
                                         }
                                     }
 
-                                    if isOwner && participant.isPending {
+                                    if isOwner && participant.isPending && participant.userId != nil {
                                         HStack(spacing: 10) {
                                             Button {
                                                 handleOwnerConfirm(participant: participant)
@@ -406,7 +416,7 @@ struct EventHeroDetailView: View {
             set: { if !$0 { stcPaySheetNumber = nil } }
         )) {
             if let number = stcPaySheetNumber {
-                STCPaySheet(eventName: event.name, amount: event.pricePerPerson, stcPayNumber: number)
+                STCPaySheet(eventName: event.name, amount: event.pricePerPerson, stcPayNumber: number, groupSize: stcPaySheetGroupSize)
             }
         }
         .sheet(isPresented: $showWaitlistSheet) {
@@ -426,7 +436,7 @@ struct EventHeroDetailView: View {
         defer { participantsLoading = false }
         do {
             participants = try await EventService.shared.getEventParticipants(eventId: event.id)
-            if let uid = currentUserId, let mine = participants.first(where: { $0.userId == uid }) {
+            if let uid = currentUserId, let mine = participants.first(where: { $0.userId == uid && !$0.isGuest }) {
                 isEnrolled = mine.isConfirmed
                 hasPendingPayment = mine.isPending
             } else {
@@ -468,15 +478,15 @@ struct EventHeroDetailView: View {
     }
 
     private func handleOwnerConfirm(participant: ParticipantRecord) {
-        guard let creatorId = currentUserId else { return }
-        actionInFlight = participant.userId
+        guard let creatorId = currentUserId, let joinerId = participant.userId else { return }
+        actionInFlight = joinerId
         ownerActionError = nil
         Task {
             defer { actionInFlight = nil }
             do {
                 try await STCPayService.shared.confirmPayment(
                     eventId: event.id,
-                    joinerId: participant.userId,
+                    joinerId: joinerId,
                     creatorId: creatorId
                 )
                 await loadParticipants()
@@ -488,15 +498,15 @@ struct EventHeroDetailView: View {
     }
 
     private func handleOwnerReject(participant: ParticipantRecord) {
-        guard let creatorId = currentUserId else { return }
-        actionInFlight = participant.userId
+        guard let creatorId = currentUserId, let joinerId = participant.userId else { return }
+        actionInFlight = joinerId
         ownerActionError = nil
         Task {
             defer { actionInFlight = nil }
             do {
                 _ = try await STCPayService.shared.rejectPayment(
                     eventId: event.id,
-                    joinerId: participant.userId,
+                    joinerId: joinerId,
                     creatorId: creatorId
                 )
                 await loadParticipants()
@@ -587,7 +597,7 @@ private struct ActionChip: View {
 struct EnrollmentSheetView: View {
     let event: EventData
     let onEnroll: () -> Void
-    var onSubmittedPayment: ((String) -> Void)? = nil
+    var onSubmittedPayment: ((String, Int) -> Void)? = nil
     var onSeatsFull: (() -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
@@ -898,11 +908,12 @@ struct EnrollmentSheetView: View {
                     let session = try await SupabaseClientManager.shared.client.auth.session
                     let result = try await STCPayService.shared.submitPayment(
                         eventId: event.id,
-                        userId: session.user.id
+                        userId: session.user.id,
+                        guestNames: participants.filter { $0 != userName }
                     )
                     switch result {
-                    case .submitted(_, let number):
-                        onSubmittedPayment?(number)
+                    case .submitted(_, let number, let groupSize):
+                        onSubmittedPayment?(number, groupSize)
                         dismiss()
                     case .seatsFull:
                         onSeatsFull?()

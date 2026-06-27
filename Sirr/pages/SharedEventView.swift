@@ -319,7 +319,7 @@ struct SharedEventView: View {
             let userId = session.user.id
             let result = try await STCPayService.shared.submitPayment(eventId: event.id, userId: userId)
             switch result {
-            case .submitted(_, let number):
+            case .submitted(_, let number, _):
                 hasPendingPayment = true
                 stcPaySheetNumber = number
             case .seatsFull:
@@ -369,7 +369,7 @@ struct SharedEventView: View {
         do {
             let session = try await SupabaseClientManager.shared.client.auth.session
             let participants = try await EventService.shared.getEventParticipants(eventId: eventId)
-            if let mine = participants.first(where: { $0.userId == session.user.id }) {
+            if let mine = participants.first(where: { $0.userId == session.user.id && !$0.isGuest }) {
                 if mine.isPending {
                     hasPendingPayment = true
                 } else if mine.isConfirmed {

@@ -14,6 +14,7 @@ struct STCPaySheet: View {
     let eventName: String
     let amount: Double
     let stcPayNumber: String
+    var groupSize: Int = 1
 
     @Environment(\.dismiss) private var dismiss
 
@@ -59,7 +60,7 @@ struct STCPaySheet: View {
                     Text("المبلغ")
                         .font(.system(size: 13))
                         .foregroundStyle(Color(white: 0.6))
-                    Text(String(format: "%.0f ر.س", amount))
+                    Text(String(format: "%.0f ر.س", amount * Double(groupSize)))
                         .font(.system(size: 32, weight: .bold))
                         .foregroundStyle(.white)
                 }
