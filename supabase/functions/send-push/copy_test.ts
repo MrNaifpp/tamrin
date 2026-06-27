@@ -25,6 +25,14 @@ Deno.test("payment_rejected copy interpolates the event name", () => {
   });
 });
 
+Deno.test("event_reminder copy interpolates the event name", () => {
+  const c = copyFor("event_reminder", "تمرين كرة قدم");
+  assertEquals(c, {
+    title: "تذكير بتمرينك ⏰",
+    body: "لا تنسَ تمرين كرة قدم القادم. نراك هناك! 🙌",
+  });
+});
+
 Deno.test("unknown type returns null", () => {
   assertEquals(copyFor("nope", "x"), null);
 });

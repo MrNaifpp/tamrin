@@ -19,6 +19,11 @@ export function copyFor(
         title: "تحديث بخصوص دفعتك",
         body: `لم يتمكّن المنظّم من تأكيد دفعتك لـ ${eventName}. تواصل معه لمعرفة التفاصيل.`,
       };
+    case "event_reminder":
+      return {
+        title: "تذكير بتمرينك ⏰",
+        body: `لا تنسَ ${eventName} القادم. نراك هناك! 🙌`,
+      };
     default:
       return null;
   }
