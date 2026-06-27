@@ -208,7 +208,9 @@ private extension EventPageView {
         defer { eventsLoading = false }
         do {
             let records = try await EventService.shared.getEventsForCurrentUser()
-            events = records.map { EventData.from(record: $0) }
+            events = records
+                .map { EventData.from(record: $0) }
+                .filter { (($0.endDate ?? $0.startDate)) >= Date() }
             if currentPage >= events.count && !events.isEmpty {
                 currentPage = events.count - 1
             } else if events.isEmpty {

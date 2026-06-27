@@ -5,6 +5,9 @@ struct EventData: Identifiable, Hashable {
     let creatorId: UUID
     let name: String
     let date: String
+    /// Real start/end timestamps (the `date` string above is for display only).
+    let startDate: Date
+    let endDate: Date?
     /// When nil, UI uses a default placeholder image (e.g. card1).
     let imageUrl: String?
     let registrationLocked: Bool
@@ -12,11 +15,13 @@ struct EventData: Identifiable, Hashable {
     let pricePerPerson: Double
     let maxParticipants: Int?
 
-    init(id: UUID, creatorId: UUID = UUID(), name: String, date: String, imageUrl: String? = nil, registrationLocked: Bool = false, totalPrice: Int = 0, pricePerPerson: Double = 0, maxParticipants: Int? = nil) {
+    init(id: UUID, creatorId: UUID = UUID(), name: String, date: String, startDate: Date = Date(), endDate: Date? = nil, imageUrl: String? = nil, registrationLocked: Bool = false, totalPrice: Int = 0, pricePerPerson: Double = 0, maxParticipants: Int? = nil) {
         self.id = id
         self.creatorId = creatorId
         self.name = name
         self.date = date
+        self.startDate = startDate
+        self.endDate = endDate
         self.imageUrl = imageUrl
         self.registrationLocked = registrationLocked
         self.totalPrice = totalPrice
@@ -34,6 +39,8 @@ extension EventData {
             creatorId: record.creatorId,
             name: record.name,
             date: EventData.formatEventDate(record.startDate, endDate: record.endDate),
+            startDate: record.startDate,
+            endDate: record.endDate,
             imageUrl: record.imageUrl,
             registrationLocked: record.registrationLocked ?? false,
             totalPrice: record.totalPrice ?? 0,
