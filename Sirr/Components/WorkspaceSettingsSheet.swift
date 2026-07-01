@@ -26,6 +26,7 @@ struct WorkspaceSettingsSheet: View {
     @State private var showRename = false
     @State private var renameText = ""
     @State private var showDestructiveConfirm = false
+    @State private var memberToRemove: WorkspaceMemberRecord?
 
     private var isOwner: Bool { currentUserId == workspace.ownerId }
     private var inviteCode: String? { detail?.workspace.inviteCode ?? workspace.inviteCode }
@@ -68,6 +69,24 @@ struct WorkspaceSettingsSheet: View {
             Text(isOwner
                  ? "سيتم حذف المساحة وجميع أحداثها ومشاركيها نهائيًا. لا يمكن التراجع."
                  : "ستفقد الوصول إلى أحداث هذه المساحة وستُزال من الأحداث القادمة.")
+        }
+        .confirmationDialog(
+            "إزالة العضو",
+            isPresented: Binding(
+                get: { memberToRemove != nil },
+                set: { if !$0 { memberToRemove = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("إزالة", role: .destructive) {
+                if let member = memberToRemove {
+                    memberToRemove = nil
+                    handleRemove(member)
+                }
+            }
+            Button("إلغاء", role: .cancel) { memberToRemove = nil }
+        } message: {
+            Text("سيفقد \(memberToRemove?.displayName ?? "العضو") الوصول إلى المساحة وسيُزال من الأحداث القادمة.")
         }
     }
 
@@ -177,7 +196,7 @@ struct WorkspaceSettingsSheet: View {
                                 .font(.appCaption)
                                 .foregroundStyle(Color(white: 0.55))
                         } else if isOwner {
-                            Button("إزالة") { handleRemove(member) }
+                            Button("إزالة") { memberToRemove = member }
                                 .font(.appCaption)
                                 .foregroundStyle(.red)
                                 .disabled(isWorking)
@@ -238,8 +257,10 @@ struct WorkspaceSettingsSheet: View {
     }
 
     private func handleRename() {
+        let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
         run {
-            _ = try await WorkspaceService.shared.renameWorkspace(id: workspace.id, name: renameText)
+            _ = try await WorkspaceService.shared.renameWorkspace(id: workspace.id, name: trimmed)
             await loadDetail()
             onChanged()
         }
@@ -277,7 +298,7 @@ struct WorkspaceSettingsSheet: View {
         guard !isWorking else { return }
         isWorking = true
         actionError = nil
-        Task {
+        Task { @MainActor in
             defer { isWorking = false }
             do { try await work() }
             catch { actionError = "تعذر تنفيذ العملية. حاول مرة أخرى." }
