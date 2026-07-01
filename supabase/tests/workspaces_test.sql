@@ -86,6 +86,7 @@ begin
   if visible <> 1 then raise exception 'FAIL: member cannot select workspace event'; end if;
 
   perform pg_temp.set_auth('00000000-0000-0000-0000-000000000003');
+  set local role authenticated;
   select count(*) into visible from public.events where id = e_id;
   if visible <> 0 then raise exception 'FAIL: outsider can select workspace event'; end if;
 

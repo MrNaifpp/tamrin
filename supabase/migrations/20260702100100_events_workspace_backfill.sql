@@ -15,6 +15,7 @@ left join public.users u on u.user_id = c.creator_id;
 insert into public.workspace_members (workspace_id, user_id)
 select w.id, w.owner_id
 from public.workspaces w
+where w.owner_id in (select distinct creator_id from public.events)
 on conflict do nothing;
 
 update public.events e
