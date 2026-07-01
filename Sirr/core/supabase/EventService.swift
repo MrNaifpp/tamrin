@@ -127,10 +127,6 @@ final class EventService {
         return events
     }
 
-    /// TEMPORARY shim until EventPageView switches to getWorkspaceEvents (Task 7).
-    /// Returns [] — home shows the workspace empty state until then.
-    func getEventsForCurrentUser() async throws -> [EventRecord] { [] }
-
     /// Create a new event and add the current user as first participant.
     /// Uses a server-side RPC (SECURITY DEFINER) to bypass RLS for inserts.
     func createEvent(

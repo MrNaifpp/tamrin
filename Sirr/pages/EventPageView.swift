@@ -16,27 +16,44 @@ enum NavigationDestination: Hashable {
 
 struct EventPageView: View {
     var authVM: AuthViewModel? = nil
+    @ObservedObject var appState: AppState
     @Binding var deepLinkEventId: UUID?
     @Namespace private var zoomNamespace
     @State private var currentPage: Int = 0
-    @State private var path: [EventData] = []
     @State private var navigationPath = NavigationPath()
-    @State private var selectedTab: Int = 0
     @State private var showEditProfileSheet = false
     @State private var events: [EventData] = []
     @State private var eventsLoading = false
     @State private var eventsError: String? = nil
-    
-    init(authVM: AuthViewModel? = nil, deepLinkEventId: Binding<UUID?> = .constant(nil)) {
+    @State private var workspaces: [WorkspaceRecord] = []
+    @State private var workspacesLoaded = false
+    @State private var showSwitcher = false
+    @State private var showCreateWorkspace = false
+    @State private var settingsWorkspace: WorkspaceRecord?
+
+    private var currentWorkspace: WorkspaceRecord? {
+        workspaces.first { $0.id == appState.currentWorkspaceId } ?? workspaces.first
+    }
+
+    init(authVM: AuthViewModel? = nil, appState: AppState, deepLinkEventId: Binding<UUID?> = .constant(nil)) {
         self.authVM = authVM
+        self.appState = appState
         self._deepLinkEventId = deepLinkEventId
     }
-    
+
     var body: some View {
         NavigationStack(path: $navigationPath) {
             GeometryReader { geometry in
                 ZStack {
-                    if events.isEmpty && !eventsLoading {
+                    if workspacesLoaded && workspaces.isEmpty {
+                        emptyStateBackground
+                            .frame(
+                                width: geometry.size.width,
+                                height: geometry.size.height + geometry.safeAreaInsets.top + geometry.safeAreaInsets.bottom
+                            )
+                            .ignoresSafeArea(edges: .all)
+                        noWorkspaceContent
+                    } else if events.isEmpty && !eventsLoading {
                         // Empty state: gradient background, message, CTA
                         emptyStateBackground
                             .frame(
@@ -106,10 +123,13 @@ struct EventPageView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("القادمة") {
-                        Task { await authVM?.logout() }
+                    if let ws = currentWorkspace {
+                        Button {
+                            showSwitcher = true
+                        } label: {
+                            WorkspaceAvatar(name: ws.name, id: ws.id, size: 30)
+                        }
                     }
-                    .font(.appTitle)
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: 8) {
@@ -147,6 +167,10 @@ struct EventPageView: View {
                 guard let eventId = deepLinkEventId else { return }
                 do {
                     let record = try await EventService.shared.getEventById(eventId)
+                    if let wsId = record.workspaceId, appState.currentWorkspaceId != wsId {
+                        appState.currentWorkspaceId = wsId
+                        await loadEvents()
+                    }
                     let eventData = EventData.from(record: record)
                     navigationPath.append(eventData)
                 } catch {
@@ -173,7 +197,7 @@ struct EventPageView: View {
             .navigationDestination(for: NavigationDestination.self) { destination in
                 switch destination {
                 case .newEvent:
-                    NewEventView(onCreated: { newEvent in
+                    NewEventView(workspaceId: currentWorkspace?.id, onCreated: { newEvent in
                         // Pop the create form and open the newly created event's detail.
                         Task { await loadEvents() }
                         if !navigationPath.isEmpty { navigationPath.removeLast() }
@@ -189,21 +213,60 @@ struct EventPageView: View {
                 .presentationDetents([.fraction(0.5)])
                 .presentationDragIndicator(.visible)
             }
+            .sheet(isPresented: $showSwitcher) {
+                WorkspaceSwitcherSheet(
+                    workspaces: workspaces,
+                    currentId: currentWorkspace?.id,
+                    onSelect: { ws in
+                        appState.currentWorkspaceId = ws.id
+                        currentPage = 0
+                        Task { await loadEvents() }
+                    },
+                    onCreate: { showCreateWorkspace = true },
+                    onOpenSettings: { ws in settingsWorkspace = ws },
+                    onLogout: {
+                        Task { await authVM?.logout() }
+                    }
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $showCreateWorkspace) {
+                CreateWorkspaceSheet { ws in
+                    appState.currentWorkspaceId = ws.id
+                    Task { await loadEvents() }
+                }
+                .presentationDetents([.fraction(0.45)])
+                .presentationDragIndicator(.visible)
+            }
+            .sheet(item: $settingsWorkspace) { ws in
+                // Replaced by WorkspaceSettingsSheet in the next task.
+                Text(ws.name)
+            }
         }
     }
 }
 
 // MARK: - Events loading & empty state
 private extension EventPageView {
+    /// Loads the workspace list, resolves the current workspace, then its events.
     func loadEvents() async {
         eventsLoading = true
         eventsError = nil
         defer { eventsLoading = false }
         do {
-            let records = try await EventService.shared.getEventsForCurrentUser()
-            events = records
-                .map { EventData.from(record: $0) }
-                .filter { (($0.endDate ?? $0.startDate)) >= Date() }
+            workspaces = try await WorkspaceService.shared.getMyWorkspaces()
+            workspacesLoaded = true
+            guard let ws = currentWorkspace else {
+                appState.currentWorkspaceId = nil
+                events = []
+                return
+            }
+            if appState.currentWorkspaceId != ws.id {
+                appState.currentWorkspaceId = ws.id
+            }
+            let records = try await EventService.shared.getWorkspaceEvents(workspaceId: ws.id)
+            events = records.map { EventData.from(record: $0) }
             if currentPage >= events.count && !events.isEmpty {
                 currentPage = events.count - 1
             } else if events.isEmpty {
@@ -229,7 +292,7 @@ private extension EventPageView {
     func emptyStateContent(geometry: GeometryProxy) -> some View {
         VStack(spacing: 24) {
             Spacer()
-            Text("لا توجد فعاليات")
+            Text("لا توجد فعاليات في \(currentWorkspace?.name ?? "المساحة")")
                 .font(.appTitle)
                 .foregroundStyle(.white)
             Text("أنشئ فعالية أو انضم إلى واحدة")
@@ -250,6 +313,38 @@ private extension EventPageView {
             .padding(.horizontal, 48)
             .padding(.top, 16)
             Spacer()
+        }
+    }
+
+    /// Zero-workspace onboarding: create one, or join via a friend's link.
+    var noWorkspaceContent: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            Text("🏟️").font(.system(size: 56))
+            Text("ابدأ مساحتك الأولى")
+                .font(.appTitle)
+                .foregroundStyle(.white)
+            Text("المساحة هي مجموعتك — أنشئ واحدة لشلّتك\nأو انضم برابط دعوة من صديق")
+                .font(.appBody)
+                .foregroundStyle(.white.opacity(0.9))
+                .multilineTextAlignment(.center)
+            Spacer()
+            Button {
+                showCreateWorkspace = true
+            } label: {
+                Text("إنشاء مساحة")
+                    .font(.headline)
+                    .foregroundStyle(.black)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 54)
+                    .background(RoundedRectangle(cornerRadius: 27, style: .continuous).fill(Color.white))
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 48)
+            Text("عندك رابط دعوة؟ افتحه وسينقلك إلى هنا")
+                .font(.appCaption)
+                .foregroundStyle(.white.opacity(0.7))
+                .padding(.bottom, 24)
         }
     }
 
@@ -331,7 +426,7 @@ private extension EventPageView {
 // MARK: - Bottom Navigation Bar
 struct BottomNavigationBarView: View {
     @Binding var selectedTab: Int
-    
+
     var body: some View {
         HStack(spacing: 0) {
             BottomNavItem(
@@ -340,14 +435,14 @@ struct BottomNavigationBarView: View {
                 isSelected: selectedTab == 0,
                 action: { selectedTab = 0 }
             )
-            
+
             BottomNavItem(
                 icon: "calendar",
                 title: "الفعاليات",
                 isSelected: selectedTab == 1,
                 action: { selectedTab = 1 }
             )
-            
+
             BottomNavItem(
                 icon: "person.fill",
                 title: "الملف الشخصي",
@@ -366,7 +461,7 @@ private struct BottomNavItem: View {
     let title: String
     let isSelected: Bool
     let action: () -> Void
-    
+
     var body: some View {
         Button(action: {
             action()
@@ -377,7 +472,7 @@ private struct BottomNavItem: View {
                     .font(.system(size: 24))
                     .symbolVariant(isSelected ? .fill : .none)
                     .foregroundStyle(isSelected ? .blue : .secondary)
-                
+
                 Text(title)
                     .font(.system(size: 10))
                     .foregroundStyle(isSelected ? .blue : .secondary)
@@ -386,7 +481,7 @@ private struct BottomNavItem: View {
         }
         .buttonStyle(.plain)
     }
-    
+
     private func hapticLight() {
         #if canImport(UIKit)
         let generator = UIImpactFeedbackGenerator(style: .light)
@@ -397,5 +492,5 @@ private struct BottomNavItem: View {
 }
 
 #Preview {
-    EventPageView()
+    EventPageView(appState: AppState())
 }

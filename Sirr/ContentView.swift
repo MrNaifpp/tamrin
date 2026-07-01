@@ -29,7 +29,7 @@ struct ContentView: View {
                         appState.authVM.clearNewUserAfterOTP()
                     })
                 } else if appState.isLoggedIn {
-                    EventPageView(authVM: appState.authVM, deepLinkEventId: $appState.deepLinkEventId)
+                    EventPageView(authVM: appState.authVM, appState: appState, deepLinkEventId: $appState.deepLinkEventId)
                 } else {
                     NavigationStack(path: $authPath) {
                         LoginOnbord(vm: appState.authVM, onNavigateToLogin: { authPath.append(AuthScreen.login) })
