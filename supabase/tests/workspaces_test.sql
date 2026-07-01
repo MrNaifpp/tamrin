@@ -219,5 +219,91 @@ begin
   if cnt <> 0 then raise exception 'FAIL: events not cascaded on workspace delete'; end if;
 end $$;
 
+-- ============================================================
+-- Section 4: membership guards on event RPCs
+-- ============================================================
+do $$
+declare
+  w json; w_id uuid; ev json; e_id uuid; r json; ok boolean;
+begin
+  perform pg_temp.set_auth('00000000-0000-0000-0000-000000000001');
+  w := public.create_workspace('مساحة الحراسة');
+  w_id := (w->>'id')::uuid;
+  update public.users set stc_pay_number = '0500000000'
+    where user_id = '00000000-0000-0000-0000-000000000001';
+
+  -- create_event now requires workspace + membership
+  ev := public.create_event(
+    p_creator_id => '00000000-0000-0000-0000-000000000001',
+    p_workspace_id => w_id,
+    p_name => 'حدث محروس',
+    p_start_date => now() + interval '1 day',
+    p_end_date => now() + interval '1 day 2 hours',
+    p_price_per_person => 25
+  );
+  e_id := (ev->>'id')::uuid;
+  if (ev->>'workspace_id')::uuid <> w_id then
+    raise exception 'FAIL: create_event did not store workspace_id';
+  end if;
+
+  -- non-member cannot create an event in the workspace
+  begin
+    ev := public.create_event(
+      p_creator_id => '00000000-0000-0000-0000-000000000003',
+      p_workspace_id => w_id,
+      p_name => 'تسلل',
+      p_start_date => now() + interval '1 day'
+    );
+    raise exception 'FAIL: non-member created an event';
+  exception when others then
+    if sqlerrm like 'FAIL:%' then raise; end if;
+  end;
+
+  -- non-member: join_event / submit_payment / join_waitlist / get_event_by_id all rejected
+  begin
+    ok := public.join_event(e_id, '00000000-0000-0000-0000-000000000003');
+    raise exception 'FAIL: non-member joined event';
+  exception when others then
+    if sqlerrm like 'FAIL:%' then raise; end if;
+  end;
+  begin
+    r := public.submit_payment(e_id, '00000000-0000-0000-0000-000000000003', '{}');
+    raise exception 'FAIL: non-member submitted payment';
+  exception when others then
+    if sqlerrm like 'FAIL:%' then raise; end if;
+  end;
+  begin
+    r := public.join_waitlist(e_id, '00000000-0000-0000-0000-000000000003');
+    raise exception 'FAIL: non-member joined waitlist';
+  exception when others then
+    if sqlerrm like 'FAIL:%' then raise; end if;
+  end;
+  perform pg_temp.set_auth('00000000-0000-0000-0000-000000000003');
+  begin
+    r := public.get_event_by_id(e_id);
+    raise exception 'FAIL: non-member fetched event by id';
+  exception when others then
+    if sqlerrm like 'FAIL:%' then raise; end if;
+  end;
+  begin
+    r := public.get_event_participants(e_id);
+    raise exception 'FAIL: non-member fetched participants';
+  exception when others then
+    if sqlerrm like 'FAIL:%' then raise; end if;
+  end;
+
+  -- member path still works end-to-end (join workspace → pay → confirm)
+  perform pg_temp.set_auth('00000000-0000-0000-0000-000000000002');
+  r := public.join_workspace((select invite_code from public.workspaces where id = w_id));
+  r := public.submit_payment(e_id, '00000000-0000-0000-0000-000000000002', '{}');
+  if r->>'status' <> 'submitted' then
+    raise exception 'FAIL: member submit_payment status %', r->>'status';
+  end if;
+  r := public.get_event_by_id(e_id);
+  if (r->>'id')::uuid <> e_id then raise exception 'FAIL: member get_event_by_id'; end if;
+  r := public.confirm_payment(e_id, '00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000001');
+  if r->>'status' <> 'confirmed' then raise exception 'FAIL: confirm_payment broken by guards'; end if;
+end $$;
+
 select 'ALL WORKSPACE TESTS PASSED' as result;
 rollback;
