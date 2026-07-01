@@ -6,12 +6,15 @@ create or replace function public.new_invite_code()
 returns text
 language sql
 volatile
+set search_path = public
 as $$
   select string_agg(
     substr('ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789',
            (floor(random() * 55) + 1)::int, 1), '')
   from generate_series(1, 12);
 $$;
+
+grant execute on function public.new_invite_code() to authenticated;
 
 create table public.workspaces (
   id uuid primary key default gen_random_uuid(),
