@@ -18,6 +18,8 @@ struct ContentView: View {
     /// Event the user was trying to join when prompted to log in. Held across
     /// the login flow so we can route to it once authenticated.
     @State private var pendingEventId: UUID?
+    /// Invite code the user was trying to use when prompted to log in.
+    @State private var pendingJoinCode: String?
 
     var body: some View {
         ZStack {
@@ -61,21 +63,42 @@ struct ContentView: View {
                 )
                 .transition(.move(edge: .bottom))
             }
+
+            if let code = appState.deepLinkJoinCode, !appState.isLoggedIn, appState.sessionChecked {
+                JoinWorkspaceView(
+                    code: code,
+                    isLoggedIn: false,
+                    onDismiss: { appState.deepLinkJoinCode = nil },
+                    onRequestLogin: {
+                        pendingJoinCode = code
+                        appState.deepLinkJoinCode = nil
+                        authPath = NavigationPath()
+                    },
+                    onJoined: { _ in }
+                )
+                .transition(.move(edge: .bottom))
+            }
         }
-        .animation(.easeInOut(duration: 0.3), value: appState.deepLinkEventId != nil)
+        .animation(.easeInOut(duration: 0.3), value: appState.deepLinkEventId != nil || appState.deepLinkJoinCode != nil)
         .onChange(of: appState.isLoggedIn) { loggedIn in
             guard loggedIn else {
-                // Signed out: drop any stale deep-link so the SharedEventView
-                // overlay doesn't reappear over the login screen and error out.
+                // Signed out: drop any stale deep-link so overlays don't
+                // reappear over the login screen and error out.
                 appState.deepLinkEventId = nil
+                appState.deepLinkJoinCode = nil
                 pendingEventId = nil
+                pendingJoinCode = nil
                 return
             }
-            // Resume the deep-link event after the user logs in. Re-driving
-            // deepLinkEventId lets EventPageView's .task(id:) open the detail.
-            guard let id = pendingEventId else { return }
-            pendingEventId = nil
-            appState.deepLinkEventId = id
+            // Resume whichever deep link was pending before login.
+            if let id = pendingEventId {
+                pendingEventId = nil
+                appState.deepLinkEventId = id
+            }
+            if let code = pendingJoinCode {
+                pendingJoinCode = nil
+                appState.deepLinkJoinCode = code
+            }
         }
         .onReceive(DeepLinkRouter.shared.$pendingURL) { url in
             guard let url else { return }
