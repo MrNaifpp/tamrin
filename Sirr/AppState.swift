@@ -30,8 +30,8 @@ class AppState: ObservableObject {
 
     func handleDeepLink(_ url: URL) {
         // Accept both the custom scheme (sirr://event/{id}) and the Universal
-        // Link (https://dreams-hub.com/event/{id}). In both cases the event id
-        // is the path segment that follows "event".
+        // Link (https://guileless-squirrel-b6537a.netlify.app/event/{id}). In
+        // both cases the event id is the path segment that follows "event".
         let segments = (url.host.map { [$0] } ?? []) + url.pathComponents.filter { $0 != "/" }
         guard let idx = segments.firstIndex(of: "event"),
               idx + 1 < segments.count,

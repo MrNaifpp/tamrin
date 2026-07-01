@@ -13,10 +13,12 @@ struct EventHeroDetailView: View {
     let event: EventData
     var onClose: () -> Void
     var onEnroll: () -> Void
+    var onDeleted: () -> Void
 
     @State private var isEnrolled = false
     @State private var isLeavingEvent = false
     @State private var showEnrollmentSheet = false
+    @State private var showSettingsSheet = false
     @State private var isRegistrationLocked: Bool
     @State private var isTogglingLock = false
     @State private var currentUserId: UUID?
@@ -30,10 +32,11 @@ struct EventHeroDetailView: View {
     @State private var actionInFlight: UUID? = nil
     @State private var ownerActionError: String? = nil
 
-    init(event: EventData, onClose: @escaping () -> Void, onEnroll: @escaping () -> Void) {
+    init(event: EventData, onClose: @escaping () -> Void, onEnroll: @escaping () -> Void, onDeleted: @escaping () -> Void) {
         self.event = event
         self.onClose = onClose
         self.onEnroll = onEnroll
+        self.onDeleted = onDeleted
         self._isRegistrationLocked = State(initialValue: event.registrationLocked)
     }
 
@@ -122,17 +125,28 @@ struct EventHeroDetailView: View {
                             .buttonStyle(.plain)
                             .disabled(isTogglingLock)
 
-                            ShareLink(item: "https://dreams-hub.com/event/\(event.id.uuidString)") {
+                            ShareLink(item: "https://guileless-squirrel-b6537a.netlify.app/event/\(event.id.uuidString)") {
                                 ActionChip(icon: "square.and.arrow.up.fill", title: "مشاركة", style: .translucent)
                             }
                             .buttonStyle(.plain)
 
                             Button {
-                                // Settings action placeholder
+                                showSettingsSheet = true
                             } label: {
                                 ActionChip(icon: "gearshape.fill", title: "الإعدادات", style: .translucent)
                             }
                             .buttonStyle(.plain)
+                            .sheet(isPresented: $showSettingsSheet) {
+                                EventSettingsSheet(
+                                    event: event,
+                                    onDeleted: {
+                                        showSettingsSheet = false
+                                        onDeleted()
+                                    }
+                                )
+                                .presentationDetents([.large])
+                                .presentationDragIndicator(.visible)
+                            }
                         }
                     } else {
                         // Participant: enroll / unenroll button

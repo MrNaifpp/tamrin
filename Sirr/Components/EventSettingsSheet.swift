@@ -1,0 +1,249 @@
+//
+//  EventSettingsSheet.swift
+//  Sirr
+//
+//  Owner-only "إعدادات إضافية" sheet opened from the gear button on the event
+//  details screen. Guest-limit, guest-approval and recurrence controls are
+//  UI-only for now (local state, not persisted). Deleting the event is wired to
+//  the delete_event RPC via EventService.
+//
+
+import SwiftUI
+
+struct EventSettingsSheet: View {
+    let event: EventData
+    /// Called after the event has been deleted server-side.
+    var onDeleted: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    // UI-only state (not persisted yet).
+    @State private var guestLimit: GuestLimit = .locked
+    @State private var guestApproval = false
+    @State private var recurrence: Recurrence = .never
+
+    // Delete flow.
+    @State private var showDeleteConfirm = false
+    @State private var isDeleting = false
+    @State private var deleteError: String?
+
+    enum GuestLimit: String, CaseIterable, Identifiable {
+        case locked = "مقفل"
+        case one = "1"
+        case two = "2"
+        case three = "3"
+        case unlimited = "غير محدود"
+        var id: String { rawValue }
+    }
+
+    enum Recurrence: String, CaseIterable, Identifiable {
+        case never = "أبدًا"
+        case weekly = "أسبوعيًا"
+        case monthly = "شهريًا"
+        var id: String { rawValue }
+    }
+
+    var body: some View {
+        ZStack {
+            Color(white: 0.10).ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                header
+
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 28) {
+                        playersSection
+                        managementSection
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 28)
+                    .padding(.bottom, 32)
+                }
+            }
+        }
+        .environment(\.layoutDirection, .rightToLeft)
+        .confirmationDialog(
+            "حذف المناسبة",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("حذف", role: .destructive) { handleDelete() }
+            Button("إلغاء", role: .cancel) {}
+        } message: {
+            Text("سيتم حذف المناسبة وجميع المشاركين نهائيًا. لا يمكن التراجع عن هذا الإجراء.")
+        }
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        ZStack {
+            Text("إعدادات إضافية")
+                .font(.appSubheadline)
+                .foregroundStyle(.white)
+
+            HStack {
+                Spacer()
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.black)
+                        .frame(width: 40, height: 40)
+                        .background(Color.white)
+                        .clipShape(Circle())
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 16)
+    }
+
+    // MARK: - Sections
+
+    private var playersSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("اللاعبين")
+
+            menuRow(title: "لاعبين ضيوف", value: guestLimit.rawValue) {
+                ForEach(GuestLimit.allCases) { option in
+                    Button(option.rawValue) { guestLimit = option }
+                }
+            }
+            caption("حدد عدد الضيوف الذين يمكن للشخص إحضارهم.")
+
+            toggleRow(title: "الموافقة على الضيوف", isOn: $guestApproval)
+            caption("الموافقة على الضيوف الجدد أولًا، حتى يمكنهم الانضمام إلى المناسبة.")
+        }
+    }
+
+    private var managementSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("إدارة التمرين")
+
+            menuRow(title: "متكرر", value: recurrence.rawValue) {
+                ForEach(Recurrence.allCases) { option in
+                    Button(option.rawValue) { recurrence = option }
+                }
+            }
+
+            deleteButton
+
+            if let deleteError {
+                Text(deleteError)
+                    .font(.appCaption)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 4)
+            }
+        }
+    }
+
+    private var deleteButton: some View {
+        Button {
+            showDeleteConfirm = true
+        } label: {
+            HStack {
+                Spacer()
+                if isDeleting {
+                    ProgressView().tint(.red)
+                } else {
+                    Text("حذف المناسبة")
+                        .font(.appBody)
+                        .foregroundStyle(.red)
+                }
+                Spacer()
+            }
+            .frame(height: 56)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.white.opacity(0.08))
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isDeleting)
+    }
+
+    // MARK: - Reusable rows
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.appBody)
+            .foregroundStyle(Color(white: 0.5))
+            .padding(.horizontal, 4)
+    }
+
+    private func caption(_ text: String) -> some View {
+        Text(text)
+            .font(.appCaption)
+            .foregroundStyle(Color(white: 0.5))
+            .padding(.horizontal, 4)
+    }
+
+    private func menuRow<Content: View>(
+        title: String,
+        value: String,
+        @ViewBuilder menu: () -> Content
+    ) -> some View {
+        Menu {
+            menu()
+        } label: {
+            HStack {
+                Text(title)
+                    .font(.appBody)
+                    .foregroundStyle(.white)
+                Spacer()
+                HStack(spacing: 8) {
+                    Text(value)
+                        .font(.appBody)
+                        .foregroundStyle(Color(white: 0.55))
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color(white: 0.55))
+                }
+            }
+            .padding(.horizontal, 18)
+            .frame(height: 56)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.white.opacity(0.08))
+            )
+        }
+    }
+
+    private func toggleRow(title: String, isOn: Binding<Bool>) -> some View {
+        HStack {
+            Text(title)
+                .font(.appBody)
+                .foregroundStyle(.white)
+            Spacer()
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .tint(.blue)
+        }
+        .padding(.horizontal, 18)
+        .frame(height: 56)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(.white.opacity(0.08))
+        )
+    }
+
+    // MARK: - Actions
+
+    private func handleDelete() {
+        guard !isDeleting else { return }
+        isDeleting = true
+        deleteError = nil
+        Task {
+            defer { isDeleting = false }
+            do {
+                try await EventService.shared.deleteEvent(eventId: event.id)
+                onDeleted()
+                dismiss()
+            } catch {
+                deleteError = "تعذر حذف المناسبة. حاول مرة أخرى."
+            }
+        }
+    }
+}

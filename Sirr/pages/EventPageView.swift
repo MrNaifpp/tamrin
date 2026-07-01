@@ -162,6 +162,10 @@ struct EventPageView: View {
                     },
                     onEnroll: {
                         Task { await loadEvents() }
+                    },
+                    onDeleted: {
+                        navigationPath.removeLast()
+                        Task { await loadEvents() }
                     }
                 )
                 .navigationTransition(.zoom(sourceID: event.id, in: zoomNamespace))

@@ -349,4 +349,22 @@ final class EventService {
         eventLogger.info("API toggleRegistrationLock succeeded (eventId: \(eventId), locked: \(newValue))")
         return newValue
     }
+
+    /// Delete an event. Only the creator can call this (enforced server-side).
+    /// Cascades remove event_participants & event_waitlist rows automatically.
+    func deleteEvent(eventId: UUID) async throws {
+        let session = try await client.auth.session
+        let userId = session.user.id
+
+        let params: [String: String] = [
+            "p_event_id": eventId.uuidString,
+            "p_user_id": userId.uuidString
+        ]
+
+        try await client
+            .rpc("delete_event", params: params)
+            .execute()
+
+        eventLogger.info("API deleteEvent succeeded (eventId: \(eventId))")
+    }
 }

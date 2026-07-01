@@ -1,0 +1,12 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["V2PFCP3D26.com.businessech.tmrin"],
+        "components": [
+          { "/": "/event/*", "comment": "Event detail deep link" }
+        ]
+      }
+    ]
+  }
+}

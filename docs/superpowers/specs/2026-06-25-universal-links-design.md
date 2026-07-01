@@ -4,29 +4,38 @@ Date: 2026-06-25
 
 ## Goal
 Turn the existing custom-scheme deep link (`sirr://event/{UUID}`) into a real
-Universal Link served from `https://dreams-hub.com`, so tapping an event link
-opens the app directly (installed) or falls back to the App Store (not
-installed). The custom `sirr://` scheme is kept as a permanent fallback.
+Universal Link served from `https://guileless-squirrel-b6537a.netlify.app`, so
+tapping an event link opens the app directly (installed) or falls back to the
+App Store (not installed). The custom `sirr://` scheme is kept as a permanent
+fallback.
+
+> Migration note: the original target domain was `dreams-hub.com`. It was
+> retired; the site now lives on Netlify at
+> `https://guileless-squirrel-b6537a.netlify.app` (served from the repo root, so
+> the AASA sits at the host root where Apple reads it). If a custom domain is
+> later attached, update the entitlement + share URL to match.
 
 ## Identifiers
 - App ID: `V2PFCP3D26.com.businessech.tmrin` (Team ID `V2PFCP3D26` + bundle id)
-- Domain: `dreams-hub.com`
-- Universal Link format: `https://dreams-hub.com/event/{UUID}`
+- Domain: `guileless-squirrel-b6537a.netlify.app`
+- Universal Link format: `https://guileless-squirrel-b6537a.netlify.app/event/{UUID}`
 - Custom scheme (fallback): `sirr://event/{UUID}`
 
-## Part A — Website (DONE)
-Hosted on Netlify (React SPA).
-1. `public/.well-known/apple-app-site-association` (no extension) containing the
-   AASA JSON for `/event/*`.
-2. `netlify.toml` header forcing `Content-Type: application/json` for that path,
-   placed before the SPA `/* -> /index.html` catch-all.
-3. `/event/{id}` web route redirects non-app visitors to the App Store.
+## Part A — Website (Netlify)
+Hosted on Netlify at the site root (source kept in this repo under `landing/`).
+
+1. `.well-known/apple-app-site-association` (no extension) containing the AASA
+   JSON for `/event/*`, served from the **host root**.
+2. `404.html` should handle `/event/{id}` for non-app visitors — shows an
+   open-in-app + App Store fallback card. (Currently `/event/{id}` returns 404
+   on the web; the deep link still works when the app is installed.)
 
 Verified live:
-- `https://dreams-hub.com/.well-known/apple-app-site-association` → 200,
-  `content-type: application/json`, raw JSON (no redirect).
-- Apple CDN (`app-site-association.cdn-apple.com/a/v1/dreams-hub.com`) → 200,
-  `Apple-Origin-Format: json` (parsed valid).
+- `https://guileless-squirrel-b6537a.netlify.app/.well-known/apple-app-site-association`
+  → 200, raw JSON (content-type `text/plain`, which modern iOS accepts).
+- Apple CDN
+  (`app-site-association.cdn-apple.com/a/v1/guileless-squirrel-b6537a.netlify.app`)
+  → 200, valid parsed JSON.
 
 ## Part B — iOS app
 1. **Entitlements** (`Sirr/Sirr.entitlements`): add
