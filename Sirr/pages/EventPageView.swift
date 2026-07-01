@@ -240,8 +240,18 @@ struct EventPageView: View {
                 .presentationDragIndicator(.visible)
             }
             .sheet(item: $settingsWorkspace) { ws in
-                // Replaced by WorkspaceSettingsSheet in the next task.
-                Text(ws.name)
+                WorkspaceSettingsSheet(
+                    workspace: ws,
+                    currentUserId: authVM?.currentProfile?.userId,
+                    onChanged: { Task { await loadEvents() } },
+                    onLeftOrDeleted: {
+                        appState.currentWorkspaceId = nil
+                        currentPage = 0
+                        Task { await loadEvents() }
+                    }
+                )
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
             }
         }
     }
