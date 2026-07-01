@@ -17,7 +17,10 @@ struct WorkspaceAvatar: View {
     var size: CGFloat = 34
 
     private var color: Color {
-        let hue = Double(abs(id.uuidString.hashValue % 360)) / 360.0
+        // Stable across launches: hashValue is per-process randomized, so
+        // derive the hue from the UUID's raw bytes instead.
+        let bytes = withUnsafeBytes(of: id.uuid) { $0.reduce(0) { ($0 &* 31 &+ Int($1)) & 0xFFFF } }
+        let hue = Double(bytes % 360) / 360.0
         return Color(hue: hue, saturation: 0.55, brightness: 0.75)
     }
 
@@ -72,46 +75,52 @@ struct WorkspaceSwitcherSheet: View {
     }
 
     private func workspaceRow(_ ws: WorkspaceRecord) -> some View {
-        Button {
-            onSelect(ws)
-            dismiss()
-        } label: {
-            HStack(spacing: 12) {
-                WorkspaceAvatar(name: ws.name, id: ws.id)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(ws.name)
-                        .font(.appBodyMedium)
-                        .foregroundStyle(.white)
-                    if let count = ws.memberCount {
-                        Text("\(count) أعضاء")
-                            .font(.appCaption)
-                            .foregroundStyle(Color(white: 0.55))
+        HStack(spacing: 12) {
+            Button {
+                onSelect(ws)
+                dismiss()
+            } label: {
+                HStack(spacing: 12) {
+                    WorkspaceAvatar(name: ws.name, id: ws.id)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(ws.name)
+                            .font(.appBodyMedium)
+                            .foregroundStyle(.white)
+                        if let count = ws.memberCount {
+                            Text("\(count) أعضاء")
+                                .font(.appCaption)
+                                .foregroundStyle(Color(white: 0.55))
+                        }
+                    }
+                    Spacer()
+                    if ws.id == currentId {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.white)
                     }
                 }
-                Spacer()
-                if ws.id == currentId {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.white)
-                }
-                Button {
-                    dismiss()
-                    onOpenSettings(ws)
-                } label: {
-                    Image(systemName: "gearshape.fill")
-                        .font(.system(size: 15))
-                        .foregroundStyle(Color(white: 0.55))
-                }
-                .buttonStyle(.plain)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 14)
-            .frame(height: 62)
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(ws.id == currentId ? .white.opacity(0.14) : .white.opacity(0.06))
-            )
+            .buttonStyle(.plain)
+
+            Button {
+                dismiss()
+                onOpenSettings(ws)
+            } label: {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 15))
+                    .foregroundStyle(Color(white: 0.55))
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 14)
+        .frame(height: 62)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(ws.id == currentId ? .white.opacity(0.14) : .white.opacity(0.06))
+        )
     }
 
     private var createRow: some View {
