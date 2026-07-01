@@ -28,6 +28,7 @@ struct EventRecord: Codable {
     let latitude: Double?
     let longitude: Double?
     let createdAt: Date?
+    let workspaceId: UUID?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -45,6 +46,7 @@ struct EventRecord: Codable {
         case latitude
         case longitude
         case createdAt = "created_at"
+        case workspaceId = "workspace_id"
     }
 }
 
@@ -97,58 +99,42 @@ final class EventService {
     static let shared = EventService()
     private let client = SupabaseClientManager.shared.client
 
-    /// Fetch events where the current user is creator or participant. Ordered by start_date ascending.
-    func getEventsForCurrentUser() async throws -> [EventRecord] {
-        let session = try await client.auth.session
-        let userId = session.user.id
-
-        // Events created by user
-        let created: [EventRecord] = try await client
-            .from("events")
-            .select()
-            .eq("creator_id", value: userId)
-            .order("start_date", ascending: true)
+    /// Upcoming events of one workspace (member-gated server-side).
+    /// Ordered by start_date ascending.
+    func getWorkspaceEvents(workspaceId: UUID) async throws -> [EventRecord] {
+        let params: [String: String] = ["p_workspace_id": workspaceId.uuidString]
+        let response = try await client
+            .rpc("get_workspace_events", params: params)
             .execute()
-            .value
 
-        // Event IDs where user is participant (not creator)
-        struct ParticipantRow: Decodable {
-            let eventId: UUID
-            enum CodingKeys: String, CodingKey { case eventId = "event_id" }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let str = try container.decode(String.self)
+            if let d = ISO8601DateFormatter().date(from: str) { return d }
+            let pg = DateFormatter()
+            pg.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSZZZZZ"
+            pg.locale = Locale(identifier: "en_US_POSIX")
+            if let d = pg.date(from: str) { return d }
+            let pg2 = DateFormatter()
+            pg2.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZZZZZ"
+            pg2.locale = Locale(identifier: "en_US_POSIX")
+            if let d = pg2.date(from: str) { return d }
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unrecognized date: \(str)")
         }
-        let participantRows: [ParticipantRow] = try await client
-            .from("event_participants")
-            .select("event_id")
-            .eq("user_id", value: userId)
-            .execute()
-            .value
-        let participantEventIds = Set(participantRows.map(\.eventId))
-        let createdIds = Set(created.map(\.id))
-        let otherIds = participantEventIds.subtracting(createdIds)
-
-        if otherIds.isEmpty {
-            eventLogger.info("API getEventsForCurrentUser succeeded (count: \(created.count))")
-            return created
-        }
-
-        // Events where user participates but did not create (fetch by ids)
-        let others: [EventRecord] = try await client
-            .from("events")
-            .select()
-            .in("id", values: Array(otherIds))
-            .order("start_date", ascending: true)
-            .execute()
-            .value
-
-        var combined = created + others
-        combined.sort { $0.startDate < $1.startDate }
-        eventLogger.info("API getEventsForCurrentUser succeeded (count: \(combined.count))")
-        return combined
+        let events = try decoder.decode([EventRecord].self, from: response.data)
+        eventLogger.info("API getWorkspaceEvents succeeded (count: \(events.count))")
+        return events
     }
+
+    /// TEMPORARY shim until EventPageView switches to getWorkspaceEvents (Task 7).
+    /// Returns [] — home shows the workspace empty state until then.
+    func getEventsForCurrentUser() async throws -> [EventRecord] { [] }
 
     /// Create a new event and add the current user as first participant.
     /// Uses a server-side RPC (SECURITY DEFINER) to bypass RLS for inserts.
     func createEvent(
+        workspaceId: UUID,
         name: String,
         location: String,
         description: String,
@@ -173,6 +159,7 @@ final class EventService {
         let iso = ISO8601DateFormatter()
         var params: [String: String] = [
             "p_creator_id": userId.uuidString,
+            "p_workspace_id": workspaceId.uuidString,
             "p_name": name,
             "p_location": location,
             "p_description": description,

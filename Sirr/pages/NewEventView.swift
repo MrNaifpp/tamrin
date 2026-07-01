@@ -15,6 +15,9 @@ import UIKit
 struct NewEventView: View {
     @Environment(\.dismiss) var dismiss
 
+    /// Workspace the new event is created in (current workspace on home).
+    var workspaceId: UUID? = nil
+
     /// Called with the created event so the presenter can open its detail page.
     var onCreated: ((EventData) -> Void)? = nil
 
@@ -434,6 +437,7 @@ struct NewEventView: View {
         do {
             let computedPricePerPerson: Double = (numberOfPeople > 0) ? Double(fieldValue) / Double(numberOfPeople) : 0
             let event = try await EventService.shared.createEvent(
+                workspaceId: workspaceId ?? UUID(),
                 name: exerciseName,
                 location: exerciseLocation,
                 description: description,
