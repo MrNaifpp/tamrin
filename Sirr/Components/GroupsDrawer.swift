@@ -19,45 +19,35 @@ struct GroupsDrawer: View {
     var onNewGroup: () -> Void
     var onOpenSettings: () -> Void
 
-    /// Drag offset while the user swipes the panel toward the edge.
-    @State private var dragOffset: CGFloat = 0
-
     var body: some View {
         GeometryReader { geometry in
             let panelWidth = geometry.size.width * 0.82
 
             ZStack(alignment: .leading) {
-                // Dim layer — tap to close.
                 if isPresented {
+                    // Dim layer — tap to close.
                     Color.black.opacity(0.45)
                         .ignoresSafeArea()
                         .transition(.opacity)
                         .onTapGesture { close() }
-                }
 
-                // Panel. In RTL, .leading is the right edge — matching the mockup.
-                panel(width: panelWidth, height: geometry.size.height)
-                    .offset(x: isPresented ? dragOffset : -panelWidth)
-                    .animation(.spring(response: 0.35, dampingFraction: 0.86), value: isPresented)
+                    // Panel. Edge.leading is layout-direction aware, so in RTL
+                    // the panel enters from the right edge — matching the mockup.
+                    panel(width: panelWidth, height: geometry.size.height)
+                        .transition(.move(edge: .leading))
+                        .gesture(
+                            // Direction-agnostic horizontal swipe closes; keeps
+                            // swipe-to-dismiss without RTL coordinate assumptions.
+                            DragGesture(minimumDistance: 30)
+                                .onEnded { value in
+                                    if abs(value.translation.width) > 60 { close() }
+                                }
+                        )
+                }
             }
-            .gesture(
-                DragGesture()
-                    .onChanged { value in
-                        // In RTL, dragging toward the leading edge closes.
-                        let translation = value.translation.width
-                        dragOffset = translation > 0 ? 0 : max(-panelWidth, translation)
-                    }
-                    .onEnded { value in
-                        if value.translation.width < -panelWidth * 0.3 {
-                            close()
-                        }
-                        dragOffset = 0
-                    }
-            )
+            .animation(.spring(response: 0.35, dampingFraction: 0.86), value: isPresented)
         }
         .environment(\.layoutDirection, .rightToLeft)
-        .allowsHitTesting(isPresented)
-        .opacity(isPresented ? 1 : 0)
     }
 
     private func close() {
