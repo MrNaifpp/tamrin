@@ -46,6 +46,10 @@ struct UpcomingScheduleView: View {
         return f
     }()
 
+    private static func arDigits(_ n: Int) -> String {
+        n.formatted(.number.locale(Locale(identifier: "ar")).grouping(.never))
+    }
+
     private var nextEvent: EventData? { events.first }
     private var laterEvents: [EventData] { Array(events.dropFirst()) }
 
@@ -97,7 +101,7 @@ struct UpcomingScheduleView: View {
                 let isToday = cal.isDateInToday(day)
                 let hasWorkout = workoutDays.contains(cal.startOfDay(for: day))
                 VStack(spacing: 6) {
-                    Text("\(cal.component(.day, from: day))")
+                    Text(Self.arDigits(cal.component(.day, from: day)))
                         .font(.appCallout)
                         .foregroundStyle(isToday ? .primary : .secondary)
                     Text(Self.dayNames[cal.component(.weekday, from: day)])
@@ -173,7 +177,7 @@ struct UpcomingScheduleView: View {
         Button { onSelect(event) } label: {
             HStack(spacing: 14) {
                 VStack(spacing: 2) {
-                    Text("\(Self.arCalendar.component(.day, from: event.startDate))")
+                    Text(Self.arDigits(Self.arCalendar.component(.day, from: event.startDate)))
                         .font(.appBodySemibold)
                         .foregroundStyle(.primary)
                     Text(Self.monthFormatter.string(from: event.startDate))
@@ -212,17 +216,17 @@ struct UpcomingScheduleView: View {
     private func daysRemainingValue(to date: Date) -> String {
         let d = daysBetweenTodayAnd(date)
         switch d {
-        case 0: return "اليوم"
+        case ...0: return "اليوم"
         case 1: return "غدًا"
         case 2: return "يومين"
-        default: return "\(d)"
+        default: return Self.arDigits(d)
         }
     }
 
     private func daysRemainingUnit(to date: Date) -> String {
         let d = daysBetweenTodayAnd(date)
         switch d {
-        case 0, 1, 2: return ""
+        case ...2: return ""
         case 3...10: return "أيام"
         default: return "يوم"
         }

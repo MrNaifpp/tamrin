@@ -6,9 +6,6 @@
 //
 
 import SwiftUI
-#if canImport(UIKit)
-import UIKit
-#endif
 
 enum NavigationDestination: Hashable {
     case newEvent
@@ -87,20 +84,6 @@ struct EventPageView: View {
                             workoutFeed(geometry: geometry)
                         }
                     }
-                    GroupsDrawer(
-                        isPresented: $showDrawer,
-                        workspaces: workspaces,
-                        currentId: currentWorkspace?.id,
-                        onSelect: { ws in
-                            appState.currentWorkspaceId = ws.id
-                        },
-                        onNewWorkout: { navigationPath.append(NavigationDestination.newEvent) },
-                        onNewGroup: { showCreateWorkspace = true },
-                        onOpenSettings: {
-                            if let ws = currentWorkspace { settingsWorkspace = ws }
-                        }
-                    )
-                    .ignoresSafeArea()
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
@@ -111,6 +94,21 @@ struct EventPageView: View {
                     onMenu: { withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) { showDrawer = true } },
                     onUpcoming: { navigationPath.append(NavigationDestination.upcoming) },
                     onProfile: { showEditProfileSheet = true }
+                )
+            }
+            .overlay {
+                GroupsDrawer(
+                    isPresented: $showDrawer,
+                    workspaces: workspaces,
+                    currentId: currentWorkspace?.id,
+                    onSelect: { ws in
+                        appState.currentWorkspaceId = ws.id
+                    },
+                    onNewWorkout: { navigationPath.append(NavigationDestination.newEvent) },
+                    onNewGroup: { showCreateWorkspace = true },
+                    onOpenSettings: {
+                        if let ws = currentWorkspace { settingsWorkspace = ws }
+                    }
                 )
             }
             .environment(\.layoutDirection, .rightToLeft)
@@ -380,74 +378,6 @@ private extension EventPageView {
                 .scaledToFill()
                 .aspectRatio(4/3, contentMode: .fill)
         }
-    }
-}
-
-// MARK: - Bottom Navigation Bar
-struct BottomNavigationBarView: View {
-    @Binding var selectedTab: Int
-
-    var body: some View {
-        HStack(spacing: 0) {
-            BottomNavItem(
-                icon: "house.fill",
-                title: "الرئيسية",
-                isSelected: selectedTab == 0,
-                action: { selectedTab = 0 }
-            )
-
-            BottomNavItem(
-                icon: "calendar",
-                title: "الفعاليات",
-                isSelected: selectedTab == 1,
-                action: { selectedTab = 1 }
-            )
-
-            BottomNavItem(
-                icon: "person.fill",
-                title: "الملف الشخصي",
-                isSelected: selectedTab == 2,
-                action: { selectedTab = 2 }
-            )
-        }
-        .frame(height: 49)
-        .background(.bar)
-        .environment(\.layoutDirection, .rightToLeft)
-    }
-}
-
-private struct BottomNavItem: View {
-    let icon: String
-    let title: String
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: {
-            action()
-            hapticLight()
-        }) {
-            VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 24))
-                    .symbolVariant(isSelected ? .fill : .none)
-                    .foregroundStyle(isSelected ? .blue : .secondary)
-
-                Text(title)
-                    .font(.system(size: 10))
-                    .foregroundStyle(isSelected ? .blue : .secondary)
-            }
-            .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func hapticLight() {
-        #if canImport(UIKit)
-        let generator = UIImpactFeedbackGenerator(style: .light)
-        generator.prepare()
-        generator.impactOccurred()
-        #endif
     }
 }
 

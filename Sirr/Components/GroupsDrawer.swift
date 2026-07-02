@@ -33,7 +33,7 @@ struct GroupsDrawer: View {
 
                     // Panel. Edge.leading is layout-direction aware, so in RTL
                     // the panel enters from the right edge — matching the mockup.
-                    panel(width: panelWidth, height: geometry.size.height)
+                    panel(width: panelWidth)
                         .transition(.move(edge: .leading))
                         .gesture(
                             // Direction-agnostic horizontal swipe closes; keeps
@@ -47,6 +47,7 @@ struct GroupsDrawer: View {
             }
             .animation(.spring(response: 0.35, dampingFraction: 0.86), value: isPresented)
         }
+        .allowsHitTesting(isPresented)
         .environment(\.layoutDirection, .rightToLeft)
     }
 
@@ -56,7 +57,7 @@ struct GroupsDrawer: View {
         }
     }
 
-    private func panel(width: CGFloat, height: CGFloat) -> some View {
+    private func panel(width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             // Title row: "المجموعات" + blue + (new workout in current group).
             HStack {
@@ -110,16 +111,19 @@ struct GroupsDrawer: View {
             .padding(.horizontal, 20)
             .padding(.bottom, 12)
         }
-        .frame(width: width, height: height)
-        .background(Color(white: 0.07))
-        .clipShape(
-            UnevenRoundedRectangle(
-                topLeadingRadius: 0, bottomLeadingRadius: 0,
-                bottomTrailingRadius: 28, topTrailingRadius: 28,
-                style: .continuous
-            )
+        .frame(width: width)
+        .frame(maxHeight: .infinity)
+        .background(
+            Color(white: 0.07)
+                .clipShape(
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: 0, bottomLeadingRadius: 0,
+                        bottomTrailingRadius: 28, topTrailingRadius: 28,
+                        style: .continuous
+                    )
+                )
+                .ignoresSafeArea()
         )
-        .ignoresSafeArea(edges: .vertical)
     }
 
     private func groupRow(_ ws: WorkspaceRecord) -> some View {
@@ -134,7 +138,7 @@ struct GroupsDrawer: View {
                         .font(.appBodyMedium)
                         .foregroundStyle(.white)
                     if let count = ws.memberCount {
-                        Text("الأعضاء \(count)")
+                        Text("الأعضاء \(count.formatted(.number.locale(Locale(identifier: "ar")).grouping(.never)))")
                             .font(.appCaption)
                             .foregroundStyle(Color(white: 0.6))
                     }
