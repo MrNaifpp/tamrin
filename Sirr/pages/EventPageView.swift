@@ -28,9 +28,14 @@ struct EventPageView: View {
     @State private var showCreateWorkspace = false
     @State private var settingsWorkspace: WorkspaceRecord?
     @State private var deepLinkError: String?
+    @State private var visibleEventId: UUID?
 
     private var currentWorkspace: WorkspaceRecord? {
         workspaces.first { $0.id == appState.currentWorkspaceId } ?? workspaces.first
+    }
+
+    private var visibleEvent: EventData? {
+        events.first { $0.id == visibleEventId } ?? events.first
     }
 
     init(authVM: AuthViewModel? = nil, appState: AppState, deepLinkEventId: Binding<UUID?> = .constant(nil)) {
@@ -61,8 +66,8 @@ struct EventPageView: View {
                             .ignoresSafeArea(edges: .all)
                         emptyStateContent(geometry: geometry)
                     } else {
-                        // Static blurred backdrop from the next (soonest) workout.
-                        nextEventBackground
+                        // Blurred backdrop that tracks the visible workout page.
+                        currentEventBackground
                             .frame(
                                 width: geometry.size.width,
                                 height: geometry.size.height + geometry.safeAreaInsets.top + geometry.safeAreaInsets.bottom
@@ -70,6 +75,9 @@ struct EventPageView: View {
                             .clipped()
                             .ignoresSafeArea(edges: .all)
                             .blur(radius: 8)
+                            .id(visibleEvent?.id)
+                            .transition(.opacity)
+                            .animation(.easeInOut(duration: 0.3), value: visibleEventId)
                         Color.black.opacity(0.3)
                             .frame(
                                 width: geometry.size.width,
@@ -86,16 +94,43 @@ struct EventPageView: View {
                     }
                 }
             }
-            .toolbar(.hidden, for: .navigationBar)
-            .safeAreaInset(edge: .top) {
-                HomeHeaderView(
-                    avatarUrl: authVM?.currentProfile?.avatarUrl,
-                    showsGroupControls: currentWorkspace != nil,
-                    onMenu: { withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) { showDrawer = true } },
-                    onUpcoming: { navigationPath.append(NavigationDestination.upcoming) },
-                    onProfile: { showEditProfileSheet = true }
-                )
+            .toolbar {
+                if currentWorkspace != nil {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) { showDrawer = true }
+                        } label: {
+                            Image(systemName: "line.3.horizontal")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                    ToolbarItem(placement: .principal) {
+                        Button {
+                            navigationPath.append(NavigationDestination.upcoming)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text("التمارين القادمة")
+                                    .font(.appCallout)
+                                Image(systemName: "chevron.forward")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .opacity(0.8)
+                            }
+                            .foregroundStyle(.primary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        showEditProfileSheet = true
+                    } label: {
+                        profileToolbarAvatar
+                    }
+                }
             }
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbar(showDrawer ? .hidden : .visible, for: .navigationBar)
             .overlay {
                 GroupsDrawer(
                     isPresented: $showDrawer,
@@ -236,6 +271,7 @@ private extension EventPageView {
             }
             let records = try await EventService.shared.getWorkspaceEvents(workspaceId: ws.id)
             events = records.map { EventData.from(record: $0) }
+            visibleEventId = events.first?.id
         } catch {
             eventsError = error.localizedDescription
             events = []
@@ -263,13 +299,14 @@ private extension EventPageView {
                         .buttonStyle(.plain)
                     }
                     .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                    .containerRelativeFrame(.vertical)
+                    .padding(.bottom, 12)
+                    .frame(height: geometry.size.height)
                 }
             }
             .scrollTargetLayout()
         }
-        .scrollTargetBehavior(.paging)
+        .scrollTargetBehavior(.viewAligned)
+        .scrollPosition(id: $visibleEventId)
     }
 
     func sectionLabel(_ title: String) -> some View {
@@ -352,14 +389,14 @@ private extension EventPageView {
     }
 
     @ViewBuilder
-    var nextEventBackground: some View {
-        if let first = events.first, let resource = EventData.imageResource(for: first.imageUrl) {
+    var currentEventBackground: some View {
+        if let event = visibleEvent, let resource = EventData.imageResource(for: event.imageUrl) {
             Image(resource)
                 .resizable()
                 .scaledToFill()
                 .aspectRatio(4/3, contentMode: .fill)
-        } else if let first = events.first,
-                  let urlString = first.imageUrl,
+        } else if let event = visibleEvent,
+                  let urlString = event.imageUrl,
                   urlString.hasPrefix("http"),
                   let url = URL(string: urlString) {
             AsyncImage(url: url) { phase in
@@ -378,6 +415,36 @@ private extension EventPageView {
                 .resizable()
                 .scaledToFill()
                 .aspectRatio(4/3, contentMode: .fill)
+        }
+    }
+
+    @ViewBuilder
+    var profileToolbarAvatar: some View {
+        if let urlString = authVM?.currentProfile?.avatarUrl, let url = URL(string: urlString) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                case .failure, .empty:
+                    Image(systemName: "person.crop.circle.fill")
+                        .resizable()
+                        .scaledToFit()
+                        .foregroundStyle(Color.gray.opacity(0.7))
+                @unknown default:
+                    Image(systemName: "person.crop.circle.fill")
+                        .resizable()
+                        .scaledToFit()
+                        .foregroundStyle(Color.gray.opacity(0.7))
+                }
+            }
+            .frame(width: 28, height: 28)
+            .clipShape(Circle())
+        } else {
+            Image(systemName: "person.crop.circle.fill")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 28, height: 28)
+                .foregroundStyle(Color.gray.opacity(0.7))
         }
     }
 }
