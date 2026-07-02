@@ -56,13 +56,13 @@ struct WorkspaceSettingsSheet: View {
         }
         .environment(\.layoutDirection, .rightToLeft)
         .task { await loadDetail() }
-        .alert("إعادة تسمية المساحة", isPresented: $showRename) {
+        .alert("إعادة تسمية المجموعة", isPresented: $showRename) {
             TextField("الاسم", text: $renameText)
             Button("حفظ") { handleRename() }
             Button("إلغاء", role: .cancel) {}
         }
         .confirmationDialog(
-            isOwner ? "حذف المساحة" : "مغادرة المساحة",
+            isOwner ? "حذف المجموعة" : "مغادرة المجموعة",
             isPresented: $showDestructiveConfirm,
             titleVisibility: .visible
         ) {
@@ -70,8 +70,8 @@ struct WorkspaceSettingsSheet: View {
             Button("إلغاء", role: .cancel) {}
         } message: {
             Text(isOwner
-                 ? "سيتم حذف المساحة وجميع أحداثها ومشاركيها نهائيًا. لا يمكن التراجع."
-                 : "ستفقد الوصول إلى أحداث هذه المساحة وستُزال من الأحداث القادمة.")
+                 ? "سيتم حذف المجموعة وجميع تمارينها ومشاركيها نهائيًا. لا يمكن التراجع."
+                 : "ستفقد الوصول إلى تمارين هذه المجموعة وستُزال من التمارين القادمة.")
         }
         .confirmationDialog(
             "إزالة العضو",
@@ -89,7 +89,7 @@ struct WorkspaceSettingsSheet: View {
             }
             Button("إلغاء", role: .cancel) { memberToRemove = nil }
         } message: {
-            Text("سيفقد \(memberToRemove?.displayName ?? "العضو") الوصول إلى المساحة وسيُزال من الأحداث القادمة.")
+            Text("سيفقد \(memberToRemove?.displayName ?? "العضو") الوصول إلى المجموعة وسيُزال من التمارين القادمة.")
         }
     }
 
@@ -97,7 +97,7 @@ struct WorkspaceSettingsSheet: View {
 
     private var header: some View {
         ZStack {
-            Text("إعدادات المساحة")
+            Text("إعدادات المجموعة")
                 .font(.appSubheadline)
                 .foregroundStyle(.white)
             HStack {
@@ -228,7 +228,7 @@ struct WorkspaceSettingsSheet: View {
                     if isWorking {
                         ProgressView().tint(.red)
                     } else {
-                        Text(isOwner ? "حذف المساحة" : "مغادرة المساحة")
+                        Text(isOwner ? "حذف المجموعة" : "مغادرة المجموعة")
                             .font(.appBody)
                             .foregroundStyle(.red)
                     }

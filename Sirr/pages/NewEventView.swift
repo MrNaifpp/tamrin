@@ -435,7 +435,7 @@ struct NewEventView: View {
         }
 
         guard let workspaceId else {
-            createError = "تعذر تحديد المساحة الحالية. أعد فتح التطبيق وحاول مرة أخرى."
+            createError = "تعذر تحديد المجموعة الحالية. أعد فتح التطبيق وحاول مرة أخرى."
             return
         }
 

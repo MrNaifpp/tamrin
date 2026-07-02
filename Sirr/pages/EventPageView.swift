@@ -139,7 +139,7 @@ struct EventPageView: View {
                     let eventData = EventData.from(record: record)
                     navigationPath.append(eventData)
                 } catch {
-                    deepLinkError = "هذا الحدث في مساحة خاصة.\nاطلب دعوة من صاحب المساحة للانضمام."
+                    deepLinkError = "هذا التمرين في مجموعة خاصة.\nاطلب دعوة من صاحب المجموعة للانضمام."
                 }
                 deepLinkEventId = nil
             }
@@ -206,7 +206,7 @@ struct EventPageView: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
             }
-            .alert("تعذر فتح الحدث", isPresented: Binding(
+            .alert("تعذر فتح التمرين", isPresented: Binding(
                 get: { deepLinkError != nil },
                 set: { if !$0 { deepLinkError = nil } }
             )) {
@@ -294,17 +294,17 @@ private extension EventPageView {
     func emptyStateContent(geometry: GeometryProxy) -> some View {
         VStack(spacing: 24) {
             Spacer()
-            Text("لا توجد فعاليات في \(currentWorkspace?.name ?? "المساحة")")
+            Text("لا توجد تمارين في \(currentWorkspace?.name ?? "المجموعة")")
                 .font(.appTitle)
                 .foregroundStyle(.white)
-            Text("أنشئ فعالية أو انضم إلى واحدة")
+            Text("أنشئ تمرينًا أو انضم إلى واحد")
                 .font(.appBody)
                 .foregroundStyle(.white.opacity(0.9))
                 .multilineTextAlignment(.center)
             Button {
                 navigationPath.append(NavigationDestination.newEvent)
             } label: {
-                Text("إنشاء فعالية")
+                Text("إنشاء تمرين")
                     .font(.headline)
                     .foregroundStyle(.black)
                     .frame(maxWidth: .infinity)
@@ -323,10 +323,10 @@ private extension EventPageView {
         VStack(spacing: 16) {
             Spacer()
             Text("🏟️").font(.system(size: 56))
-            Text("ابدأ مساحتك الأولى")
+            Text("ابدأ مجموعتك الأولى")
                 .font(.appTitle)
                 .foregroundStyle(.white)
-            Text("المساحة هي مجموعتك — أنشئ واحدة لشلّتك\nأو انضم برابط دعوة من صديق")
+            Text("المجموعة لك ولأصحابك — أنشئ واحدة لشلّتك\nأو انضم برابط دعوة من صديق")
                 .font(.appBody)
                 .foregroundStyle(.white.opacity(0.9))
                 .multilineTextAlignment(.center)
@@ -335,7 +335,7 @@ private extension EventPageView {
             Button {
                 showCreateWorkspace = true
             } label: {
-                Text("إنشاء مساحة")
+                Text("إنشاء مجموعة")
                     .font(.headline)
                     .foregroundStyle(.black)
                     .frame(maxWidth: .infinity)
