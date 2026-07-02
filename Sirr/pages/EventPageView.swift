@@ -12,6 +12,7 @@ import UIKit
 
 enum NavigationDestination: Hashable {
     case newEvent
+    case upcoming
 }
 
 struct EventPageView: View {
@@ -19,7 +20,6 @@ struct EventPageView: View {
     @ObservedObject var appState: AppState
     @Binding var deepLinkEventId: UUID?
     @Namespace private var zoomNamespace
-    @State private var currentPage: Int = 0
     @State private var navigationPath = NavigationPath()
     @State private var showEditProfileSheet = false
     @State private var events: [EventData] = []
@@ -64,8 +64,8 @@ struct EventPageView: View {
                             .ignoresSafeArea(edges: .all)
                         emptyStateContent(geometry: geometry)
                     } else {
-                        // Full-screen background image for current event (or default when loading)
-                        eventBackgroundImage(currentPage: min(currentPage, events.count - 1))
+                        // Static blurred backdrop from the next (soonest) workout.
+                        nextEventBackground
                             .frame(
                                 width: geometry.size.width,
                                 height: geometry.size.height + geometry.safeAreaInsets.top + geometry.safeAreaInsets.bottom
@@ -73,92 +73,34 @@ struct EventPageView: View {
                             .clipped()
                             .ignoresSafeArea(edges: .all)
                             .blur(radius: 8)
-                            .transition(.opacity)
-                            .animation(.easeInOut(duration: 0.3), value: currentPage)
                         Color.black.opacity(0.3)
                             .frame(
                                 width: geometry.size.width,
                                 height: geometry.size.height + geometry.safeAreaInsets.top + geometry.safeAreaInsets.bottom
                             )
                             .ignoresSafeArea(edges: .all)
-                        VStack {
-                            if eventsLoading && events.isEmpty {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .scaleEffect(1.2)
-                                Spacer()
-                            } else if !events.isEmpty {
-                                TabView(selection: $currentPage) {
-                                    ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
-                                        VStack(spacing: 0) {
-                                            Spacer(minLength: 18)
-                                            NavigationLink(value: event) {
-                                                NewActivtyCardView(
-                                                    eventName: event.name,
-                                                    eventDate: event.date,
-                                                    imageURL: event.imageUrl,
-                                                    imageName: .card1
-                                                )
-                                                .matchedTransitionSource(id: event.id, in: zoomNamespace)
-                                                .frame(height: min(612, geometry.size.height * 0.75))
-                                                .padding(.horizontal, 20)
-                                            }
-                                            .buttonStyle(.plain)
-                                            Spacer(minLength: 20)
-                                        }
-                                        .frame(width: geometry.size.width)
-                                        .tag(index)
-                                    }
-                                }
-                                .tabViewStyle(.page(indexDisplayMode: .always))
-                                .animation(.smooth, value: currentPage)
-                                .onChange(of: currentPage) { _ in
-                                    hapticMedium()
-                                }
-                            }
-                            Spacer()
-                        }
-                        .ignoresSafeArea(.keyboard, edges: .top)
-                    }
-                }
-            }
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    if let ws = currentWorkspace {
-                        Button {
-                            showSwitcher = true
-                        } label: {
-                            WorkspaceAvatar(name: ws.name, id: ws.id, size: 30)
-                        }
-                    }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 8) {
-                        // No workspace yet → nothing to create an event into.
-                        if currentWorkspace != nil {
-                            Button {
-                                navigationPath.append(NavigationDestination.newEvent)
-                            } label: {
-                                Image(systemName: "plus")
-                                    .font(.system(size: 17, weight: .semibold))
-                                    .foregroundStyle(.primary)
-                            }
-                        }
-                        Button {
-                            showEditProfileSheet = true
-                        } label: {
-                            eventPageProfileAvatar
+                        if eventsLoading && events.isEmpty {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(1.2)
+                        } else if !events.isEmpty {
+                            workoutFeed(geometry: geometry)
                         }
                     }
                 }
             }
-            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbar(.hidden, for: .navigationBar)
+            .safeAreaInset(edge: .top) {
+                HomeHeaderView(
+                    avatarUrl: authVM?.currentProfile?.avatarUrl,
+                    showsGroupControls: currentWorkspace != nil,
+                    onMenu: { showSwitcher = true },
+                    onUpcoming: { navigationPath.append(NavigationDestination.upcoming) },
+                    onProfile: { showEditProfileSheet = true }
+                )
+            }
             .environment(\.layoutDirection, .rightToLeft)
             .onAppear {
-                #if canImport(UIKit)
-                UIPageControl.appearance().currentPageIndicatorTintColor = .red
-                UIPageControl.appearance().pageIndicatorTintColor = .gray
-                #endif
                 Task {
                     await authVM?.loadCurrentProfile()
                 }
@@ -212,6 +154,9 @@ struct EventPageView: View {
                         if !navigationPath.isEmpty { navigationPath.removeLast() }
                         navigationPath.append(newEvent)
                     })
+                case .upcoming:
+                    // Replaced by UpcomingScheduleView in a later task.
+                    Text("التمارين القادمة")
                 }
             }
             .sheet(isPresented: $showEditProfileSheet) {
@@ -228,7 +173,6 @@ struct EventPageView: View {
                     currentId: currentWorkspace?.id,
                     onSelect: { ws in
                         appState.currentWorkspaceId = ws.id
-                        currentPage = 0
                         Task { await loadEvents() }
                     },
                     onCreate: { showCreateWorkspace = true },
@@ -255,7 +199,6 @@ struct EventPageView: View {
                     onChanged: { Task { await loadEvents() } },
                     onLeftOrDeleted: {
                         appState.currentWorkspaceId = nil
-                        currentPage = 0
                         Task { await loadEvents() }
                     }
                 )
@@ -294,15 +237,46 @@ private extension EventPageView {
             }
             let records = try await EventService.shared.getWorkspaceEvents(workspaceId: ws.id)
             events = records.map { EventData.from(record: $0) }
-            if currentPage >= events.count && !events.isEmpty {
-                currentPage = events.count - 1
-            } else if events.isEmpty {
-                currentPage = 0
-            }
         } catch {
             eventsError = error.localizedDescription
             events = []
         }
+    }
+
+    /// Vertical feed: التمرين الجاي (first card) then التمارين القادمة (rest).
+    func workoutFeed(geometry: GeometryProxy) -> some View {
+        ScrollView(showsIndicators: false) {
+            LazyVStack(alignment: .leading, spacing: 10) {
+                sectionLabel("التمرين الجاي")
+                ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
+                    if index == 1 {
+                        sectionLabel("التمارين القادمة")
+                            .padding(.top, 18)
+                    }
+                    NavigationLink(value: event) {
+                        NewActivtyCardView(
+                            eventName: event.name,
+                            eventDate: event.date,
+                            imageURL: event.imageUrl,
+                            imageName: .card1
+                        )
+                        .matchedTransitionSource(id: event.id, in: zoomNamespace)
+                        .frame(height: min(612, geometry.size.height * 0.68))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 24)
+        }
+    }
+
+    func sectionLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.appSubheadline)
+            .foregroundStyle(.white.opacity(0.95))
+            .padding(.horizontal, 6)
     }
 
     var emptyStateBackground: some View {
@@ -378,15 +352,14 @@ private extension EventPageView {
     }
 
     @ViewBuilder
-    func eventBackgroundImage(currentPage: Int) -> some View {
-        if currentPage >= 0, currentPage < events.count,
-           let resource = EventData.imageResource(for: events[currentPage].imageUrl) {
+    var nextEventBackground: some View {
+        if let first = events.first, let resource = EventData.imageResource(for: first.imageUrl) {
             Image(resource)
                 .resizable()
                 .scaledToFill()
                 .aspectRatio(4/3, contentMode: .fill)
-        } else if currentPage >= 0, currentPage < events.count,
-                  let urlString = events[currentPage].imageUrl,
+        } else if let first = events.first,
+                  let urlString = first.imageUrl,
                   urlString.hasPrefix("http"),
                   let url = URL(string: urlString) {
             AsyncImage(url: url) { phase in
@@ -405,49 +378,6 @@ private extension EventPageView {
                 .resizable()
                 .scaledToFill()
                 .aspectRatio(4/3, contentMode: .fill)
-        }
-    }
-}
-
-// MARK: - Haptics & Toolbar helpers
-private extension EventPageView {
-    func hapticMedium() {
-        #if canImport(UIKit)
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.prepare()
-        generator.impactOccurred()
-        #endif
-    }
-
-    @ViewBuilder
-    var eventPageProfileAvatar: some View {
-        if let urlString = authVM?.currentProfile?.avatarUrl, let url = URL(string: urlString) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure, .empty:
-                    Image(systemName: "person.crop.circle.fill")
-                        .resizable()
-                        .scaledToFit()
-                        .foregroundStyle(Color.gray.opacity(0.7))
-                @unknown default:
-                    Image(systemName: "person.crop.circle.fill")
-                        .resizable()
-                        .scaledToFit()
-                        .foregroundStyle(Color.gray.opacity(0.7))
-                }
-            }
-            .frame(width: 28, height: 28)
-            .clipShape(Circle())
-        } else {
-            Image(systemName: "person.crop.circle.fill")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 28, height: 28)
-                .foregroundStyle(Color.gray.opacity(0.7))
         }
     }
 }
