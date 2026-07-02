@@ -134,12 +134,15 @@ struct EventPageView: View {
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: 8) {
-                        Button {
-                            navigationPath.append(NavigationDestination.newEvent)
-                        } label: {
-                            Image(systemName: "plus")
-                                .font(.system(size: 17, weight: .semibold))
-                                .foregroundStyle(.primary)
+                        // No workspace yet → nothing to create an event into.
+                        if currentWorkspace != nil {
+                            Button {
+                                navigationPath.append(NavigationDestination.newEvent)
+                            } label: {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 17, weight: .semibold))
+                                    .foregroundStyle(.primary)
+                            }
                         }
                         Button {
                             showEditProfileSheet = true
