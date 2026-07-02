@@ -352,7 +352,8 @@ private extension EventPageView {
                 .font(.appBody)
                 .foregroundStyle(.white.opacity(0.9))
                 .multilineTextAlignment(.center)
-            Spacer()
+            // Centered like emptyStateContent: the ZStack's oversized background
+            // sibling shifts children down, so bottom-anchored content clips.
             Button {
                 showCreateWorkspace = true
             } label: {
@@ -365,10 +366,11 @@ private extension EventPageView {
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 48)
+            .padding(.top, 16)
             Text("عندك رابط دعوة؟ افتحه وسينقلك إلى هنا")
                 .font(.appCaption)
                 .foregroundStyle(.white.opacity(0.7))
-                .padding(.bottom, 24)
+            Spacer()
         }
     }
 
