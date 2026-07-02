@@ -285,7 +285,7 @@ struct SharedEventView: View {
             let record = try await EventService.shared.getEventById(eventId)
             event = EventData.from(record: record)
         } catch {
-            errorMessage = "لم يتم العثور على الفعالية"
+            errorMessage = "هذا الحدث في مساحة خاصة.\nاطلب دعوة من صاحب المساحة للانضمام."
         }
     }
 
