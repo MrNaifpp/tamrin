@@ -27,7 +27,7 @@ struct EventPageView: View {
     @State private var eventsError: String? = nil
     @State private var workspaces: [WorkspaceRecord] = []
     @State private var workspacesLoaded = false
-    @State private var showSwitcher = false
+    @State private var showDrawer = false
     @State private var showCreateWorkspace = false
     @State private var settingsWorkspace: WorkspaceRecord?
     @State private var deepLinkError: String?
@@ -87,6 +87,20 @@ struct EventPageView: View {
                             workoutFeed(geometry: geometry)
                         }
                     }
+                    GroupsDrawer(
+                        isPresented: $showDrawer,
+                        workspaces: workspaces,
+                        currentId: currentWorkspace?.id,
+                        onSelect: { ws in
+                            appState.currentWorkspaceId = ws.id
+                        },
+                        onNewWorkout: { navigationPath.append(NavigationDestination.newEvent) },
+                        onNewGroup: { showCreateWorkspace = true },
+                        onOpenSettings: {
+                            if let ws = currentWorkspace { settingsWorkspace = ws }
+                        }
+                    )
+                    .ignoresSafeArea()
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
@@ -94,7 +108,7 @@ struct EventPageView: View {
                 HomeHeaderView(
                     avatarUrl: authVM?.currentProfile?.avatarUrl,
                     showsGroupControls: currentWorkspace != nil,
-                    onMenu: { showSwitcher = true },
+                    onMenu: { withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) { showDrawer = true } },
                     onUpcoming: { navigationPath.append(NavigationDestination.upcoming) },
                     onProfile: { showEditProfileSheet = true }
                 )
@@ -167,24 +181,7 @@ struct EventPageView: View {
                 .presentationDetents([.fraction(0.5)])
                 .presentationDragIndicator(.visible)
             }
-            .sheet(isPresented: $showSwitcher) {
-                WorkspaceSwitcherSheet(
-                    workspaces: workspaces,
-                    currentId: currentWorkspace?.id,
-                    onSelect: { ws in
-                        appState.currentWorkspaceId = ws.id
-                        Task { await loadEvents() }
-                    },
-                    onCreate: { showCreateWorkspace = true },
-                    onOpenSettings: { ws in settingsWorkspace = ws },
-                    onLogout: {
-                        Task { await authVM?.logout() }
-                    }
-                )
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-            }
-            .sheet(isPresented: $showCreateWorkspace) {
+.sheet(isPresented: $showCreateWorkspace) {
                 CreateWorkspaceSheet { ws in
                     appState.currentWorkspaceId = ws.id
                     Task { await loadEvents() }
