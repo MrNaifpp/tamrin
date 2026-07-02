@@ -20,6 +20,7 @@ struct JoinWorkspaceView: View {
     @State private var preview: WorkspaceInvitePreview?
     @State private var loadError: String?
     @State private var isJoining = false
+    @State private var joinError: String?
 
     var body: some View {
         ZStack {
@@ -43,11 +44,18 @@ struct JoinWorkspaceView: View {
                     Text(previewSubtitle(preview))
                         .font(.appBody)
                         .foregroundStyle(.white.opacity(0.9))
-                    Text("\(preview.memberCount) أعضاء")
-                        .font(.appCaption)
-                        .foregroundStyle(.white.opacity(0.7))
+                    if preview.memberCount > 0 {
+                        Text("\(preview.memberCount) أعضاء")
+                            .font(.appCaption)
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
                     Spacer()
                     joinButton(preview)
+                    if let joinError {
+                        Text(joinError)
+                            .font(.appCaption)
+                            .foregroundStyle(.red)
+                    }
                     Button("ليس الآن") { onDismiss() }
                         .font(.appBody)
                         .foregroundStyle(.white.opacity(0.7))
@@ -106,7 +114,6 @@ struct JoinWorkspaceView: View {
         guard isLoggedIn else {
             // get_workspace_by_invite requires an authenticated session; show a
             // generic invite card prompting login instead of failing.
-            preview = nil
             loadError = nil
             // Minimal logged-out experience: straight to the login CTA.
             preview = WorkspaceInvitePreview(id: UUID(), name: "دعوة إلى مساحة", ownerName: nil, memberCount: 0, isMember: false)
@@ -121,6 +128,7 @@ struct JoinWorkspaceView: View {
 
     private func handleJoin() {
         guard !isJoining else { return }
+        joinError = nil
         isJoining = true
         Task {
             defer { isJoining = false }
@@ -129,7 +137,7 @@ struct JoinWorkspaceView: View {
                 onJoined(wsId)
                 onDismiss()
             } catch {
-                loadError = "تعذر الانضمام. حاول مرة أخرى."
+                joinError = "تعذر الانضمام. حاول مرة أخرى."
             }
         }
     }

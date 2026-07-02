@@ -64,7 +64,7 @@ struct ContentView: View {
                 .transition(.move(edge: .bottom))
             }
 
-            if let code = appState.deepLinkJoinCode, appState.isLoggedIn {
+            if let code = appState.deepLinkJoinCode, appState.isLoggedIn, appState.sessionChecked {
                 JoinWorkspaceView(
                     code: code,
                     isLoggedIn: true,
