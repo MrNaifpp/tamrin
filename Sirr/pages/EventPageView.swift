@@ -30,6 +30,7 @@ struct EventPageView: View {
     @State private var showSwitcher = false
     @State private var showCreateWorkspace = false
     @State private var settingsWorkspace: WorkspaceRecord?
+    @State private var deepLinkError: String?
 
     private var currentWorkspace: WorkspaceRecord? {
         workspaces.first { $0.id == appState.currentWorkspaceId } ?? workspaces.first
@@ -157,8 +158,13 @@ struct EventPageView: View {
                 #endif
                 Task {
                     await authVM?.loadCurrentProfile()
-                    await loadEvents()
                 }
+            }
+            // Reload whenever the current workspace changes (join/create/switch),
+            // and on first appearance. loadEvents() normalizes a nil/stale id to
+            // a real one, which re-fires this task once and then converges.
+            .task(id: appState.currentWorkspaceId) {
+                await loadEvents()
             }
             // .task(id:) runs both when the view first appears with a value
             // already set (cold-launch / post-login mount) and whenever the id
@@ -174,7 +180,7 @@ struct EventPageView: View {
                     let eventData = EventData.from(record: record)
                     navigationPath.append(eventData)
                 } catch {
-                    print("[DeepLink] Failed to load event: \(error.localizedDescription)")
+                    deepLinkError = "هذا الحدث في مساحة خاصة.\nاطلب دعوة من صاحب المساحة للانضمام."
                 }
                 deepLinkEventId = nil
             }
@@ -252,6 +258,14 @@ struct EventPageView: View {
                 )
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+            }
+            .alert("تعذر فتح الحدث", isPresented: Binding(
+                get: { deepLinkError != nil },
+                set: { if !$0 { deepLinkError = nil } }
+            )) {
+                Button("حسنًا", role: .cancel) { deepLinkError = nil }
+            } message: {
+                Text(deepLinkError ?? "")
             }
         }
     }

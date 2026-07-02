@@ -30,6 +30,9 @@ as $$
 declare
   new_event public.events;
 begin
+  if p_creator_id is distinct from auth.uid() then
+    raise exception 'Not authorized';
+  end if;
   if not public.is_workspace_member(p_workspace_id, p_creator_id) then
     raise exception 'Not a workspace member';
   end if;
@@ -139,6 +142,9 @@ begin
   if ev.id is null then
     raise exception 'Event not found';
   end if;
+  if p_user_id is distinct from auth.uid() then
+    raise exception 'Not authorized';
+  end if;
   if not public.is_workspace_member(ev.workspace_id, p_user_id) then
     raise exception 'Not a workspace member';
   end if;
@@ -182,6 +188,9 @@ begin
   select * into ev from public.events where id = p_event_id for update;
   if ev.id is null then
     raise exception 'Event not found';
+  end if;
+  if p_user_id is distinct from auth.uid() then
+    raise exception 'Not authorized';
   end if;
   if not public.is_workspace_member(ev.workspace_id, p_user_id) then
     raise exception 'Not a workspace member';
@@ -263,6 +272,9 @@ begin
   select workspace_id into v_workspace from public.events where id = p_event_id;
   if v_workspace is null then
     raise exception 'Event not found';
+  end if;
+  if p_user_id is distinct from auth.uid() then
+    raise exception 'Not authorized';
   end if;
   if not public.is_workspace_member(v_workspace, p_user_id) then
     raise exception 'Not a workspace member';

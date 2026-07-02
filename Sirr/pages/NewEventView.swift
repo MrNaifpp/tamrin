@@ -434,10 +434,15 @@ struct NewEventView: View {
             }
         }
 
+        guard let workspaceId else {
+            createError = "تعذر تحديد المساحة الحالية. أعد فتح التطبيق وحاول مرة أخرى."
+            return
+        }
+
         do {
             let computedPricePerPerson: Double = (numberOfPeople > 0) ? Double(fieldValue) / Double(numberOfPeople) : 0
             let event = try await EventService.shared.createEvent(
-                workspaceId: workspaceId ?? UUID(),
+                workspaceId: workspaceId,
                 name: exerciseName,
                 location: exerciseLocation,
                 description: description,

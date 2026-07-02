@@ -116,7 +116,7 @@ struct JoinWorkspaceView: View {
             // generic invite card prompting login instead of failing.
             loadError = nil
             // Minimal logged-out experience: straight to the login CTA.
-            preview = WorkspaceInvitePreview(id: UUID(), name: "دعوة إلى مساحة", ownerName: nil, memberCount: 0, isMember: false)
+            preview = WorkspaceInvitePreview(id: UUID(uuidString: "00000000-0000-0000-0000-000000000000")!, name: "دعوة إلى مساحة", ownerName: nil, memberCount: 0, isMember: false)
             return
         }
         do {

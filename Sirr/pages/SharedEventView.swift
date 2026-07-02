@@ -27,7 +27,9 @@ struct SharedEventView: View {
 
     var body: some View {
         ZStack {
-            if isLoading {
+            if !isLoggedIn {
+                loginPromptView
+            } else if isLoading {
                 loadingView
             } else if let errorMessage {
                 errorView(errorMessage)
@@ -36,6 +38,7 @@ struct SharedEventView: View {
             }
         }
         .task {
+            guard isLoggedIn else { return }
             await loadEvent()
             await refreshOwnStatus()
         }
@@ -69,6 +72,40 @@ struct SharedEventView: View {
                     .font(.appBody)
                     .foregroundStyle(.white.opacity(0.8))
             }
+        }
+    }
+
+    // MARK: - Login Prompt (logged-out users)
+
+    private var loginPromptView: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            VStack(spacing: 20) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.yellow)
+                Text("سجّل الدخول لعرض هذا الحدث")
+                    .font(.appBody)
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                Button {
+                    onRequestLogin()
+                } label: {
+                    Text("تسجيل الدخول")
+                        .font(.appBodySemibold)
+                        .foregroundStyle(.black)
+                        .frame(width: 160, height: 48)
+                        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(.white))
+                }
+                Button {
+                    onDismiss()
+                } label: {
+                    Text("رجوع")
+                        .font(.appBodySemibold)
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+            }
+            .padding(32)
         }
     }
 
