@@ -242,33 +242,34 @@ private extension EventPageView {
         }
     }
 
-    /// Vertical feed: التمرين الجاي (first card) then التمارين القادمة (rest).
+    /// Vertical full-page pager: one workout per page, snap scrolling.
+    /// Label rides each page: التمرين الجاي on the first, التمارين القادمة after.
     func workoutFeed(geometry: GeometryProxy) -> some View {
         ScrollView(showsIndicators: false) {
-            LazyVStack(alignment: .leading, spacing: 10) {
-                sectionLabel("التمرين الجاي")
+            LazyVStack(spacing: 0) {
                 ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
-                    if index == 1 {
-                        sectionLabel("التمارين القادمة")
-                            .padding(.top, 18)
+                    VStack(alignment: .leading, spacing: 10) {
+                        sectionLabel(index == 0 ? "التمرين الجاي" : "التمارين القادمة")
+                        NavigationLink(value: event) {
+                            NewActivtyCardView(
+                                eventName: event.name,
+                                eventDate: event.date,
+                                imageURL: event.imageUrl,
+                                imageName: .card1
+                            )
+                            .matchedTransitionSource(id: event.id, in: zoomNamespace)
+                            .frame(maxHeight: .infinity)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    NavigationLink(value: event) {
-                        NewActivtyCardView(
-                            eventName: event.name,
-                            eventDate: event.date,
-                            imageURL: event.imageUrl,
-                            imageName: .card1
-                        )
-                        .matchedTransitionSource(id: event.id, in: zoomNamespace)
-                        .frame(height: min(612, geometry.size.height * 0.68))
-                    }
-                    .buttonStyle(.plain)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .containerRelativeFrame(.vertical)
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
-            .padding(.bottom, 24)
+            .scrollTargetLayout()
         }
+        .scrollTargetBehavior(.paging)
     }
 
     func sectionLabel(_ title: String) -> some View {
