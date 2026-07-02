@@ -305,7 +305,10 @@ private extension EventPageView {
             }
             .scrollTargetLayout()
         }
-        .scrollTargetBehavior(.viewAligned)
+        // .paging gives the decisive one-flick-one-card feel; pages fit because
+        // each page is explicitly geometry-height (the old overflow came from
+        // containerRelativeFrame, not from paging).
+        .scrollTargetBehavior(.paging)
         .scrollPosition(id: $visibleEventId)
     }
 
