@@ -169,8 +169,9 @@ struct EventPageView: View {
                         navigationPath.append(newEvent)
                     })
                 case .upcoming:
-                    // Replaced by UpcomingScheduleView in a later task.
-                    Text("التمارين القادمة")
+                    UpcomingScheduleView(events: events) { event in
+                        navigationPath.append(event)
+                    }
                 }
             }
             .sheet(isPresented: $showEditProfileSheet) {
