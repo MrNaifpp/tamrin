@@ -181,7 +181,7 @@ struct EventPageView: View {
                 .presentationDetents([.fraction(0.5)])
                 .presentationDragIndicator(.visible)
             }
-.sheet(isPresented: $showCreateWorkspace) {
+            .sheet(isPresented: $showCreateWorkspace) {
                 CreateWorkspaceSheet { ws in
                     appState.currentWorkspaceId = ws.id
                     Task { await loadEvents() }
@@ -197,6 +197,9 @@ struct EventPageView: View {
                     onLeftOrDeleted: {
                         appState.currentWorkspaceId = nil
                         Task { await loadEvents() }
+                    },
+                    onLogout: {
+                        Task { await authVM?.logout() }
                     }
                 )
                 .presentationDetents([.large])

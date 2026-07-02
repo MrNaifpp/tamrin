@@ -16,6 +16,8 @@ struct WorkspaceSettingsSheet: View {
     var onChanged: () -> Void
     /// Called after leave or delete; caller clears currentWorkspaceId and reloads.
     var onLeftOrDeleted: () -> Void
+    /// App-level sign-out (this sheet doubles as the app's settings home).
+    var onLogout: () -> Void
 
     @Environment(\.dismiss) private var dismiss
 
@@ -44,6 +46,7 @@ struct WorkspaceSettingsSheet: View {
                         inviteSection
                         membersSection
                         dangerSection
+                        appSection
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 20)
@@ -243,6 +246,30 @@ struct WorkspaceSettingsSheet: View {
             if let actionError {
                 Text(actionError).font(.appCaption).foregroundStyle(.red)
             }
+        }
+    }
+
+    private var appSection: some View {
+        VStack(spacing: 8) {
+            Divider().overlay(Color(white: 0.25))
+            Button {
+                dismiss()
+                onLogout()
+            } label: {
+                HStack {
+                    Spacer()
+                    Text("تسجيل الخروج")
+                        .font(.appBody)
+                        .foregroundStyle(.red)
+                    Spacer()
+                }
+                .frame(height: 56)
+                .background(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(.white.opacity(0.08))
+                )
+            }
+            .buttonStyle(.plain)
         }
     }
 
