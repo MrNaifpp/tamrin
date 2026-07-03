@@ -202,6 +202,9 @@ struct EventPageView: View {
                     onDeleted: {
                         navigationPath.removeLast()
                         Task { await loadEvents() }
+                    },
+                    onSeriesChanged: {
+                        Task { await loadEvents() }
                     }
                 )
                 .navigationTransition(.zoom(sourceID: event.id, in: zoomNamespace))
@@ -309,7 +312,7 @@ private extension EventPageView {
                                 eventDate: event.date,
                                 imageURL: event.imageUrl,
                                 imageName: .card1,
-                                isRecurring: event.templateId != nil
+                                isRecurring: event.isRecurring
                             )
                             .matchedTransitionSource(id: event.id, in: zoomNamespace)
                             .frame(maxHeight: .infinity)

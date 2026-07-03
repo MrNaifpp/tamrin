@@ -351,6 +351,7 @@ end $$;
 do $$
 declare
   w json; w_id uuid; ev json; e_id uuid; t_id uuid; r json; cnt int;
+  arr json; flag boolean;
 begin
   perform pg_temp.set_auth('10000000-0000-0000-0000-000000000001');
   w := public.create_workspace('مساحة التفعيل اللاحق');
@@ -400,6 +401,27 @@ begin
   r := public.enable_recurrence(e_id);
   if (r->>'id')::uuid <> t_id then raise exception 'FAIL: reactivation created a new template'; end if;
   if (r->>'ended_at') is not null then raise exception 'FAIL: reactivated template still ended'; end if;
+
+  -- feed flag: is_recurring true while the series is live...
+  arr := public.get_workspace_events(w_id);
+  select bool_or((x->>'is_recurring')::boolean) into flag
+    from json_array_elements(arr) x
+    where (x->>'id')::uuid = e_id;
+  if flag is distinct from true then
+    raise exception 'FAIL: is_recurring should be true for a live series';
+  end if;
+
+  -- ...and false once the series ends, even though template_id stays
+  r := public.end_recurrence(t_id);
+  arr := public.get_workspace_events(w_id);
+  select bool_or((x->>'is_recurring')::boolean) into flag
+    from json_array_elements(arr) x
+    where (x->>'id')::uuid = e_id;
+  if flag is distinct from false then
+    raise exception 'FAIL: is_recurring should be false after ending the series';
+  end if;
+  perform 1 from public.events where id = e_id and template_id = t_id;
+  if not found then raise exception 'FAIL: ending the series should keep template_id on the event'; end if;
 end $$;
 
 -- ============================================================

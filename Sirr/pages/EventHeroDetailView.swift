@@ -15,6 +15,8 @@ struct EventHeroDetailView: View {
     var onClose: () -> Void
     var onEnroll: () -> Void
     var onDeleted: () -> Void
+    /// Called after the series is enabled/ended so the feed can refresh its badge.
+    var onSeriesChanged: (() -> Void)?
 
     @State private var isEnrolled = false
     @State private var isLeavingEvent = false
@@ -40,11 +42,12 @@ struct EventHeroDetailView: View {
     @State private var seriesActionError: String?
     @Environment(\.openURL) private var openURL
 
-    init(event: EventData, onClose: @escaping () -> Void, onEnroll: @escaping () -> Void, onDeleted: @escaping () -> Void) {
+    init(event: EventData, onClose: @escaping () -> Void, onEnroll: @escaping () -> Void, onDeleted: @escaping () -> Void, onSeriesChanged: (() -> Void)? = nil) {
         self.event = event
         self.onClose = onClose
         self.onEnroll = onEnroll
         self.onDeleted = onDeleted
+        self.onSeriesChanged = onSeriesChanged
         self._isRegistrationLocked = State(initialValue: event.registrationLocked)
     }
 
@@ -282,6 +285,7 @@ struct EventHeroDetailView: View {
                                     },
                                     onRecurrenceChanged: { template in
                                         seriesTemplate = template
+                                        onSeriesChanged?()
                                     }
                                 )
                                 .presentationDetents([.large])

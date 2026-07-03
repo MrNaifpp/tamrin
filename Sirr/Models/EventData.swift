@@ -20,8 +20,10 @@ struct EventData: Identifiable, Hashable {
     let longitude: Double?
     /// Non-nil when this event belongs to a recurring series.
     let templateId: UUID?
+    /// True when the linked series is live (template exists and not ended).
+    let isRecurring: Bool
 
-    init(id: UUID, creatorId: UUID = UUID(), name: String, date: String, startDate: Date = Date(), endDate: Date? = nil, imageUrl: String? = nil, registrationLocked: Bool = false, totalPrice: Int = 0, pricePerPerson: Double = 0, maxParticipants: Int? = nil, location: String = "", latitude: Double? = nil, longitude: Double? = nil, templateId: UUID? = nil) {
+    init(id: UUID, creatorId: UUID = UUID(), name: String, date: String, startDate: Date = Date(), endDate: Date? = nil, imageUrl: String? = nil, registrationLocked: Bool = false, totalPrice: Int = 0, pricePerPerson: Double = 0, maxParticipants: Int? = nil, location: String = "", latitude: Double? = nil, longitude: Double? = nil, templateId: UUID? = nil, isRecurring: Bool = false) {
         self.id = id
         self.creatorId = creatorId
         self.name = name
@@ -37,6 +39,7 @@ struct EventData: Identifiable, Hashable {
         self.latitude = latitude
         self.longitude = longitude
         self.templateId = templateId
+        self.isRecurring = isRecurring
     }
 }
 
@@ -59,7 +62,8 @@ extension EventData {
             location: record.location,
             latitude: record.latitude,
             longitude: record.longitude,
-            templateId: record.templateId
+            templateId: record.templateId,
+            isRecurring: record.isRecurring ?? false
         )
     }
 

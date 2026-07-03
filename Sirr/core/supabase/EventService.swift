@@ -30,6 +30,8 @@ struct EventRecord: Codable {
     let createdAt: Date?
     let workspaceId: UUID?
     let templateId: UUID?
+    /// Computed by get_workspace_events: template linked AND not ended.
+    let isRecurring: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -49,6 +51,7 @@ struct EventRecord: Codable {
         case createdAt = "created_at"
         case workspaceId = "workspace_id"
         case templateId = "template_id"
+        case isRecurring = "is_recurring"
     }
 }
 
