@@ -18,8 +18,10 @@ struct EventData: Identifiable, Hashable {
     let location: String
     let latitude: Double?
     let longitude: Double?
+    /// Non-nil when this event belongs to a recurring series.
+    let templateId: UUID?
 
-    init(id: UUID, creatorId: UUID = UUID(), name: String, date: String, startDate: Date = Date(), endDate: Date? = nil, imageUrl: String? = nil, registrationLocked: Bool = false, totalPrice: Int = 0, pricePerPerson: Double = 0, maxParticipants: Int? = nil, location: String = "", latitude: Double? = nil, longitude: Double? = nil) {
+    init(id: UUID, creatorId: UUID = UUID(), name: String, date: String, startDate: Date = Date(), endDate: Date? = nil, imageUrl: String? = nil, registrationLocked: Bool = false, totalPrice: Int = 0, pricePerPerson: Double = 0, maxParticipants: Int? = nil, location: String = "", latitude: Double? = nil, longitude: Double? = nil, templateId: UUID? = nil) {
         self.id = id
         self.creatorId = creatorId
         self.name = name
@@ -34,6 +36,7 @@ struct EventData: Identifiable, Hashable {
         self.location = location
         self.latitude = latitude
         self.longitude = longitude
+        self.templateId = templateId
     }
 }
 
@@ -55,7 +58,8 @@ extension EventData {
             maxParticipants: record.maxParticipants,
             location: record.location,
             latitude: record.latitude,
-            longitude: record.longitude
+            longitude: record.longitude,
+            templateId: record.templateId
         )
     }
 

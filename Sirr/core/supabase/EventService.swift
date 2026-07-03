@@ -29,6 +29,7 @@ struct EventRecord: Codable {
     let longitude: Double?
     let createdAt: Date?
     let workspaceId: UUID?
+    let templateId: UUID?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -47,6 +48,7 @@ struct EventRecord: Codable {
         case longitude
         case createdAt = "created_at"
         case workspaceId = "workspace_id"
+        case templateId = "template_id"
     }
 }
 
@@ -95,9 +97,58 @@ struct ParticipantRecord: Codable, Identifiable {
     }
 }
 
+/// Row from public.event_templates (via get_event_template RPC).
+struct EventTemplateRecord: Codable {
+    let id: UUID
+    let workspaceId: UUID
+    let creatorId: UUID
+    let recurrence: String
+    let nextOccurrenceAt: Date
+    let skipNext: Bool
+    let endedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case workspaceId = "workspace_id"
+        case creatorId = "creator_id"
+        case recurrence
+        case nextOccurrenceAt = "next_occurrence_at"
+        case skipNext = "skip_next"
+        case endedAt = "ended_at"
+    }
+}
+
+/// Result of skip_next_occurrence: skipped now, or the next occurrence was
+/// already generated (the creator deletes that event instead).
+enum SkipNextResult {
+    case skipped(Date?)
+    case alreadyOpen(UUID?)
+}
+
 final class EventService {
     static let shared = EventService()
     private let client = SupabaseClientManager.shared.client
+
+    /// Decoder handling Postgres timestamp formats (same strategy the RPC
+    /// decoders in this file use inline).
+    private static func makePostgresDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let str = try container.decode(String.self)
+            if let d = ISO8601DateFormatter().date(from: str) { return d }
+            let pg = DateFormatter()
+            pg.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSZZZZZ"
+            pg.locale = Locale(identifier: "en_US_POSIX")
+            if let d = pg.date(from: str) { return d }
+            let pg2 = DateFormatter()
+            pg2.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZZZZZ"
+            pg2.locale = Locale(identifier: "en_US_POSIX")
+            if let d = pg2.date(from: str) { return d }
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unrecognized date: \(str)")
+        }
+        return decoder
+    }
 
     /// Upcoming events of one workspace (member-gated server-side).
     /// Ordered by start_date ascending.
@@ -141,7 +192,8 @@ final class EventService {
         totalPrice: Int = 0,
         pricePerPerson: Double = 0,
         latitude: Double? = nil,
-        longitude: Double? = nil
+        longitude: Double? = nil,
+        recurrence: String = "none"
     ) async throws -> EventRecord {
         let session: Session
         do {
@@ -168,6 +220,7 @@ final class EventService {
         if pricePerPerson > 0 { params["p_price_per_person"] = "\(pricePerPerson)" }
         if let latitude { params["p_latitude"] = "\(latitude)" }
         if let longitude { params["p_longitude"] = "\(longitude)" }
+        if recurrence != "none" { params["p_recurrence"] = recurrence }
 
         let response = try await client
             .rpc("create_event", params: params)
@@ -349,5 +402,53 @@ final class EventService {
             .execute()
 
         eventLogger.info("API deleteEvent succeeded (eventId: \(eventId))")
+    }
+
+    /// Recurrence template backing a series-linked event.
+    func getEventTemplate(templateId: UUID) async throws -> EventTemplateRecord {
+        let params: [String: String] = ["p_template_id": templateId.uuidString]
+        let response = try await client
+            .rpc("get_event_template", params: params)
+            .execute()
+        let template = try Self.makePostgresDecoder().decode(EventTemplateRecord.self, from: response.data)
+        eventLogger.info("API getEventTemplate succeeded (id: \(template.id))")
+        return template
+    }
+
+    /// Skip the series' next occurrence. `fromEventId` is the event whose page
+    /// hosted the button (the server excludes it when checking whether the
+    /// next occurrence is already open).
+    func skipNextOccurrence(templateId: UUID, fromEventId: UUID) async throws -> SkipNextResult {
+        struct SkipResponse: Decodable {
+            let status: String
+            let skippedDate: Date?
+            let eventId: UUID?
+            enum CodingKeys: String, CodingKey {
+                case status
+                case skippedDate = "skipped_date"
+                case eventId = "event_id"
+            }
+        }
+        let params: [String: String] = [
+            "p_template_id": templateId.uuidString,
+            "p_event_id": fromEventId.uuidString
+        ]
+        let response = try await client
+            .rpc("skip_next_occurrence", params: params)
+            .execute()
+        let result = try Self.makePostgresDecoder().decode(SkipResponse.self, from: response.data)
+        eventLogger.info("API skipNextOccurrence: \(result.status)")
+        return result.status == "already_open"
+            ? .alreadyOpen(result.eventId)
+            : .skipped(result.skippedDate)
+    }
+
+    /// End the series. Existing events are untouched.
+    func endRecurrence(templateId: UUID) async throws {
+        let params: [String: String] = ["p_template_id": templateId.uuidString]
+        try await client
+            .rpc("end_recurrence", params: params)
+            .execute()
+        eventLogger.info("API endRecurrence succeeded (templateId: \(templateId))")
     }
 }
