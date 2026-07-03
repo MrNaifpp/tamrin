@@ -345,7 +345,65 @@ begin
 end $$;
 
 -- ============================================================
--- Section 6: cron job registered
+-- Section 6: enable_recurrence — enable from settings, no-op when
+-- already recurring, reactivation after end, creator-only
+-- ============================================================
+do $$
+declare
+  w json; w_id uuid; ev json; e_id uuid; t_id uuid; r json; cnt int;
+begin
+  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000001');
+  w := public.create_workspace('مساحة التفعيل اللاحق');
+  w_id := (w->>'id')::uuid;
+  ev := public.create_event(
+    p_creator_id => '10000000-0000-0000-0000-000000000001',
+    p_workspace_id => w_id,
+    p_name => 'بدون تكرار',
+    p_start_date => now() + interval '4 days',
+    p_end_date => now() + interval '4 days' + interval '2 hours',
+    p_recurrence => 'none'
+  );
+  e_id := (ev->>'id')::uuid;
+
+  -- non-creator cannot enable
+  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000002');
+  r := public.join_workspace((select invite_code from public.workspaces where id = w_id));
+  begin
+    r := public.enable_recurrence(e_id);
+    raise exception 'FAIL: non-creator enabled recurrence';
+  exception when others then
+    if sqlerrm like 'FAIL:%' then raise; end if;
+  end;
+
+  -- creator enables: template created + event stamped, fields derived
+  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000001');
+  r := public.enable_recurrence(e_id);
+  t_id := (r->>'id')::uuid;
+  if t_id is null then raise exception 'FAIL: enable_recurrence returned no template'; end if;
+  perform 1 from public.events where id = e_id and template_id = t_id;
+  if not found then raise exception 'FAIL: enable_recurrence did not stamp template_id'; end if;
+  if (r->>'duration_minutes')::int <> 120 then
+    raise exception 'FAIL: enable duration_minutes expected 120, got %', r->>'duration_minutes';
+  end if;
+  if abs(extract(epoch from ((r->>'next_occurrence_at')::timestamptz - ((ev->>'start_date')::timestamptz + interval '7 days')))) > 1 then
+    raise exception 'FAIL: enable next_occurrence_at is not start + 7 days';
+  end if;
+
+  -- enabling again is a no-op returning the same template
+  r := public.enable_recurrence(e_id);
+  if (r->>'id')::uuid <> t_id then raise exception 'FAIL: re-enable created a second template'; end if;
+  select count(*) into cnt from public.event_templates where workspace_id = w_id;
+  if cnt <> 1 then raise exception 'FAIL: expected 1 template after re-enable, got %', cnt; end if;
+
+  -- end then re-enable reactivates the same template
+  r := public.end_recurrence(t_id);
+  r := public.enable_recurrence(e_id);
+  if (r->>'id')::uuid <> t_id then raise exception 'FAIL: reactivation created a new template'; end if;
+  if (r->>'ended_at') is not null then raise exception 'FAIL: reactivated template still ended'; end if;
+end $$;
+
+-- ============================================================
+-- Section 7: cron job registered
 -- ============================================================
 do $$
 declare cnt int;
