@@ -85,6 +85,11 @@ struct UpcomingScheduleView: View {
         .navigationTitle("التمارين القادمة")
         .navigationBarTitleDisplayMode(.inline)
         .environment(\.layoutDirection, .rightToLeft)
+        // The page's surfaces are hardcoded light, so pin the scheme: in
+        // device dark mode .primary/.secondary otherwise resolve to white
+        // and the text disappears on the white cards.
+        .environment(\.colorScheme, .light)
+        .toolbarColorScheme(.light, for: .navigationBar)
     }
 
     // MARK: - Week strip (informational only)
