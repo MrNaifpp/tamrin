@@ -138,5 +138,84 @@ begin
   end;
 end $$;
 
+-- ============================================================
+-- Section 3: series RPCs (get / skip / end)
+-- ============================================================
+do $$
+declare
+  w json; w_id uuid; ev json; e_id uuid; t_id uuid; r json; g_id uuid;
+begin
+  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000001');
+  w := public.create_workspace('مساحة التحكم بالسلسلة');
+  w_id := (w->>'id')::uuid;
+  ev := public.create_event(
+    p_creator_id => '10000000-0000-0000-0000-000000000001',
+    p_workspace_id => w_id,
+    p_name => 'سلسلة',
+    p_start_date => now() + interval '2 days',
+    p_end_date => now() + interval '2 days' + interval '1 hour',
+    p_recurrence => 'weekly'
+  );
+  e_id := (ev->>'id')::uuid;
+  t_id := (ev->>'template_id')::uuid;
+
+  -- get_event_template: creator (member) reads it
+  r := public.get_event_template(t_id);
+  if (r->>'id')::uuid <> t_id then raise exception 'FAIL: get_event_template'; end if;
+
+  -- outsider rejected
+  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000003');
+  begin
+    r := public.get_event_template(t_id);
+    raise exception 'FAIL: outsider read template';
+  exception when others then
+    if sqlerrm like 'FAIL:%' then raise; end if;
+  end;
+
+  -- plain member (not creator) cannot skip
+  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000002');
+  r := public.join_workspace((select invite_code from public.workspaces where id = w_id));
+  begin
+    r := public.skip_next_occurrence(t_id, e_id);
+    raise exception 'FAIL: non-creator skipped';
+  exception when others then
+    if sqlerrm like 'FAIL:%' then raise; end if;
+  end;
+
+  -- creator skips from the upcoming first event: nothing generated yet -> skipped
+  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000001');
+  r := public.skip_next_occurrence(t_id, e_id);
+  if r->>'status' <> 'skipped' then raise exception 'FAIL: skip status %', r->>'status'; end if;
+  perform 1 from public.event_templates where id = t_id and skip_next;
+  if not found then raise exception 'FAIL: skip_next flag not set'; end if;
+
+  -- a generated future occurrence exists -> already_open + its id
+  update public.event_templates set skip_next = false where id = t_id;
+  insert into public.events (creator_id, workspace_id, name, start_date, template_id)
+  values ('10000000-0000-0000-0000-000000000001', w_id, 'مولّد', now() + interval '9 days', t_id)
+  returning id into g_id;
+  r := public.skip_next_occurrence(t_id, e_id);
+  if r->>'status' <> 'already_open' then raise exception 'FAIL: expected already_open, got %', r->>'status'; end if;
+  if (r->>'event_id')::uuid <> g_id then raise exception 'FAIL: already_open returned wrong event'; end if;
+
+  -- end_recurrence: non-creator rejected
+  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000002');
+  begin
+    r := public.end_recurrence(t_id);
+    raise exception 'FAIL: non-creator ended series';
+  exception when others then
+    if sqlerrm like 'FAIL:%' then raise; end if;
+  end;
+
+  -- creator ends; existing events untouched
+  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000001');
+  r := public.end_recurrence(t_id);
+  if r->>'status' <> 'ended' then raise exception 'FAIL: end_recurrence status %', r->>'status'; end if;
+  perform 1 from public.event_templates where id = t_id and ended_at is not null;
+  if not found then raise exception 'FAIL: ended_at not set'; end if;
+  perform 1 from public.events where id = g_id;
+  if not found then raise exception 'FAIL: ending series deleted an event'; end if;
+end $$;
+
 select 'ALL RECURRING EVENT TESTS PASSED' as result;
 rollback;
