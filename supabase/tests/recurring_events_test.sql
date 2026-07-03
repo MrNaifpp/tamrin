@@ -76,5 +76,67 @@ begin
   if not found then raise exception 'FAIL: deleting template should null template_id and keep the event'; end if;
 end $$;
 
+-- ============================================================
+-- Section 2: create_event with p_recurrence
+-- ============================================================
+do $$
+declare
+  w json; w_id uuid; ev json; t_id uuid; tpl public.event_templates; cnt int;
+begin
+  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000001');
+  w := public.create_workspace('مساحة الإنشاء المتكرر');
+  w_id := (w->>'id')::uuid;
+
+  -- weekly: template inserted + first event stamped, atomically
+  ev := public.create_event(
+    p_creator_id => '10000000-0000-0000-0000-000000000001',
+    p_workspace_id => w_id,
+    p_name => 'تمرين متكرر',
+    p_location => 'ملعب الحي',
+    p_start_date => now() + interval '5 days',
+    p_end_date => now() + interval '5 days' + interval '90 minutes',
+    p_total_price => 200,
+    p_price_per_person => 20,
+    p_max_participants => 10,
+    p_recurrence => 'weekly'
+  );
+  t_id := (ev->>'template_id')::uuid;
+  if t_id is null then raise exception 'FAIL: weekly create_event did not stamp template_id'; end if;
+
+  select * into tpl from public.event_templates where id = t_id;
+  if tpl.id is null then raise exception 'FAIL: template row missing'; end if;
+  if tpl.recurrence <> 'weekly' then raise exception 'FAIL: template recurrence %', tpl.recurrence; end if;
+  if tpl.duration_minutes <> 90 then raise exception 'FAIL: duration_minutes expected 90, got %', tpl.duration_minutes; end if;
+  if abs(extract(epoch from (tpl.next_occurrence_at - ((ev->>'start_date')::timestamptz + interval '7 days')))) > 1 then
+    raise exception 'FAIL: next_occurrence_at is not start + 7 days';
+  end if;
+
+  -- 'none': no template
+  ev := public.create_event(
+    p_creator_id => '10000000-0000-0000-0000-000000000001',
+    p_workspace_id => w_id,
+    p_name => 'مرة واحدة',
+    p_start_date => now() + interval '3 days',
+    p_recurrence => 'none'
+  );
+  if (ev->>'template_id') is not null then raise exception 'FAIL: none recurrence stamped a template'; end if;
+  select count(*) into cnt from public.event_templates where workspace_id = w_id;
+  if cnt <> 1 then raise exception 'FAIL: expected exactly 1 template, got %', cnt; end if;
+
+  -- invalid recurrence rejected
+  begin
+    ev := public.create_event(
+      p_creator_id => '10000000-0000-0000-0000-000000000001',
+      p_workspace_id => w_id,
+      p_name => 'خطأ',
+      p_start_date => now() + interval '3 days',
+      p_recurrence => 'biweekly'
+    );
+    raise exception 'FAIL: invalid recurrence accepted';
+  exception when others then
+    if sqlerrm like 'FAIL:%' then raise; end if;
+  end;
+end $$;
+
 select 'ALL RECURRING EVENT TESTS PASSED' as result;
 rollback;
