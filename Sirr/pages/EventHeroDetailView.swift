@@ -32,6 +32,13 @@ struct EventHeroDetailView: View {
     @State private var isCancellingPending = false
     @State private var actionInFlight: UUID? = nil
     @State private var ownerActionError: String? = nil
+    // Recurring series (F1): loaded when the event is template-linked.
+    @State private var seriesTemplate: EventTemplateRecord?
+    @State private var showSkipConfirm = false
+    @State private var showEndConfirm = false
+    @State private var showSkipAlreadyOpen = false
+    @State private var isSeriesActionInFlight = false
+    @State private var seriesActionError: String?
     @Environment(\.openURL) private var openURL
 
     init(event: EventData, onClose: @escaping () -> Void, onEnroll: @escaping () -> Void, onDeleted: @escaping () -> Void) {
@@ -45,6 +52,65 @@ struct EventHeroDetailView: View {
     private var isOwner: Bool {
         guard let uid = currentUserId else { return false }
         return event.creatorId == uid
+    }
+
+    /// Creator-only controls for a recurring series (سلسلة متكررة).
+    @ViewBuilder
+    private var seriesSection: some View {
+        if isOwner, let template = seriesTemplate, template.endedAt == nil {
+            VStack(spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: "repeat")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("سلسلة متكررة — أسبوعيًا")
+                        .font(.appBodySemibold)
+                    Spacer()
+                    Text(EventData.formatEventDate(template.nextOccurrenceAt, endDate: nil))
+                        .font(.appCaption)
+                        .foregroundStyle(.white.opacity(0.75))
+                }
+                .foregroundStyle(.white)
+
+                HStack(spacing: 12) {
+                    if template.skipNext {
+                        Text("سيتم تخطّي الأسبوع القادم")
+                            .font(.appCaption)
+                            .foregroundStyle(.yellow)
+                            .frame(maxWidth: .infinity, minHeight: 40)
+                            .background(Capsule().fill(Color.yellow.opacity(0.18)))
+                    } else {
+                        Button {
+                            showSkipConfirm = true
+                        } label: {
+                            ActionChip(icon: "forward.end.fill", title: "تخطَّ الأسبوع القادم", style: .translucent)
+                                .opacity(isSeriesActionInFlight ? 0.5 : 1.0)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isSeriesActionInFlight)
+                    }
+
+                    Button {
+                        showEndConfirm = true
+                    } label: {
+                        ActionChip(icon: "xmark.circle.fill", title: "إنهاء التكرار", style: .translucent)
+                            .opacity(isSeriesActionInFlight ? 0.5 : 1.0)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isSeriesActionInFlight)
+                }
+
+                if let err = seriesActionError {
+                    Text(err)
+                        .font(.appCaption)
+                        .foregroundStyle(.red)
+                }
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(.white.opacity(0.12))
+            )
+        }
     }
     
     private var eventHeroBackgroundImage: some View {
@@ -178,6 +244,7 @@ struct EventHeroDetailView: View {
                                 .presentationDragIndicator(.visible)
                             }
                         }
+                        seriesSection
                     } else {
                         // Participant: enroll / unenroll button
                         if isRegistrationLocked && !isEnrolled {
@@ -453,6 +520,9 @@ struct EventHeroDetailView: View {
                 let client = SupabaseClientManager.shared.client
                 currentUserId = try? await client.auth.session.user.id
                 await loadParticipants()
+                if let templateId = event.templateId {
+                    seriesTemplate = try? await EventService.shared.getEventTemplate(templateId: templateId)
+                }
             }
         }
         .sheet(isPresented: Binding(
@@ -472,6 +542,31 @@ struct EventHeroDetailView: View {
                     print("[Waitlist] Error — \(error.localizedDescription)")
                 }
             })
+        }
+        .confirmationDialog(
+            "تخطَّ الأسبوع القادم",
+            isPresented: $showSkipConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("تخطَّ", role: .destructive) { handleSkipNext() }
+            Button("إلغاء", role: .cancel) {}
+        } message: {
+            Text("لن يُنشأ تمرين الأسبوع القادم، وتستمر السلسلة بعده كالمعتاد.")
+        }
+        .confirmationDialog(
+            "إنهاء التكرار",
+            isPresented: $showEndConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("إنهاء", role: .destructive) { handleEndRecurrence() }
+            Button("إلغاء", role: .cancel) {}
+        } message: {
+            Text("لن تُنشأ تمارين جديدة من هذه السلسلة. التمارين الحالية تبقى كما هي.")
+        }
+        .alert("التمرين القادم منشور بالفعل", isPresented: $showSkipAlreadyOpen) {
+            Button("حسنًا", role: .cancel) {}
+        } message: {
+            Text("تمرين الأسبوع القادم منشور. إذا أردت إلغاءه، افتح صفحته واحذفه من الإعدادات.")
         }
     }
 
@@ -524,6 +619,41 @@ struct EventHeroDetailView: View {
             }
         } catch {
             print("[Participants] Error — \(error.localizedDescription)")
+        }
+    }
+
+    private func handleSkipNext() {
+        guard let template = seriesTemplate, !isSeriesActionInFlight else { return }
+        isSeriesActionInFlight = true
+        seriesActionError = nil
+        Task {
+            defer { isSeriesActionInFlight = false }
+            do {
+                let result = try await EventService.shared.skipNextOccurrence(templateId: template.id, fromEventId: event.id)
+                switch result {
+                case .skipped:
+                    seriesTemplate = try? await EventService.shared.getEventTemplate(templateId: template.id)
+                case .alreadyOpen:
+                    showSkipAlreadyOpen = true
+                }
+            } catch {
+                seriesActionError = "تعذر تخطي الأسبوع القادم. حاول مرة أخرى."
+            }
+        }
+    }
+
+    private func handleEndRecurrence() {
+        guard let template = seriesTemplate, !isSeriesActionInFlight else { return }
+        isSeriesActionInFlight = true
+        seriesActionError = nil
+        Task {
+            defer { isSeriesActionInFlight = false }
+            do {
+                try await EventService.shared.endRecurrence(templateId: template.id)
+                seriesTemplate = nil
+            } catch {
+                seriesActionError = "تعذر إنهاء التكرار. حاول مرة أخرى."
+            }
         }
     }
 

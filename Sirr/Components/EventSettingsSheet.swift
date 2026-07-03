@@ -3,9 +3,9 @@
 //  Sirr
 //
 //  Owner-only "إعدادات إضافية" sheet opened from the gear button on the event
-//  details screen. Guest-limit, guest-approval and recurrence controls are
-//  UI-only for now (local state, not persisted). Deleting the event is wired to
-//  the delete_event RPC via EventService.
+//  details screen. Guest-limit and guest-approval controls are UI-only for now
+//  (local state, not persisted). Deleting the event is wired to the
+//  delete_event RPC via EventService.
 //
 
 import SwiftUI
@@ -20,7 +20,6 @@ struct EventSettingsSheet: View {
     // UI-only state (not persisted yet).
     @State private var guestLimit: GuestLimit = .locked
     @State private var guestApproval = false
-    @State private var recurrence: Recurrence = .never
 
     // Delete flow.
     @State private var showDeleteConfirm = false
@@ -33,13 +32,6 @@ struct EventSettingsSheet: View {
         case two = "2"
         case three = "3"
         case unlimited = "غير محدود"
-        var id: String { rawValue }
-    }
-
-    enum Recurrence: String, CaseIterable, Identifiable {
-        case never = "أبدًا"
-        case weekly = "أسبوعيًا"
-        case monthly = "شهريًا"
         var id: String { rawValue }
     }
 
@@ -121,12 +113,6 @@ struct EventSettingsSheet: View {
     private var managementSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionHeader("إدارة التمرين")
-
-            menuRow(title: "متكرر", value: recurrence.rawValue) {
-                ForEach(Recurrence.allCases) { option in
-                    Button(option.rawValue) { recurrence = option }
-                }
-            }
 
             deleteButton
 
