@@ -443,6 +443,18 @@ final class EventService {
             : .skipped(result.skippedDate)
     }
 
+    /// Enable weekly recurrence on an existing event (from its settings sheet).
+    /// Creates the template or reactivates an ended one; returns it.
+    func enableRecurrence(eventId: UUID) async throws -> EventTemplateRecord {
+        let params: [String: String] = ["p_event_id": eventId.uuidString]
+        let response = try await client
+            .rpc("enable_recurrence", params: params)
+            .execute()
+        let template = try Self.makePostgresDecoder().decode(EventTemplateRecord.self, from: response.data)
+        eventLogger.info("API enableRecurrence succeeded (templateId: \(template.id))")
+        return template
+    }
+
     /// End the series. Existing events are untouched.
     func endRecurrence(templateId: UUID) async throws {
         let params: [String: String] = ["p_template_id": templateId.uuidString]

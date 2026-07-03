@@ -4,8 +4,8 @@
 //
 //  Owner-only "إعدادات إضافية" sheet opened from the gear button on the event
 //  details screen. Guest-limit and guest-approval controls are UI-only for now
-//  (local state, not persisted). Deleting the event is wired to the
-//  delete_event RPC via EventService.
+//  (local state, not persisted). The weekly-recurrence toggle and deletion are
+//  wired to their RPCs via EventService.
 //
 
 import SwiftUI
@@ -14,12 +14,21 @@ struct EventSettingsSheet: View {
     let event: EventData
     /// Called after the event has been deleted server-side.
     var onDeleted: () -> Void
+    /// Called when the weekly-recurrence state changes (nil = series ended).
+    var onRecurrenceChanged: ((EventTemplateRecord?) -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
 
     // UI-only state (not persisted yet).
     @State private var guestLimit: GuestLimit = .locked
     @State private var guestApproval = false
+
+    // Weekly recurrence (persisted via enable_recurrence / end_recurrence).
+    @State private var recurrenceTemplate: EventTemplateRecord?
+    @State private var recurrenceEnabled = false
+    @State private var isUpdatingRecurrence = false
+    @State private var showEndRecurrenceConfirm = false
+    @State private var recurrenceError: String?
 
     // Delete flow.
     @State private var showDeleteConfirm = false
@@ -54,6 +63,13 @@ struct EventSettingsSheet: View {
             }
         }
         .environment(\.layoutDirection, .rightToLeft)
+        .task {
+            guard let templateId = event.templateId else { return }
+            if let template = try? await EventService.shared.getEventTemplate(templateId: templateId) {
+                recurrenceTemplate = template
+                recurrenceEnabled = template.endedAt == nil
+            }
+        }
         .confirmationDialog(
             "حذف المناسبة",
             isPresented: $showDeleteConfirm,
@@ -63,6 +79,16 @@ struct EventSettingsSheet: View {
             Button("إلغاء", role: .cancel) {}
         } message: {
             Text("سيتم حذف المناسبة وجميع المشاركين نهائيًا. لا يمكن التراجع عن هذا الإجراء.")
+        }
+        .confirmationDialog(
+            "إنهاء التكرار",
+            isPresented: $showEndRecurrenceConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("إنهاء", role: .destructive) { handleEndRecurrence() }
+            Button("إلغاء", role: .cancel) {}
+        } message: {
+            Text("لن تُنشأ تمارين جديدة من هذه السلسلة. التمارين الحالية تبقى كما هي.")
         }
     }
 
@@ -113,6 +139,34 @@ struct EventSettingsSheet: View {
     private var managementSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionHeader("إدارة التمرين")
+
+            HStack {
+                Text("يتكرر أسبوعيًا")
+                    .font(.appBody)
+                    .foregroundStyle(.white)
+                Spacer()
+                if isUpdatingRecurrence {
+                    ProgressView().tint(.white)
+                } else {
+                    Toggle("", isOn: recurrenceToggleBinding)
+                        .labelsHidden()
+                        .tint(.blue)
+                }
+            }
+            .padding(.horizontal, 18)
+            .frame(height: 56)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.white.opacity(0.08))
+            )
+            caption("يُنشأ تمرين الأسبوع القادم تلقائيًا قبل موعده بـ٣ أيام، ويصل إشعار لجميع الأعضاء.")
+
+            if let recurrenceError {
+                Text(recurrenceError)
+                    .font(.appCaption)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 4)
+            }
 
             deleteButton
 
@@ -216,6 +270,53 @@ struct EventSettingsSheet: View {
     }
 
     // MARK: - Actions
+
+    /// Routes toggle changes: enabling is immediate, disabling asks first.
+    private var recurrenceToggleBinding: Binding<Bool> {
+        Binding(
+            get: { recurrenceEnabled },
+            set: { newValue in
+                if newValue {
+                    handleEnableRecurrence()
+                } else {
+                    showEndRecurrenceConfirm = true
+                }
+            }
+        )
+    }
+
+    private func handleEnableRecurrence() {
+        guard !isUpdatingRecurrence else { return }
+        isUpdatingRecurrence = true
+        recurrenceError = nil
+        Task {
+            defer { isUpdatingRecurrence = false }
+            do {
+                let template = try await EventService.shared.enableRecurrence(eventId: event.id)
+                recurrenceTemplate = template
+                recurrenceEnabled = true
+                onRecurrenceChanged?(template)
+            } catch {
+                recurrenceError = "تعذر تفعيل التكرار. حاول مرة أخرى."
+            }
+        }
+    }
+
+    private func handleEndRecurrence() {
+        guard let template = recurrenceTemplate, !isUpdatingRecurrence else { return }
+        isUpdatingRecurrence = true
+        recurrenceError = nil
+        Task {
+            defer { isUpdatingRecurrence = false }
+            do {
+                try await EventService.shared.endRecurrence(templateId: template.id)
+                recurrenceEnabled = false
+                onRecurrenceChanged?(nil)
+            } catch {
+                recurrenceError = "تعذر إنهاء التكرار. حاول مرة أخرى."
+            }
+        }
+    }
 
     private func handleDelete() {
         guard !isDeleting else { return }

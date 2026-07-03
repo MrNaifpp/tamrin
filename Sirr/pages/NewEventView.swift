@@ -872,22 +872,40 @@ struct NewEventView: View {
     
     // MARK: - Weekly Recurrence Toggle
     private var recurrenceToggle: some View {
-        HStack {
-            Text("يتكرر أسبوعيًا")
-                .font(.appBody)
-                .foregroundStyle(.white)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: "repeat")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 30, height: 30)
+                    .background(Circle().fill(.white.opacity(0.14)))
 
-            Spacer()
+                Text("يتكرر أسبوعيًا")
+                    .font(.appBody)
+                    .foregroundStyle(.white)
 
-            Toggle("", isOn: $repeatsWeekly)
-                .labelsHidden()
-                .tint(.blue)
+                Spacer()
+
+                Toggle("", isOn: $repeatsWeekly)
+                    .labelsHidden()
+                    .tint(.blue)
+            }
+
+            if repeatsWeekly {
+                Text("يُنشأ تمرين الأسبوع القادم تلقائيًا قبل موعده بـ٣ أيام، ويصل إشعار لجميع الأعضاء")
+                    .font(.appCaption)
+                    .foregroundStyle(.white.opacity(0.65))
+                    .padding(.horizontal, 4)
+                    .transition(.opacity)
+            }
         }
-        .frame(height: 50)
-        .padding(.horizontal, 18)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
         .background(
-            Capsule().fill(.white.opacity(0.1))
+            RoundedRectangle(cornerRadius: 25, style: .continuous)
+                .fill(.white.opacity(0.1))
         )
+        .animation(.easeInOut(duration: 0.2), value: repeatsWeekly)
     }
 
     // MARK: - Price and People Section
