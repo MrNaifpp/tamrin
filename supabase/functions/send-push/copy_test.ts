@@ -33,6 +33,14 @@ Deno.test("event_reminder copy interpolates the event name", () => {
   });
 });
 
+Deno.test("event_opened copy interpolates the event name", () => {
+  const c = copyFor("event_opened", "تمرين الأربعاء");
+  assertEquals(c, {
+    title: "انفتح التسجيل ⚽",
+    body: "انفتح التسجيل لتمرين تمرين الأربعاء — احجز مكانك",
+  });
+});
+
 Deno.test("unknown type returns null", () => {
   assertEquals(copyFor("nope", "x"), null);
 });

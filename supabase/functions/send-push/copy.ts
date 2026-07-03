@@ -24,6 +24,11 @@ export function copyFor(
         title: "تذكير بتمرينك ⏰",
         body: `لا تنسَ ${eventName} القادم. نراك هناك! 🙌`,
       };
+    case "event_opened":
+      return {
+        title: "انفتح التسجيل ⚽",
+        body: `انفتح التسجيل لتمرين ${eventName} — احجز مكانك`,
+      };
     default:
       return null;
   }
