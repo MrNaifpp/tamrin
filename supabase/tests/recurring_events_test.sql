@@ -217,5 +217,142 @@ begin
   if not found then raise exception 'FAIL: ending series deleted an event'; end if;
 end $$;
 
+-- ============================================================
+-- Section 4: generator — creates one event, copies fields,
+-- auto-joins creator, pushes members only, idempotent
+-- ============================================================
+do $$
+declare
+  w json; w_id uuid; ev json; t_id uuid; r json;
+  cnt int; g public.events; v_next timestamptz;
+begin
+  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000001');
+  w := public.create_workspace('مساحة التوليد');
+  w_id := (w->>'id')::uuid;
+  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000002');
+  r := public.join_workspace((select invite_code from public.workspaces where id = w_id));
+  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000001');
+
+  -- first event already played: next occurrence = start + 7d = now() + 2 days,
+  -- which is inside the 3-day lead window.
+  ev := public.create_event(
+    p_creator_id => '10000000-0000-0000-0000-000000000001',
+    p_workspace_id => w_id,
+    p_name => 'تمرين الأربعاء',
+    p_location => 'ملعب الحي',
+    p_start_date => now() - interval '5 days',
+    p_end_date => now() - interval '5 days' + interval '90 minutes',
+    p_total_price => 200,
+    p_price_per_person => 20,
+    p_max_participants => 10,
+    p_recurrence => 'weekly'
+  );
+  t_id := (ev->>'template_id')::uuid;
+  select next_occurrence_at into v_next from public.event_templates where id = t_id;
+
+  -- run 1: exactly one new event
+  perform public.generate_recurring_events();
+  select count(*) into cnt from public.events where template_id = t_id and id <> (ev->>'id')::uuid;
+  if cnt <> 1 then raise exception 'FAIL: generator run 1 created % events', cnt; end if;
+
+  select * into g from public.events
+    where template_id = t_id and id <> (ev->>'id')::uuid;
+
+  -- fields copied
+  if g.name <> 'تمرين الأربعاء' or g.location <> 'ملعب الحي' or g.total_price <> 200
+     or g.max_participants <> 10 or g.workspace_id <> w_id
+     or g.creator_id <> '10000000-0000-0000-0000-000000000001' then
+    raise exception 'FAIL: generated event fields not copied';
+  end if;
+  if abs(extract(epoch from (g.start_date - v_next))) > 1 then
+    raise exception 'FAIL: generated start_date != next_occurrence_at';
+  end if;
+  if g.end_date is null or abs(extract(epoch from (g.end_date - (g.start_date + interval '90 minutes')))) > 1 then
+    raise exception 'FAIL: generated end_date != start + duration';
+  end if;
+
+  -- creator auto-joined
+  select count(*) into cnt from public.event_participants
+    where event_id = g.id and user_id = '10000000-0000-0000-0000-000000000001';
+  if cnt <> 1 then raise exception 'FAIL: creator not auto-joined'; end if;
+
+  -- one event_opened push, member only, never the creator
+  select count(*) into cnt from public.push_outbox where event_id = g.id and type = 'event_opened';
+  if cnt <> 1 then raise exception 'FAIL: expected 1 event_opened outbox row, got %', cnt; end if;
+  select count(*) into cnt from public.push_outbox
+    where event_id = g.id and user_id = '10000000-0000-0000-0000-000000000001';
+  if cnt <> 0 then raise exception 'FAIL: creator received event_opened push'; end if;
+
+  -- next_occurrence_at advanced exactly one interval
+  perform 1 from public.event_templates where id = t_id
+    and abs(extract(epoch from (next_occurrence_at - (v_next + interval '7 days')))) < 1;
+  if not found then raise exception 'FAIL: next_occurrence_at not advanced by 7 days'; end if;
+
+  -- run 2: idempotent (next occurrence now outside the lead window)
+  perform public.generate_recurring_events();
+  select count(*) into cnt from public.events where template_id = t_id and id <> (ev->>'id')::uuid;
+  if cnt <> 1 then raise exception 'FAIL: generator not idempotent — % events after run 2', cnt; end if;
+end $$;
+
+-- ============================================================
+-- Section 5: skip consumption, ended templates, catch-up
+-- ============================================================
+do $$
+declare
+  w json; w_id uuid; ev json; t_id uuid; cnt int; v_next timestamptz;
+begin
+  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000001');
+  w := public.create_workspace('مساحة التخطي والإنهاء');
+  w_id := (w->>'id')::uuid;
+
+  ev := public.create_event(
+    p_creator_id => '10000000-0000-0000-0000-000000000001',
+    p_workspace_id => w_id,
+    p_name => 'سيُتخطى',
+    p_start_date => now() - interval '5 days',
+    p_recurrence => 'weekly'
+  );
+  t_id := (ev->>'template_id')::uuid;
+
+  -- skip consumption: flag set + inside window -> no event, flag reset, date advanced
+  update public.event_templates set skip_next = true where id = t_id;
+  select next_occurrence_at into v_next from public.event_templates where id = t_id;
+  perform public.generate_recurring_events();
+  select count(*) into cnt from public.events where template_id = t_id and id <> (ev->>'id')::uuid;
+  if cnt <> 0 then raise exception 'FAIL: skip still generated an event'; end if;
+  perform 1 from public.event_templates where id = t_id
+    and not skip_next
+    and abs(extract(epoch from (next_occurrence_at - (v_next + interval '7 days')))) < 1;
+  if not found then raise exception 'FAIL: skip not consumed correctly'; end if;
+
+  -- ended template: generator ignores it even inside the window
+  update public.event_templates
+    set ended_at = now(), next_occurrence_at = now() + interval '1 day'
+    where id = t_id;
+  perform public.generate_recurring_events();
+  select count(*) into cnt from public.events where template_id = t_id and id <> (ev->>'id')::uuid;
+  if cnt <> 0 then raise exception 'FAIL: ended template generated an event'; end if;
+
+  -- catch-up: a far-behind template creates at most one event and lands in the future
+  update public.event_templates
+    set ended_at = null, skip_next = false, next_occurrence_at = now() - interval '20 days'
+    where id = t_id;
+  perform public.generate_recurring_events();
+  select count(*) into cnt from public.events where template_id = t_id and id <> (ev->>'id')::uuid;
+  if cnt > 1 then raise exception 'FAIL: catch-up burst-created % events', cnt; end if;
+  perform 1 from public.event_templates where id = t_id and next_occurrence_at > now();
+  if not found then raise exception 'FAIL: catch-up left next_occurrence_at in the past'; end if;
+end $$;
+
+-- ============================================================
+-- Section 6: cron job registered
+-- ============================================================
+do $$
+declare cnt int;
+begin
+  select count(*) into cnt from cron.job where jobname = 'recurring-events';
+  if cnt <> 1 then raise exception 'FAIL: recurring-events cron job not scheduled'; end if;
+end $$;
+
 select 'ALL RECURRING EVENT TESTS PASSED' as result;
 rollback;
