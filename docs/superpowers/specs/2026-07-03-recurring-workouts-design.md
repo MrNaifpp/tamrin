@@ -12,7 +12,7 @@ Confirmed product decisions:
 
 | Decision | Choice |
 |---|---|
-| Recurrence options | لا يتكرر / أسبوعي / كل أسبوعين (v1) |
+| Recurrence options | Weekly only (v1) — a single "يتكرر أسبوعيًا" toggle; biweekly/monthly deferred |
 | Occurrence shape | A normal `events` row linked by `template_id`; fresh participant list each time |
 | Lead time | Next occurrence created **3 days** before start (per-template `lead_days`, no v1 UI to change it) |
 | Announcement | One push to every workspace member when an occurrence opens (new outbox type) |
@@ -34,7 +34,7 @@ Confirmed product decisions:
 | `total_price`, `price_per_person` | as on `events` | |
 | `max_participants` | int NULL | |
 | `duration_minutes` | int NULL | derived from first event's `end_date - start_date`; NULL if no end date |
-| `recurrence` | text NOT NULL check in ('weekly','biweekly') | |
+| `recurrence` | text NOT NULL check in ('weekly') | only weekly in v1; the check relaxes when more rules ship |
 | `next_occurrence_at` | timestamptz NOT NULL | the single source of truth for "when is the next one" |
 | `lead_days` | int NOT NULL default 3 | occurrence is created when `now() >= next_occurrence_at - lead_days` |
 | `skip_next` | boolean NOT NULL default false | one-shot flag consumed by the generator |
@@ -62,7 +62,7 @@ All SECURITY DEFINER, workspace-membership-guarded like the July 2 batch.
 
 | RPC | access | behavior |
 |---|---|---|
-| `create_event(...)` — extended | member | gains `p_recurrence text default 'none'`. When weekly/biweekly: also insert the template (deriving `next_occurrence_at = p_start_date + interval`, duration from the dates) and stamp the first event's `template_id`. One transaction. |
+| `create_event(...)` — extended | member | gains `p_recurrence text default 'none'`. When `'weekly'`: also insert the template (deriving `next_occurrence_at = p_start_date + interval '7 days'`, duration from the dates) and stamp the first event's `template_id`. One transaction. |
 | `get_event_template(p_template_id)` | member | template row + its recurrence state (drives the series section on event detail) |
 | `skip_next_occurrence(p_template_id)` | series creator | set `skip_next = true`; returns the date that will be skipped. If the next occurrence's event **already exists** (we're inside the lead window), returns `already_open` and does nothing — the creator deletes that event instead (existing `delete_event`). |
 | `end_recurrence(p_template_id)` | series creator | set `ended_at = now()`; existing events untouched |
@@ -71,9 +71,9 @@ All SECURITY DEFINER, workspace-membership-guarded like the July 2 batch.
 
 ## iOS app
 
-- **`NewEventView`**: a segmented control under the date pickers — **لا يتكرر / أسبوعي / كل أسبوعين**. Passed to `create_event`. No other new inputs (lead time stays at the default).
+- **`NewEventView`**: a single **"يتكرر أسبوعيًا" toggle** under the date pickers, off by default. Passed to `create_event` as `'weekly'`/`'none'`. No other new inputs (lead time stays at the default).
 - **`EventHeroDetailView`**: when the event has a `template_id` and the viewer is the series creator, show a **سلسلة متكررة** section: recurrence label + next date, and two actions — "تخطَّ الأسبوع القادم" (confirmation dialog; handles the `already_open` answer by pointing at deletion) and "إنهاء التكرار" (destructive confirmation; ends the series, keeps this event).
-- **Feed card** (`EventPageView`): a small "يتكرر أسبوعيًا / كل أسبوعين" badge on template-linked events.
+- **Feed card** (`EventPageView`): a small "يتكرر أسبوعيًا" badge on template-linked events.
 - **Push tap** for `event_opened` deep-links to the new event — the existing `sirr://event/{id}` route, no new client routing.
 - **`EventService`**: three new methods mirroring the RPCs; `EventRecord`/`EventData` gain `templateId`.
 
@@ -89,7 +89,7 @@ One migration batch (table + RLS + RPCs + cron job + generator) plus the app cha
 ## Out of scope (future)
 
 - Editing a template in place (price/time/field changes mid-series)
-- Monthly or custom recurrence rules; multiple sessions per week per template
+- Biweekly, monthly, or custom recurrence rules; multiple sessions per week per template
 - Per-template lead-time UI
 - Auto-carrying last week's confirmed players into the new occurrence
 - A "series" management screen listing all templates in a workspace
