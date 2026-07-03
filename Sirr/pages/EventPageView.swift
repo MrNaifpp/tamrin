@@ -308,7 +308,8 @@ private extension EventPageView {
                                 eventName: event.name,
                                 eventDate: event.date,
                                 imageURL: event.imageUrl,
-                                imageName: .card1
+                                imageName: .card1,
+                                isRecurring: event.templateId != nil
                             )
                             .matchedTransitionSource(id: event.id, in: zoomNamespace)
                             .frame(maxHeight: .infinity)

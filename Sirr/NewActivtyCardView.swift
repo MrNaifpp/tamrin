@@ -13,7 +13,9 @@ struct NewActivtyCardView: View {
     /// When non-nil, load image from URL; otherwise use imageName.
     var imageURL: String? = nil
     var imageName: ImageResource = .card1
-    
+    /// Shows the "يتكرر أسبوعيًا" badge for series-linked events.
+    var isRecurring: Bool = false
+
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .bottom) {
@@ -98,6 +100,21 @@ struct NewActivtyCardView: View {
                 }
                 .padding(.bottom, 56)
                 .padding(.horizontal, 24)
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if isRecurring {
+                HStack(spacing: 6) {
+                    Image(systemName: "repeat")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text("يتكرر أسبوعيًا")
+                        .font(.appCaption)
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(Capsule().fill(.black.opacity(0.35)))
+                .padding(16)
             }
         }
         .clipShape(
