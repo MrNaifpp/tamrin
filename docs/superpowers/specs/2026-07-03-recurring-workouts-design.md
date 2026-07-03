@@ -64,7 +64,7 @@ All SECURITY DEFINER, workspace-membership-guarded like the July 2 batch.
 |---|---|---|
 | `create_event(...)` — extended | member | gains `p_recurrence text default 'none'`. When `'weekly'`: also insert the template (deriving `next_occurrence_at = p_start_date + interval '7 days'`, duration from the dates) and stamp the first event's `template_id`. One transaction. |
 | `get_event_template(p_template_id)` | member | template row + its recurrence state (drives the series section on event detail) |
-| `skip_next_occurrence(p_template_id)` | series creator | set `skip_next = true`; returns the date that will be skipped. If the next occurrence's event **already exists** (we're inside the lead window), returns `already_open` and does nothing — the creator deletes that event instead (existing `delete_event`). |
+| `skip_next_occurrence(p_template_id, p_event_id)` | series creator | `p_event_id` = the event whose detail page hosted the button (needed because the series' first event and a freshly generated occurrence are indistinguishable by dates alone). If a future series event **other than** `p_event_id` exists, the next occurrence is already generated → returns `already_open` + that event id and does nothing — the creator deletes that event instead (existing `delete_event`). Otherwise sets `skip_next = true` and returns the date that will be skipped. |
 | `end_recurrence(p_template_id)` | series creator | set `ended_at = now()`; existing events untouched |
 
 `delete_event` is unchanged — deleting one occurrence never touches the template (the `template_id` FK just dangles onto other rows).
