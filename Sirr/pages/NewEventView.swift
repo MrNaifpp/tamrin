@@ -32,6 +32,7 @@ struct NewEventView: View {
     @State private var numberOfPeople: Int = 0
     @State private var pricePerUnit: String = "00 إ"
     @State private var playerApprovalEnabled: Bool = false
+    @State private var repeatsWeekly: Bool = false
     @State private var showPriceDialog: Bool = false
     @State private var showPeopleDialog: Bool = false
     @State private var showStartDateDialog: Bool = false
@@ -166,7 +167,12 @@ struct NewEventView: View {
                 customDateRangePicker
                     .padding(.horizontal, 16)
                     .padding(.vertical, 6)
-                
+
+                // Weekly recurrence toggle (F1)
+                recurrenceToggle
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
+
                 // Player approval toggle section
                 playerApprovalToggle
                     .padding(.horizontal, 16)
@@ -453,7 +459,8 @@ struct NewEventView: View {
                 totalPrice: fieldValue,
                 pricePerPerson: computedPricePerPerson,
                 latitude: selectedCoordinate?.latitude,
-                longitude: selectedCoordinate?.longitude
+                longitude: selectedCoordinate?.longitude,
+                recurrence: repeatsWeekly ? "weekly" : "none"
             )
             print("[CreateEvent] Success — id: \(event.id), name: \(event.name)")
             if let onCreated {
@@ -863,6 +870,26 @@ struct NewEventView: View {
         )
     }
     
+    // MARK: - Weekly Recurrence Toggle
+    private var recurrenceToggle: some View {
+        HStack {
+            Text("يتكرر أسبوعيًا")
+                .font(.appBody)
+                .foregroundStyle(.white)
+
+            Spacer()
+
+            Toggle("", isOn: $repeatsWeekly)
+                .labelsHidden()
+                .tint(.blue)
+        }
+        .frame(height: 50)
+        .padding(.horizontal, 18)
+        .background(
+            Capsule().fill(.white.opacity(0.1))
+        )
+    }
+
     // MARK: - Price and People Section
     private var priceAndPeopleSection: some View {
         ZStack {
