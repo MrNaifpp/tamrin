@@ -16,7 +16,7 @@ Confirmed product decisions:
 | Occurrence shape | A normal `events` row linked by `template_id`; fresh participant list each time |
 | Lead time | Next occurrence created **3 days** before start (per-template `lead_days`, no v1 UI to change it) |
 | Announcement | One push to every workspace member when an occurrence opens (new outbox type) |
-| Series controls | On the event detail page of a template-linked event, creator-only: تخطَّ الأسبوع القادم / إنهاء التكرار |
+| Series controls | Detail page (creator-only "سلسلة متكررة" card): next date + تخطَّ الأسبوع القادم. Event settings sheet: persisted "يتكرر أسبوعيًا" toggle — on = `enable_recurrence` (create/reactivate template, also works on events created without recurrence), off = `end_recurrence` (destructive confirmation) |
 | Template editing | Not in v1 — to change price/time/field, end the series and create a new recurring workout |
 | History | Skipping or ending a series never deletes existing events |
 
@@ -66,6 +66,7 @@ All SECURITY DEFINER, workspace-membership-guarded like the July 2 batch.
 | `get_event_template(p_template_id)` | member | template row + its recurrence state (drives the series section on event detail) |
 | `skip_next_occurrence(p_template_id, p_event_id)` | series creator | `p_event_id` = the event whose detail page hosted the button (needed because the series' first event and a freshly generated occurrence are indistinguishable by dates alone). If a future series event **other than** `p_event_id` exists, the next occurrence is already generated → returns `already_open` + that event id and does nothing — the creator deletes that event instead (existing `delete_event`). Otherwise sets `skip_next = true` and returns the date that will be skipped. |
 | `end_recurrence(p_template_id)` | series creator | set `ended_at = now()`; existing events untouched |
+| `enable_recurrence(p_event_id)` | event creator | settings-sheet toggle-on: creates the weekly template from the event's fields and stamps `template_id` — or reactivates the ended template the event is already linked to (`ended_at = null`, stale anchor handled by the generator's catch-up). No-op returning the live template when already recurring. |
 
 `delete_event` is unchanged — deleting one occurrence never touches the template (the `template_id` FK just dangles onto other rows).
 
