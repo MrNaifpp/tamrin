@@ -4,8 +4,8 @@
 //
 //  Slide-in "المجموعات" panel (replaces the old half-sheet switcher).
 //  Dark panel enters from the leading edge over a dimmed home. The blue +
-//  creates a workout in the current group; "مجموعة جديدة" creates a group;
-//  the gear opens the current group's settings (which also hosts logout).
+//  creates a new group; the gear opens the current group's settings
+//  (which also hosts logout). New workouts are created from the home header.
 //
 
 import SwiftUI
@@ -15,7 +15,6 @@ struct GroupsDrawer: View {
     let workspaces: [WorkspaceRecord]
     let currentId: UUID?
     var onSelect: (WorkspaceRecord) -> Void
-    var onNewWorkout: () -> Void
     var onNewGroup: () -> Void
     var onOpenSettings: () -> Void
 
@@ -59,25 +58,23 @@ struct GroupsDrawer: View {
 
     private func panel(width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Title row: "المجموعات" + blue + (new workout in current group).
+            // Title row: "المجموعات" + blue + (new group).
             HStack {
                 Text("المجموعات")
                     .font(.appSubheadline)
                     .foregroundStyle(.white)
                 Spacer()
-                if currentId != nil {
-                    Button {
-                        close()
-                        onNewWorkout()
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 44, height: 44)
-                            .background(Circle().fill(Color.blue))
-                    }
-                    .buttonStyle(.plain)
+                Button {
+                    close()
+                    onNewGroup()
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 44, height: 44)
+                        .background(Circle().fill(Color.blue))
                 }
+                .buttonStyle(.plain)
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
@@ -87,7 +84,6 @@ struct GroupsDrawer: View {
                     ForEach(workspaces) { ws in
                         groupRow(ws)
                     }
-                    newGroupRow
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 20)
@@ -160,30 +156,6 @@ struct GroupsDrawer: View {
         .buttonStyle(.plain)
     }
 
-    private var newGroupRow: some View {
-        Button {
-            close()
-            onNewGroup()
-        } label: {
-            HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(.white.opacity(0.1))
-                    .frame(width: 46, height: 46)
-                    .overlay(Image(systemName: "plus").foregroundStyle(.white))
-                Text("مجموعة جديدة")
-                    .font(.appBodyMedium)
-                    .foregroundStyle(.white)
-                Spacer()
-            }
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(.white.opacity(0.07))
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
 }
 
 #Preview {
@@ -196,7 +168,7 @@ struct GroupsDrawer: View {
                     isPresented: $shown,
                     workspaces: [],
                     currentId: nil,
-                    onSelect: { _ in }, onNewWorkout: {}, onNewGroup: {}, onOpenSettings: {}
+                    onSelect: { _ in }, onNewGroup: {}, onOpenSettings: {}
                 )
             }
         }

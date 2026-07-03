@@ -46,53 +46,57 @@ struct EventPageView: View {
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
-            GeometryReader { geometry in
-                ZStack {
-                    if workspacesLoaded && workspaces.isEmpty {
-                        emptyStateBackground
-                            .frame(
-                                width: geometry.size.width,
-                                height: geometry.size.height + geometry.safeAreaInsets.top + geometry.safeAreaInsets.bottom
-                            )
-                            .ignoresSafeArea(edges: .all)
-                        noWorkspaceContent
-                    } else if events.isEmpty && !eventsLoading {
-                        // Empty state: gradient background, message, CTA
-                        emptyStateBackground
-                            .frame(
-                                width: geometry.size.width,
-                                height: geometry.size.height + geometry.safeAreaInsets.top + geometry.safeAreaInsets.bottom
-                            )
-                            .ignoresSafeArea(edges: .all)
-                        emptyStateContent(geometry: geometry)
-                    } else {
-                        // Blurred backdrop that tracks the visible workout page.
-                        currentEventBackground
-                            .frame(
-                                width: geometry.size.width,
-                                height: geometry.size.height + geometry.safeAreaInsets.top + geometry.safeAreaInsets.bottom
-                            )
-                            .clipped()
-                            .ignoresSafeArea(edges: .all)
-                            .blur(radius: 8)
-                            .id(visibleEvent?.id)
-                            .transition(.opacity)
-                            .animation(.easeInOut(duration: 0.3), value: visibleEventId)
-                        Color.black.opacity(0.3)
-                            .frame(
-                                width: geometry.size.width,
-                                height: geometry.size.height + geometry.safeAreaInsets.top + geometry.safeAreaInsets.bottom
-                            )
-                            .ignoresSafeArea(edges: .all)
-                        if eventsLoading && events.isEmpty {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                .scaleEffect(1.2)
-                        } else if !events.isEmpty {
-                            workoutFeed(geometry: geometry)
+            // Outer reader stays inside the safe area only to report the real
+            // insets (the inner reader zeroes them). The inner reader ignores
+            // safe area so geometry.size is the full physical screen: pages,
+            // backgrounds, and the scroll container all share that one size,
+            // which is what keeps every snap — including the last page — flush.
+            GeometryReader { safeArea in
+                GeometryReader { geometry in
+                    ZStack {
+                        if workspacesLoaded && workspaces.isEmpty {
+                            emptyStateBackground
+                                .frame(
+                                    width: geometry.size.width,
+                                    height: geometry.size.height
+                                )
+                            noWorkspaceContent
+                        } else if events.isEmpty && !eventsLoading {
+                            // Empty state: gradient background, message, CTA
+                            emptyStateBackground
+                                .frame(
+                                    width: geometry.size.width,
+                                    height: geometry.size.height
+                                )
+                            emptyStateContent(geometry: geometry)
+                        } else {
+                            // Blurred backdrop that tracks the visible workout page.
+                            currentEventBackground
+                                .frame(
+                                    width: geometry.size.width,
+                                    height: geometry.size.height
+                                )
+                                .clipped()
+                                .blur(radius: 8)
+                                .id(visibleEvent?.id)
+                                .transition(.opacity)
+                                .animation(.easeInOut(duration: 0.3), value: visibleEventId)
+                            Color.black.opacity(0.3)
+                                .frame(
+                                    width: geometry.size.width,
+                                    height: geometry.size.height
+                                )
+                            if eventsLoading && events.isEmpty {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(1.2)
+                            } else if !events.isEmpty {
+                                workoutFeed(geometry: geometry, insets: safeArea.safeAreaInsets)
+                            }
                         }
                     }
                 }
+                .ignoresSafeArea()
             }
             .toolbar {
                 if currentWorkspace != nil {
@@ -121,7 +125,18 @@ struct EventPageView: View {
                         .buttonStyle(.plain)
                     }
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
+                // In RTL the trailing group sits at the visual left: the plus
+                // rides next to the profile avatar, avatar stays in the corner.
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    if currentWorkspace != nil {
+                        Button {
+                            navigationPath.append(NavigationDestination.newEvent)
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(.primary)
+                        }
+                    }
                     Button {
                         showEditProfileSheet = true
                     } label: {
@@ -139,7 +154,6 @@ struct EventPageView: View {
                     onSelect: { ws in
                         appState.currentWorkspaceId = ws.id
                     },
-                    onNewWorkout: { navigationPath.append(NavigationDestination.newEvent) },
                     onNewGroup: { showCreateWorkspace = true },
                     onOpenSettings: {
                         if let ws = currentWorkspace { settingsWorkspace = ws }
@@ -280,12 +294,15 @@ private extension EventPageView {
 
     /// Vertical full-page pager: one workout per page, snap scrolling.
     /// Label rides each page: التمرين الجاي on the first, التمارين القادمة after.
-    func workoutFeed(geometry: GeometryProxy) -> some View {
+    /// `geometry` is the full-screen reader (safe area ignored, insets zeroed);
+    /// `insets` carries the real safe-area insets from the outer reader.
+    func workoutFeed(geometry: GeometryProxy, insets: EdgeInsets) -> some View {
         ScrollView(showsIndicators: false) {
             LazyVStack(spacing: 0) {
                 ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
                     VStack(alignment: .leading, spacing: 10) {
                         sectionLabel(index == 0 ? "التمرين الجاي" : "التمارين القادمة")
+                            .padding(.top, insets.top + 8)
                         NavigationLink(value: event) {
                             NewActivtyCardView(
                                 eventName: event.name,
@@ -299,16 +316,20 @@ private extension EventPageView {
                         .buttonStyle(.plain)
                     }
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 12)
+                    .padding(.bottom, insets.bottom + 12)
                     .frame(height: geometry.size.height)
                 }
             }
             .scrollTargetLayout()
         }
-        // .paging gives the decisive one-flick-one-card feel; pages fit because
-        // each page is explicitly geometry-height (the old overflow came from
-        // containerRelativeFrame, not from paging).
-        .scrollTargetBehavior(.paging)
+        // Every page is exactly geometry.size.height (= full screen), and the
+        // explicit frame pins the container to the same value, so viewAligned
+        // snaps land flush on every page including the last. contentMargins(0)
+        // kills any automatic scroll margins from the transparent bars.
+        // limitBehavior .always keeps one-flick-one-card.
+        .contentMargins(.all, 0, for: .scrollContent)
+        .frame(height: geometry.size.height)
+        .scrollTargetBehavior(.viewAligned(limitBehavior: .always))
         .scrollPosition(id: $visibleEventId)
     }
 
@@ -432,12 +453,12 @@ private extension EventPageView {
                     Image(systemName: "person.crop.circle.fill")
                         .resizable()
                         .scaledToFit()
-                        .foregroundStyle(Color.gray.opacity(0.7))
+                        .foregroundStyle(.primary)
                 @unknown default:
                     Image(systemName: "person.crop.circle.fill")
                         .resizable()
                         .scaledToFit()
-                        .foregroundStyle(Color.gray.opacity(0.7))
+                        .foregroundStyle(.primary)
                 }
             }
             .frame(width: 28, height: 28)
@@ -447,7 +468,7 @@ private extension EventPageView {
                 .resizable()
                 .scaledToFit()
                 .frame(width: 28, height: 28)
-                .foregroundStyle(Color.gray.opacity(0.7))
+                .foregroundStyle(.primary)
         }
     }
 }
