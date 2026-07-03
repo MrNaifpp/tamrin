@@ -29,7 +29,7 @@ The single highest-leverage feature. Most groups play the same field, same day, 
 
 **Acceptance criteria:**
 - [ ] Creator can toggle "يتكرر أسبوعيًا" when creating a workout; this stores a template and links the first event to it.
-- [ ] The next occurrence is auto-created 4 days before its start time (configurable per template), with all fields copied and a fresh participant list.
+- [ ] The next occurrence is auto-created 3 days before its start time (configurable per template), with all fields copied and a fresh participant list.
 - [ ] All workspace members receive one push when a new occurrence opens ("انفتح التسجيل لتمرين الأربعاء ⚽").
 - [ ] Creator can skip the next occurrence ("ما فيه تمرين هالأسبوع") or end the series; skipping never deletes past events.
 - [ ] Editing a single occurrence (e.g. moved field this week) does not mutate the template.

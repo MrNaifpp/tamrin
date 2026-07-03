@@ -1,7 +1,7 @@
 # Recurring Workouts (F1) — Design
 
 **Date:** 2026-07-03
-**Status:** Draft (roadmap approved; spec awaiting review)
+**Status:** Reviewed with Naif 2026-07-04 — auto-join creator confirmed, skip-before-generation-only confirmed, lead time changed to 3 days
 **Source:** `docs/ROADMAP.md` — Phase 2, F1
 
 ## Summary
@@ -14,7 +14,7 @@ Confirmed product decisions:
 |---|---|
 | Recurrence options | لا يتكرر / أسبوعي / كل أسبوعين (v1) |
 | Occurrence shape | A normal `events` row linked by `template_id`; fresh participant list each time |
-| Lead time | Next occurrence created **4 days** before start (per-template `lead_days`, no v1 UI to change it) |
+| Lead time | Next occurrence created **3 days** before start (per-template `lead_days`, no v1 UI to change it) |
 | Announcement | One push to every workspace member when an occurrence opens (new outbox type) |
 | Series controls | On the event detail page of a template-linked event, creator-only: تخطَّ الأسبوع القادم / إنهاء التكرار |
 | Template editing | Not in v1 — to change price/time/field, end the series and create a new recurring workout |
@@ -36,7 +36,7 @@ Confirmed product decisions:
 | `duration_minutes` | int NULL | derived from first event's `end_date - start_date`; NULL if no end date |
 | `recurrence` | text NOT NULL check in ('weekly','biweekly') | |
 | `next_occurrence_at` | timestamptz NOT NULL | the single source of truth for "when is the next one" |
-| `lead_days` | int NOT NULL default 4 | occurrence is created when `now() >= next_occurrence_at - lead_days` |
+| `lead_days` | int NOT NULL default 3 | occurrence is created when `now() >= next_occurrence_at - lead_days` |
 | `skip_next` | boolean NOT NULL default false | one-shot flag consumed by the generator |
 | `ended_at` | timestamptz NULL | set by إنهاء التكرار; generator ignores ended templates |
 | `created_at` | timestamptz | |
@@ -51,7 +51,7 @@ Confirmed product decisions:
 
 1. If `skip_next` is true → advance `next_occurrence_at` by the recurrence interval, reset `skip_next`, **do not** create an event, continue.
 2. Otherwise insert an `events` row copying the template fields (`start_date = next_occurrence_at`, `end_date = start + duration` when known, `template_id` set), and insert the creator as a confirmed participant — same as `create_event` does today.
-3. Enqueue one `push_outbox` row of new type **`event_opened`** per workspace member except the creator (copy: "انفتح التسجيل 🎾" / "انفتح التسجيل لتمرين {eventName} — احجز مكانك"). Reuses the existing outbox → pg_net trigger → `send-push` pipeline; only `copy.ts` gains a case.
+3. Enqueue one `push_outbox` row of new type **`event_opened`** per workspace member except the creator (copy: "انفتح التسجيل ⚽" / "انفتح التسجيل لتمرين {eventName} — احجز مكانك"). Reuses the existing outbox → pg_net trigger → `send-push` pipeline; only `copy.ts` gains a case.
 4. Advance `next_occurrence_at` by the interval — in the **same transaction** as the insert, which is what makes a double cron run idempotent (the second run finds `next_occurrence_at` already past the lead window).
 
 Catch-up rule: if a template is somehow far behind (e.g. cron was down), the loop advances `next_occurrence_at` until it is in the future but creates **at most one** event per run — no burst of stale workouts.
