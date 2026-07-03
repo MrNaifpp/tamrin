@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import MapKit
 internal import Auth
 import Supabase
 
@@ -31,6 +32,7 @@ struct EventHeroDetailView: View {
     @State private var isCancellingPending = false
     @State private var actionInFlight: UUID? = nil
     @State private var ownerActionError: String? = nil
+    @Environment(\.openURL) private var openURL
 
     init(event: EventData, onClose: @escaping () -> Void, onEnroll: @escaping () -> Void, onDeleted: @escaping () -> Void) {
         self.event = event
@@ -95,6 +97,34 @@ struct EventHeroDetailView: View {
                             .font(.appFont(size: 18, weight: .bold))
                             .foregroundStyle(.white.opacity(0.9))
                             .multilineTextAlignment(.center)
+
+                        if !event.location.isEmpty {
+                            Button {
+                                openInMaps()
+                            } label: {
+                                HStack(spacing: 7) {
+                                    Image(systemName: "mappin.and.ellipse")
+                                        .font(.system(size: 13, weight: .semibold))
+                                    Text(event.location)
+                                        .font(.appBodyMedium)
+                                        .lineLimit(1)
+                                    Image(systemName: "chevron.forward")
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .opacity(0.75)
+                                }
+                                .foregroundStyle(.white.opacity(0.95))
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(
+                                    Capsule().fill(.white.opacity(0.14))
+                                )
+                                .overlay(
+                                    Capsule().stroke(.white.opacity(0.22), lineWidth: 1)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, 4)
+                        }
                     }
                     .padding(.horizontal, 24)
                     .padding(.top, 8)
@@ -443,6 +473,41 @@ struct EventHeroDetailView: View {
                 }
             })
         }
+    }
+
+    /// Tries the Google Maps app first (its URL scheme is only accepted when
+    /// the app is installed); otherwise falls back to the system Apple Maps.
+    private func openInMaps() {
+        var components = URLComponents(string: "comgooglemaps://")
+        components?.queryItems = [URLQueryItem(name: "q", value: mapsQuery)]
+        guard let googleURL = components?.url else {
+            openAppleMaps()
+            return
+        }
+        openURL(googleURL) { accepted in
+            if !accepted { openAppleMaps() }
+        }
+    }
+
+    private func openAppleMaps() {
+        if let lat = event.latitude, let lon = event.longitude {
+            let placemark = MKPlacemark(coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon))
+            let item = MKMapItem(placemark: placemark)
+            item.name = event.location
+            item.openInMaps()
+        } else {
+            var components = URLComponents(string: "https://maps.apple.com/")
+            components?.queryItems = [URLQueryItem(name: "q", value: event.location)]
+            if let url = components?.url { openURL(url) }
+        }
+    }
+
+    /// Coordinates when available (exact pin), else the free-text place name.
+    private var mapsQuery: String {
+        if let lat = event.latitude, let lon = event.longitude {
+            return "\(lat),\(lon)"
+        }
+        return event.location
     }
 
     private func loadParticipants() async {
