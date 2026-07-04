@@ -28,13 +28,13 @@ The single highest-leverage feature. Most groups play the same field, same day, 
 **Design sketch:** New `event_templates` table (workspace_id, name, weekday, time, duration, location + coords, image, price, max_participants, recurrence = weekly/biweekly). A pg_cron job (reusing the `enqueue_event_reminders` pattern) materializes the next occurrence N days ahead as a normal `events` row and enqueues a `new_event` push to all workspace members. Creator can edit/skip any single occurrence without breaking the series.
 
 **Acceptance criteria:**
-- [ ] Creator can toggle "يتكرر أسبوعيًا" when creating a workout; this stores a template and links the first event to it.
-- [ ] The next occurrence is auto-created 3 days before its start time (configurable per template), with all fields copied and a fresh participant list.
-- [ ] All workspace members receive one push when a new occurrence opens ("انفتح التسجيل لتمرين الأربعاء ⚽").
-- [ ] Creator can skip the next occurrence ("ما فيه تمرين هالأسبوع") or end the series; skipping never deletes past events.
-- [ ] Editing a single occurrence (e.g. moved field this week) does not mutate the template.
-- [ ] Deleting the template stops future generation but preserves history.
-- [ ] SQL test covers: generation idempotency (cron runs twice → one event), locked/skipped weeks, RLS (only workspace members see templates).
+- [x] Creator can toggle "يتكرر أسبوعيًا" when creating a workout (and later from the event settings sheet); this stores a template and links the first event to it.
+- [x] The next occurrence is auto-created 3 days before its start time (configurable per template), with all fields copied and a fresh participant list.
+- [x] All workspace members receive one push when a new occurrence opens ("انفتح التسجيل لتمرين الأربعاء ⚽").
+- [x] Creator can skip the next occurrence ("ما فيه تمرين هالأسبوع") or end the series; skipping never deletes past events.
+- [x] Editing a single occurrence (e.g. moved field this week) does not mutate the template.
+- [x] Deleting the template stops future generation but preserves history.
+- [x] SQL test covers: generation idempotency (cron runs twice → one event), locked/skipped weeks, RLS (only workspace members see templates).
 
 ### F2. RSVP + auto-promotion from waitlist
 
