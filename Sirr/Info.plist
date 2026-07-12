@@ -9,6 +9,10 @@
 		<string>TheYearofHandicrafts-SemiBold.otf</string>
 		<string>TheYearofHandicrafts-Bold.otf</string>
 		<string>TheYearofHandicrafts-Black.otf</string>
+		<string>ThmanyahSans-Light.ttf</string>
+		<string>ThmanyahSans-Regular.ttf</string>
+		<string>ThmanyahSans-Medium.ttf</string>
+		<string>ThmanyahSans-Bold.ttf</string>
 	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
