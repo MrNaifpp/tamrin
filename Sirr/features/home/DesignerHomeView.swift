@@ -30,6 +30,7 @@ struct DesignerHomeView: View {
             let revealDistance = min(proxy.size.width * 0.84, 340)
             let progress = menuProgress()
             let pageCorner = 44 * progress
+            let topInset = proxy.safeAreaInsets.top
 
             ZStack(alignment: .leading) {
                 TeamSideMenu(
@@ -42,7 +43,7 @@ struct DesignerHomeView: View {
                     onSelectTeam: { id in feed.selectTeam(id); setMenu(open: false) }
                 )
 
-                mainContent
+                mainContent(topInset: topInset)
                     .frame(width: proxy.size.width, height: proxy.size.height)
                     .clipShape(.rect(cornerRadius: pageCorner, style: .continuous))
                     .shadow(color: .black.opacity(0.34 * progress), radius: 32 * progress, x: 14 * progress, y: 0)
@@ -73,7 +74,7 @@ struct DesignerHomeView: View {
         }
     }
 
-    private var mainContent: some View {
+    private func mainContent(topInset: CGFloat) -> some View {
         ZStack {
             TamrinTheme.page.ignoresSafeArea()
 
@@ -123,6 +124,7 @@ struct DesignerHomeView: View {
                         sectionTitle: feed.occurrences.isEmpty
                             ? nil
                             : (currentIndex == 0 ? "التمرين الجاي" : "التمارين القادمة"),
+                        topInset: topInset,
                         openMenu: { setMenu(open: true) },
                         openPlan: {},
                         openProfile: {}
@@ -223,6 +225,7 @@ private struct StickyHomeHeader: View {
     let team: FeedTeam
     let profileName: String
     let sectionTitle: String?
+    let topInset: CGFloat
     let openMenu: () -> Void
     let openPlan: () -> Void
     let openProfile: () -> Void
@@ -242,7 +245,7 @@ private struct StickyHomeHeader: View {
                     .animation(.easeInOut(duration: 0.25), value: sectionTitle)
             }
         }
-        .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 12)
+        .padding(.horizontal, 16).padding(.top, topInset + 8).padding(.bottom, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .colorScheme(.dark)
     }
