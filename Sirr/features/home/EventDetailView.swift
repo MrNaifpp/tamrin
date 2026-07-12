@@ -7,7 +7,7 @@ struct EventDetailView: View {
     @Bindable var feed: MockHomeFeed
     let occurrence: FeedOccurrence
     var artName: String = "ExerciseArt1"
-    @Environment(\.dismiss) private var dismiss
+    var onClose: () -> Void = {}
 
     private var roster: [FeedMember] { feed.roster(for: occurrence) }
     private var myRegistration: FeedMember? { feed.myRegistration(for: occurrence) }
@@ -68,7 +68,7 @@ struct EventDetailView: View {
             }
         }
         .overlay(alignment: .topLeading) {
-            Button { dismiss() } label: {
+            Button { onClose() } label: {
                 Image(systemName: "chevron.backward")
                     .font(.system(size: 17, weight: .semibold))
                     .frame(width: 44, height: 44)

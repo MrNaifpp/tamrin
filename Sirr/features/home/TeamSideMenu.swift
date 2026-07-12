@@ -85,36 +85,24 @@ struct TeamSideMenu: View {
 
                 VStack {
                     Spacer()
-                    HStack(spacing: 8) {
-                        Button(action: openSettings) {
-                            HStack(spacing: 10) {
-                                MenuProfileAvatar(name: feed.profileName)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(feed.profileName.isEmpty ? "حسابي" : feed.profileName)
-                                        .font(TamrinFont.font(size: 14, weight: .bold))
-                                    Text("الملف الشخصي")
-                                        .font(TamrinFont.font(size: 10, weight: .regular))
-                                        .foregroundStyle(.white.opacity(0.5))
-                                }
-                                Spacer()
+                    Button(action: openSettings) {
+                        HStack(spacing: 10) {
+                            MenuProfileAvatar(name: feed.profileName)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(feed.profileName.isEmpty ? "حسابي" : feed.profileName)
+                                    .font(TamrinFont.font(size: 14, weight: .bold))
+                                Text("الملف الشخصي")
+                                    .font(TamrinFont.font(size: 10, weight: .regular))
+                                    .foregroundStyle(.white.opacity(0.5))
                             }
-                            .padding(.horizontal, 10)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 52)
+                            Spacer()
                         }
-                        .buttonStyle(.plain)
-                        .glassEffect(.regular.interactive(), in: .capsule)
-                        .accessibilityLabel("الملف الشخصي")
-
-                        Button(action: openNotifications) {
-                            Image(systemName: "bell.fill").frame(width: 44, height: 44)
-                        }
-                        .buttonStyle(.glass)
-                        .buttonBorderShape(.circle)
-                        .controlSize(.large)
-                        .accessibilityLabel("التنبيهات")
+                        .padding(.horizontal, 14)
+                        .frame(width: menuWidth, height: 60)
                     }
-                    .frame(width: menuWidth)
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: .capsule)
+                    .accessibilityLabel("الملف الشخصي")
                 }
                 .padding(.leading, 16)
                 .padding(.bottom, max(proxy.safeAreaInsets.bottom + 24, 40))

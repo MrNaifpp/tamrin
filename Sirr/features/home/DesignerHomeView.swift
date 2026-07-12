@@ -58,11 +58,9 @@ struct DesignerHomeView: View {
                     .offset(x: revealDistance * progress)
                     .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.86), value: progress)
             }
-            .background(Color(red: 0.067, green: 0.067, blue: 0.067))
-            .ignoresSafeArea()
+            .background(Color(red: 0.067, green: 0.067, blue: 0.067).ignoresSafeArea())
             .simultaneousGesture(menuGesture(revealDistance: revealDistance, screenWidth: proxy.size.width))
         }
-        .ignoresSafeArea()
         .alert("قريبًا", isPresented: Binding(
             get: { comingSoon != nil },
             set: { if !$0 { comingSoon = nil } }
@@ -77,68 +75,62 @@ struct DesignerHomeView: View {
         ZStack {
             TamrinTheme.page.ignoresSafeArea()
 
-            // NavigationStack re-establishes a real safe area inside the
-            // ignoresSafeArea drawer container, so the safeAreaInset header
-            // sits below the status bar (matches the designer's HomeView).
-            NavigationStack {
-                ZStack(alignment: .topTrailing) {
-                    HomeArtBackdrop(artName: artName(currentIndex), hasArt: !feed.occurrences.isEmpty)
+            ZStack(alignment: .topTrailing) {
+                HomeArtBackdrop(artName: artName(currentIndex), hasArt: !feed.occurrences.isEmpty)
 
-                    Group {
-                        if feed.occurrences.isEmpty {
-                            ScrollView(showsIndicators: false) {
-                                EmptyScheduleCard()
-                                    .padding(.horizontal, 20)
-                                    .padding(.top, 6)
-                            }
-                        } else {
-                            ScrollView(.vertical, showsIndicators: false) {
-                                LazyVStack(spacing: 110) {
-                                    ForEach(feed.occurrences.prefix(6)) { occurrence in
-                                        EventPosterCard(occurrence: occurrence, registeredCount: feed.registeredCount(for: occurrence)) {
-                                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                            selected = occurrence
-                                        }
-                                        .containerRelativeFrame(.vertical, alignment: .top) { length, _ in
-                                            max(length - 64, 320)
-                                        }
-                                        .matchedTransitionSource(id: occurrence.id, in: cardZoom)
-                                    }
-                                }
-                                .scrollTargetLayout()
+                Group {
+                    if feed.occurrences.isEmpty {
+                        ScrollView(showsIndicators: false) {
+                            EmptyScheduleCard()
                                 .padding(.horizontal, 20)
+                                .padding(.top, 6)
+                        }
+                    } else {
+                        ScrollView(.vertical, showsIndicators: false) {
+                            LazyVStack(spacing: 110) {
+                                ForEach(feed.occurrences.prefix(6)) { occurrence in
+                                    EventPosterCard(occurrence: occurrence, registeredCount: feed.registeredCount(for: occurrence)) {
+                                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                        selected = occurrence
+                                    }
+                                    .containerRelativeFrame(.vertical, alignment: .top) { length, _ in
+                                        max(length - 64, 320)
+                                    }
+                                    .matchedTransitionSource(id: occurrence.id, in: cardZoom)
+                                }
                             }
-                            .scrollTargetBehavior(.viewAligned(limitBehavior: .always))
-                            .scrollPosition(id: $scrolledID)
+                            .scrollTargetLayout()
+                            .padding(.horizontal, 20)
                         }
-                    }
-                    .overlay(alignment: .bottom) {
-                        if feed.occurrences.count > 1, currentIndex == 0 {
-                            ScrollHintChevron()
-                                .padding(.bottom, 2)
-                                .transition(.opacity)
-                        }
-                    }
-                    .animation(.easeInOut(duration: 0.3), value: currentIndex)
-                    .safeAreaInset(edge: .top, spacing: 0) {
-                        StickyHomeHeader(
-                            team: feed.currentTeam,
-                            profileName: feed.profileName,
-                            sectionTitle: feed.occurrences.isEmpty
-                                ? nil
-                                : (currentIndex == 0 ? "التمرين الجاي" : "التمارين القادمة"),
-                            openMenu: { setMenu(open: true) },
-                            openPlan: {},
-                            openProfile: {}
-                        )
+                        .scrollTargetBehavior(.viewAligned(limitBehavior: .always))
+                        .scrollPosition(id: $scrolledID)
                     }
                 }
-                .toolbar(.hidden, for: .navigationBar)
+                .overlay(alignment: .bottom) {
+                    if feed.occurrences.count > 1, currentIndex == 0 {
+                        ScrollHintChevron()
+                            .padding(.bottom, 2)
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.3), value: currentIndex)
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    StickyHomeHeader(
+                        team: feed.currentTeam,
+                        profileName: feed.profileName,
+                        sectionTitle: feed.occurrences.isEmpty
+                            ? nil
+                            : (currentIndex == 0 ? "التمرين الجاي" : "التمارين القادمة"),
+                        openMenu: { setMenu(open: true) },
+                        openPlan: {},
+                        openProfile: {}
+                    )
+                }
             }
         }
         .environment(\.layoutDirection, .rightToLeft)
         .fullScreenCover(item: $selected) { occ in
-            EventDetailView(feed: feed, occurrence: occ, artName: artName(occ.artIndex))
+            EventDetailView(feed: feed, occurrence: occ, artName: artName(occ.artIndex), onClose: { selected = nil })
                 .navigationTransition(.zoom(sourceID: occ.id, in: cardZoom))
         }
     }
@@ -157,9 +149,9 @@ struct DesignerHomeView: View {
     }
 
     private func menuGesture(revealDistance: CGFloat, screenWidth: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 16, coordinateSpace: .local)
+        DragGesture(minimumDistance: 18, coordinateSpace: .local)
             .onChanged { value in
-                let startsAtRightEdge = value.startLocation.x > screenWidth - 34
+                let startsAtRightEdge = value.startLocation.x > screenWidth - 30
                 guard isMenuOpen || startsAtRightEdge else { return }
                 if isMenuOpen {
                     menuDragProgress = min(max(-value.translation.width / revealDistance, -1), 0)
