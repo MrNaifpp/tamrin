@@ -1,14 +1,21 @@
 import SwiftUI
 
-/// Reskinned Home feed (designer look) on mock data. Deferred to later
-/// increments: real backend wiring, the edge-swipe side menu, plan-template
-/// detail, and the create/join/settings/payments/notifications sheets. The
-/// menu / plan / profile buttons are inert stubs here.
+/// Reskinned Home feed (designer look) on mock data, with the ported side-menu
+/// drawer (open via the header ☰ button or a right-edge swipe) and live team
+/// switching. Deferred to later increments: real backend wiring, plan-template
+/// detail, and the payments / settings / notifications / create-team screens
+/// (their menu entries raise a "قريبًا" placeholder alert).
 struct DesignerHomeView: View {
     @State private var feed = MockHomeFeed()
     @State private var scrolledID: UUID?
     @State private var selected: FeedOccurrence?
     @Namespace private var cardZoom
+
+    @State private var isMenuOpen = false
+    @State private var menuDragProgress: CGFloat = 0
+    @State private var didMenuHaptic = false
+    @State private var comingSoon: String?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var currentIndex: Int {
         guard let id = scrolledID,
@@ -19,6 +26,54 @@ struct DesignerHomeView: View {
     private func artName(_ index: Int) -> String { "ExerciseArt\((index % 3) + 1)" }
 
     var body: some View {
+        GeometryReader { proxy in
+            let revealDistance = min(proxy.size.width * 0.84, 340)
+            let progress = menuProgress()
+            let pageCorner = 44 * progress
+
+            ZStack(alignment: .leading) {
+                TeamSideMenu(
+                    feed: feed,
+                    close: { setMenu(open: false) },
+                    createTeam: { setMenu(open: false); comingSoon = "إنشاء مجموعة" },
+                    openSettings: { setMenu(open: false); comingSoon = "الإعدادات" },
+                    openPayments: { setMenu(open: false); comingSoon = "الدفعات" },
+                    openNotifications: { setMenu(open: false); comingSoon = "التنبيهات" },
+                    onSelectTeam: { id in feed.selectTeam(id); setMenu(open: false) }
+                )
+
+                mainContent
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .clipShape(.rect(cornerRadius: pageCorner, style: .continuous))
+                    .shadow(color: .black.opacity(0.34 * progress), radius: 32 * progress, x: 14 * progress, y: 0)
+                    .overlay {
+                        if progress > 0.02 {
+                            Color.black.opacity(0.001)
+                                .contentShape(Rectangle())
+                                .onTapGesture { setMenu(open: false) }
+                        }
+                    }
+                    .opacity(Double(1.0 - 0.18 * progress))
+                    .scaleEffect(1 - (0.045 * progress), anchor: .trailing)
+                    .offset(x: revealDistance * progress)
+                    .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.86), value: progress)
+            }
+            .background(Color(red: 0.067, green: 0.067, blue: 0.067))
+            .ignoresSafeArea()
+            .simultaneousGesture(menuGesture(revealDistance: revealDistance, screenWidth: proxy.size.width))
+        }
+        .ignoresSafeArea()
+        .alert("قريبًا", isPresented: Binding(
+            get: { comingSoon != nil },
+            set: { if !$0 { comingSoon = nil } }
+        )) {
+            Button("حسنًا", role: .cancel) { comingSoon = nil }
+        } message: {
+            Text("\(comingSoon ?? "") — تحت التطوير")
+        }
+    }
+
+    private var mainContent: some View {
         ZStack {
             TamrinTheme.page.ignoresSafeArea()
 
@@ -68,7 +123,7 @@ struct DesignerHomeView: View {
                         sectionTitle: feed.occurrences.isEmpty
                             ? nil
                             : (currentIndex == 0 ? "التمرين الجاي" : "التمارين القادمة"),
-                        openMenu: {},
+                        openMenu: { setMenu(open: true) },
                         openPlan: {},
                         openProfile: {}
                     )
@@ -80,6 +135,42 @@ struct DesignerHomeView: View {
             EventDetailView(feed: feed, occurrence: occ, artName: artName(occ.artIndex))
                 .navigationTransition(.zoom(sourceID: occ.id, in: cardZoom))
         }
+    }
+
+    private func menuProgress() -> CGFloat {
+        let base: CGFloat = isMenuOpen ? 1 : 0
+        return min(max(base + menuDragProgress, 0), 1)
+    }
+
+    private func setMenu(open: Bool) {
+        withAnimation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.86)) {
+            isMenuOpen = open
+            menuDragProgress = 0
+        }
+        didMenuHaptic = false
+    }
+
+    private func menuGesture(revealDistance: CGFloat, screenWidth: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 16, coordinateSpace: .local)
+            .onChanged { value in
+                let startsAtRightEdge = value.startLocation.x > screenWidth - 34
+                guard isMenuOpen || startsAtRightEdge else { return }
+                if isMenuOpen {
+                    menuDragProgress = min(max(-value.translation.width / revealDistance, -1), 0)
+                } else {
+                    menuDragProgress = min(max(-value.translation.width / revealDistance, 0), 1)
+                }
+                if menuProgress() > 0.78, !didMenuHaptic {
+                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred(intensity: 0.65)
+                    didMenuHaptic = true
+                }
+            }
+            .onEnded { value in
+                let predicted = isMenuOpen
+                    ? 1 + min(max(-value.predictedEndTranslation.width / revealDistance, -1), 0)
+                    : min(max(-value.predictedEndTranslation.width / revealDistance, 0), 1)
+                setMenu(open: predicted > 0.46)
+            }
     }
 }
 
