@@ -5,6 +5,7 @@ import SwiftUI
 /// omitted this increment (member view only).
 struct EventPosterCard: View {
     let occurrence: FeedOccurrence
+    let registeredCount: Int
     let action: () -> Void
 
     private var artName: String { "ExerciseArt\((occurrence.artIndex % 3) + 1)" }
@@ -36,7 +37,7 @@ struct EventPosterCard: View {
                         .font(TamrinFont.font(size: 15, weight: .medium))
                         .opacity(0.82)
 
-                    Text("\(occurrence.locationName) · \(occurrence.registeredCount)/\(occurrence.capacity) · \(occurrence.price == 0 ? "مجاني" : "\(occurrence.price.cleanAmount) ﷼")")
+                    Text("\(occurrence.locationName) · \(registeredCount)/\(occurrence.capacity) · \(occurrence.price == 0 ? "مجاني" : "\(occurrence.price.cleanAmount) ﷼")")
                         .font(TamrinFont.font(size: 12, weight: .regular))
                         .opacity(0.68).lineLimit(1)
                 }
@@ -89,9 +90,9 @@ struct EmptyScheduleCard: View {
 
 #Preview {
     let occ = FeedOccurrence(id: UUID(), title: "كورة الثلاثاء", startAt: Date(),
-                             locationName: "ملعب النخيل", capacity: 14, registeredCount: 9,
+                             locationName: "ملعب النخيل", capacity: 14,
                              price: 25, isCancelled: false, artIndex: 0)
-    return EventPosterCard(occurrence: occ, action: {})
+    return EventPosterCard(occurrence: occ, registeredCount: 9, action: {})
         .frame(height: 420).padding()
         .environment(\.layoutDirection, .rightToLeft)
 }

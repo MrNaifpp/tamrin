@@ -35,7 +35,7 @@ struct DesignerHomeView: View {
                         ScrollView(.vertical, showsIndicators: false) {
                             LazyVStack(spacing: 110) {
                                 ForEach(feed.occurrences.prefix(6)) { occurrence in
-                                    EventPosterCard(occurrence: occurrence) {
+                                    EventPosterCard(occurrence: occurrence, registeredCount: feed.registeredCount(for: occurrence)) {
                                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                         selected = occurrence
                                     }
