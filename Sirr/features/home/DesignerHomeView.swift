@@ -8,6 +8,7 @@ struct DesignerHomeView: View {
     @State private var feed = MockHomeFeed()
     @State private var scrolledID: UUID?
     @State private var selected: FeedOccurrence?
+    @Namespace private var cardZoom
 
     private var currentIndex: Int {
         guard let id = scrolledID,
@@ -42,6 +43,7 @@ struct DesignerHomeView: View {
                                     .containerRelativeFrame(.vertical, alignment: .top) { length, _ in
                                         max(length - 64, 320)
                                     }
+                                    .matchedTransitionSource(id: occurrence.id, in: cardZoom)
                                 }
                             }
                             .scrollTargetLayout()
@@ -74,6 +76,10 @@ struct DesignerHomeView: View {
             }
         }
         .environment(\.layoutDirection, .rightToLeft)
+        .fullScreenCover(item: $selected) { occ in
+            EventDetailView(feed: feed, occurrence: occ, artName: artName(occ.artIndex))
+                .navigationTransition(.zoom(sourceID: occ.id, in: cardZoom))
+        }
     }
 }
 
