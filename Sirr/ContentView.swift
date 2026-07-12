@@ -29,7 +29,10 @@ struct ContentView: View {
                         appState.authVM.clearNewUserAfterOTP()
                     })
                 } else if appState.isLoggedIn {
-                    EventPageView(authVM: appState.authVM, appState: appState, deepLinkEventId: $appState.deepLinkEventId)
+                    // Increment 1: designer Home feed on mock data. The old
+                    // EventPageView (real Supabase) is kept for reference and
+                    // will be re-wired in the backend increment.
+                    DesignerHomeView()
                 } else {
                     NavigationStack(path: $authPath) {
                         LoginOnbord(vm: appState.authVM, onNavigateToLogin: { authPath.append(AuthScreen.login) })
