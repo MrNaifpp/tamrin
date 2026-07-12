@@ -63,7 +63,7 @@ struct DesignerHomeView: View {
                 .animation(.easeInOut(duration: 0.3), value: currentIndex)
                 .safeAreaInset(edge: .top, spacing: 0) {
                     StickyHomeHeader(
-                        team: feed.team,
+                        team: feed.currentTeam,
                         profileName: feed.profileName,
                         sectionTitle: feed.occurrences.isEmpty
                             ? nil
