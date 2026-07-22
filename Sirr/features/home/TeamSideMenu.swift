@@ -1,23 +1,22 @@
 import SwiftUI
 
 /// Ported side-menu drawer (designer TeamSideMenu, member view) bound to
-/// MockHomeFeed. Team selection is live; create-team / payments / settings /
+/// HomeStore. Team selection is live; create-team / payments / settings /
 /// notifications are stubbed by the parent via the callbacks below. The
 /// admin/member experience switcher is intentionally dropped.
 struct TeamSideMenu: View {
-    @Bindable var feed: MockHomeFeed
+    @Bindable var feed: HomeStore
     let close: () -> Void
     let createTeam: () -> Void
     let openSettings: () -> Void
     let openPayments: () -> Void
-    let openNotifications: () -> Void
     let onSelectTeam: (UUID) -> Void
 
     var body: some View {
         GeometryReader { proxy in
             let menuWidth = min(proxy.size.width - 94, 308)
 
-            ZStack {
+            ZStack(alignment: .bottomLeading) {
                 Color(red: 0.067, green: 0.067, blue: 0.067).ignoresSafeArea()
 
                 VStack(alignment: .leading, spacing: 20) {
@@ -100,8 +99,8 @@ struct TeamSideMenu: View {
                         .padding(.horizontal, 14)
                         .frame(width: menuWidth, height: 60)
                     }
-                    .buttonStyle(.plain)
-                    .glassEffect(.regular.interactive(), in: .capsule)
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.capsule)
                     .accessibilityLabel("الملف الشخصي")
                 }
                 .padding(.leading, 16)
@@ -180,6 +179,6 @@ private struct MenuProfileAvatar: View {
 }
 
 #Preview {
-    TeamSideMenu(feed: MockHomeFeed(), close: {}, createTeam: {}, openSettings: {},
-                 openPayments: {}, openNotifications: {}, onSelectTeam: { _ in })
+    TeamSideMenu(feed: HomeStore.preview, close: {}, createTeam: {}, openSettings: {},
+                 openPayments: {}, onSelectTeam: { _ in })
 }

@@ -27,6 +27,12 @@ struct EventPosterCard: View {
                             .foregroundStyle(.white)
                             .padding(.horizontal, 13).padding(.vertical, 6)
                             .background(.red.opacity(0.85), in: .capsule)
+                    } else if occurrence.isRecurring {
+                        Label("أسبوعيًا", systemImage: "repeat")
+                            .font(TamrinFont.font(size: 12, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.92))
+                            .padding(.horizontal, 12).padding(.vertical, 6)
+                            .background(.white.opacity(0.18), in: .capsule)
                     }
 
                     Text(occurrence.title)
@@ -73,18 +79,25 @@ struct EventPosterCard: View {
 struct EmptyScheduleCard: View {
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: "calendar.badge.exclamationmark")
+            Image(systemName: "calendar")
                 .font(.largeTitle)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.7))
             Text("ما فيه مواعيد قادمة")
                 .font(TamrinFont.headline)
-            Text("راجع قالب التمرين أو أضف موعداً جديداً.")
+                .foregroundStyle(.white)
+            Text("المواعيد الجديدة بتظهر هنا أول ما تُنشر.")
                 .font(TamrinFont.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.6))
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 44)
-        .background(.white, in: .rect(cornerRadius: 24, style: .continuous))
+        .padding(.vertical, 48)
+        .padding(.horizontal, 24)
+        .background(.white.opacity(0.08), in: .rect(cornerRadius: 32, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 32, style: .continuous)
+                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+        }
     }
 }
 

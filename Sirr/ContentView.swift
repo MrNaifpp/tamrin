@@ -29,10 +29,9 @@ struct ContentView: View {
                         appState.authVM.clearNewUserAfterOTP()
                     })
                 } else if appState.isLoggedIn {
-                    // Increment 1: designer Home feed on mock data. The old
-                    // EventPageView (real Supabase) is kept for reference and
-                    // will be re-wired in the backend increment.
-                    DesignerHomeView()
+                    // Designer Home feed, now wired to Supabase via HomeStore
+                    // (workspaces / events / participants / profile).
+                    DesignerHomeView(appState: appState)
                 } else {
                     NavigationStack(path: $authPath) {
                         LoginOnbord(vm: appState.authVM, onNavigateToLogin: { authPath.append(AuthScreen.login) })

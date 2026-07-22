@@ -25,5 +25,7 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSContactsUsageDescription</key>
+	<string>لدعوة أصدقائك إلى المجموعة من جهات الاتصال.</string>
 </dict>
 </plist>

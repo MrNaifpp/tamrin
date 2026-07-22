@@ -250,6 +250,76 @@ final class EventService {
         return event
     }
 
+    /// Editable event fields, updated via the events table directly — the
+    /// baseline RLS policy ("Creators can update own events") gates it to the
+    /// creator, so no RPC is needed.
+    private struct UpdateEventPayload: Encodable {
+        let name: String
+        let location: String
+        let startDate: String
+        let endDate: String?
+        let maxParticipants: Int?
+        let totalPrice: Int
+        let pricePerPerson: Double
+        let latitude: Double?
+        let longitude: Double?
+
+        enum CodingKeys: String, CodingKey {
+            case name, location, latitude, longitude
+            case startDate = "start_date"
+            case endDate = "end_date"
+            case maxParticipants = "max_participants"
+            case totalPrice = "total_price"
+            case pricePerPerson = "price_per_person"
+        }
+    }
+
+    /// Update an existing event's editable fields (creator-only via RLS; a
+    /// non-creator's update simply matches zero rows).
+    func updateEvent(
+        eventId: UUID,
+        name: String,
+        location: String,
+        startDate: Date,
+        endDate: Date?,
+        maxParticipants: Int?,
+        totalPrice: Int,
+        pricePerPerson: Double,
+        latitude: Double?,
+        longitude: Double?
+    ) async throws {
+        let iso = ISO8601DateFormatter()
+        let payload = UpdateEventPayload(
+            name: name,
+            location: location,
+            startDate: iso.string(from: startDate),
+            endDate: endDate.map { iso.string(from: $0) },
+            maxParticipants: maxParticipants,
+            totalPrice: totalPrice,
+            pricePerPerson: pricePerPerson,
+            latitude: latitude,
+            longitude: longitude
+        )
+        try await client
+            .from("events")
+            .update(payload)
+            .eq("id", value: eventId.uuidString)
+            .execute()
+        eventLogger.info("API updateEvent succeeded (id: \(eventId))")
+    }
+
+    /// Detaches an event from its series template (creator-only via the same
+    /// RLS policy). Used before enable_recurrence to force a fresh template
+    /// snapshot from the updated event — reactivation alone never re-snapshots.
+    func clearTemplateLink(eventId: UUID) async throws {
+        try await client
+            .from("events")
+            .update(["template_id": AnyJSON.null])
+            .eq("id", value: eventId.uuidString)
+            .execute()
+        eventLogger.info("API clearTemplateLink succeeded (id: \(eventId))")
+    }
+
     /// Distinct locations (name + coordinates) the current user has used in their own events.
     /// Used to let creators quick-pick a previously-entered place. Only rows with coordinates are returned.
     func getPreviousLocations() async throws -> [SavedLocation] {
