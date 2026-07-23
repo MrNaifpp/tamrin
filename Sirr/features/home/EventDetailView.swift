@@ -217,11 +217,13 @@ struct EventDetailView: View {
     private var progressPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("نسبة إكتمال التمرين")
+                Text("المسجلون في التمرين")
                     .font(TamrinFont.font(size: 15, weight: .medium))
                     .foregroundStyle(.white)
                 Spacer()
-                Text("\(confirmedCount.formatted())\\\(occurrence.capacity.formatted())")
+                // "٩ من ١٤" — the word «من» disambiguates registered-vs-capacity
+                // and pins the bidi order (the designer's "9\14" could flip in RTL).
+                Text("\(confirmedCount.formatted()) من \(occurrence.capacity.formatted())")
                     .font(TamrinFont.font(size: 15, weight: .bold))
                     .foregroundStyle(.white)
                     .contentTransition(.numericText())
