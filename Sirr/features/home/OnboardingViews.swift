@@ -52,7 +52,9 @@ private struct WelcomeChoiceCard: View {
     let dark: Bool
     var body: some View {
         HStack(spacing: 16) {
-            Image(systemName: symbol).font(.title2.bold()).frame(width: 54, height: 54)
+            Image(systemName: symbol)
+                .font(.system(size: 19, weight: .bold))
+                .frame(width: 46, height: 46)
                 .background(dark ? TamrinTheme.lime : TamrinTheme.secondary, in: .circle)
                 .foregroundStyle(TamrinTheme.ink)
             VStack(alignment: .leading, spacing: 5) {
@@ -63,10 +65,10 @@ private struct WelcomeChoiceCard: View {
             Image(systemName: "chevron.left").font(.caption.bold()).opacity(0.55)
         }
         .foregroundStyle(dark ? .white : .primary)
-        .padding(18)
-        .frame(maxWidth: .infinity, minHeight: 104)
-        .background(dark ? TamrinTheme.ink : TamrinTheme.glass, in: .rect(cornerRadius: 28))
-        .overlay(RoundedRectangle(cornerRadius: 28).stroke(.white.opacity(0.8)))
+        .padding(15)
+        .frame(maxWidth: .infinity, minHeight: 92)
+        .background(dark ? TamrinTheme.ink : TamrinTheme.glass, in: .rect(cornerRadius: 24))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(.white.opacity(0.8)))
         .shadow(color: .black.opacity(dark ? 0.14 : 0.04), radius: 22, y: 10)
     }
 }

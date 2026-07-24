@@ -221,8 +221,8 @@ private struct FlowHeader: View {
             HStack {
                 Button(action: back) {
                     Image(systemName: step == .identity ? "xmark" : "chevron.right")
-                        .font(.headline)
-                        .frame(width: 42, height: 42)
+                        .font(.system(size: TamrinControlMetrics.symbolSize, weight: .semibold))
+                        .frame(width: TamrinControlMetrics.touchTarget, height: TamrinControlMetrics.touchTarget)
                 }
                 .buttonStyle(.plain)
                 .background(TamrinTheme.glass, in: .circle)
@@ -341,9 +341,9 @@ private struct IdentityStepPage: View {
                                     UISelectionFeedbackGenerator().selectionChanged()
                                 } label: {
                                     Image(systemName: symbol)
-                                        .font(.system(size: 21, weight: .semibold))
+                                        .font(.system(size: TamrinControlMetrics.symbolSize, weight: .semibold))
                                         .foregroundStyle(isSymbolSelected(symbol) ? .white : .secondary)
-                                        .frame(width: 56, height: 56)
+                                        .frame(width: TamrinControlMetrics.touchTarget, height: TamrinControlMetrics.touchTarget)
                                         .background(isSymbolSelected(symbol) ? AnyShapeStyle(TamrinTheme.ink) : AnyShapeStyle(TamrinTheme.glass), in: .circle)
                                         .overlay(Circle().stroke(TamrinTheme.hairline))
                                 }
@@ -425,7 +425,7 @@ private struct TemplatesListPage: View {
                     }
                     .foregroundStyle(TamrinTheme.ink)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 64)
+                    .frame(minHeight: TamrinControlMetrics.actionHeight)
                     .background {
                         RoundedRectangle(cornerRadius: 24, style: .continuous)
                             .strokeBorder(TamrinTheme.ink.opacity(0.28), style: StrokeStyle(lineWidth: 1.6, dash: [7, 6]))
@@ -720,7 +720,7 @@ private struct ScheduleSheet: View {
 
             if plan.scheduleKind == .recurring {
                 VStack(spacing: 14) {
-                HStack(spacing: 8) {
+                HStack(spacing: 4) {
                     ForEach(days, id: \.0) { day, letter in
                         Button {
                             if plan.weekdays.contains(day) { plan.weekdays.remove(day) } else { plan.weekdays.insert(day) }
@@ -730,7 +730,7 @@ private struct ScheduleSheet: View {
                                 .font(TamrinFont.font(size: 17, weight: .bold))
                                 .foregroundStyle(plan.weekdays.contains(day) ? .white : .primary)
                                 .frame(maxWidth: .infinity)
-                                .frame(height: 52)
+                                .frame(minHeight: TamrinControlMetrics.touchTarget)
                                 .background(plan.weekdays.contains(day) ? AnyShapeStyle(TamrinTheme.ink) : AnyShapeStyle(TamrinTheme.secondary), in: .circle)
                                 .scaleEffect(plan.weekdays.contains(day) ? 1.06 : 1)
                                 .animation(.spring(response: 0.28, dampingFraction: 0.7), value: plan.weekdays.contains(day))
@@ -780,7 +780,8 @@ private struct ScheduleSheet: View {
             Label(title, systemImage: symbol)
                 .font(TamrinFont.font(size: 15, weight: .bold))
                 .foregroundStyle(plan.scheduleKind == kind ? .white : .primary)
-                .frame(maxWidth: .infinity).frame(height: 52)
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: TamrinControlMetrics.touchTarget)
                 .background(plan.scheduleKind == kind ? TamrinTheme.ink : TamrinTheme.secondary, in: .capsule)
         }
         .buttonStyle(.plain)
@@ -837,7 +838,7 @@ private struct CapacitySheet: View {
                             .monospacedDigit()
                             .foregroundStyle(plan.capacity == value ? .white : .primary)
                             .frame(maxWidth: .infinity)
-                            .frame(height: 42)
+                            .frame(minHeight: TamrinControlMetrics.touchTarget)
                             .background(plan.capacity == value ? AnyShapeStyle(TamrinTheme.ink) : AnyShapeStyle(TamrinTheme.secondary), in: .capsule)
                     }
                     .buttonStyle(.plain)
@@ -880,9 +881,9 @@ private struct CapacityRoundButton: View {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
         } label: {
             Image(systemName: symbol)
-                .font(.title2.bold())
+                .font(.system(size: TamrinControlMetrics.symbolSize, weight: .bold))
                 .foregroundStyle(TamrinTheme.ink)
-                .frame(width: 62, height: 62)
+                .frame(width: TamrinControlMetrics.touchTarget, height: TamrinControlMetrics.touchTarget)
                 .background(TamrinTheme.glass, in: .circle)
                 .overlay(Circle().stroke(TamrinTheme.hairline))
                 .shadow(color: .black.opacity(0.06), radius: 12, y: 5)
@@ -969,7 +970,9 @@ private struct PublishingReminderSheet: View {
 
     private func reminderButton(_ symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button { action(); UIImpactFeedbackGenerator(style: .light).impactOccurred() } label: {
-            Image(systemName: symbol).font(.title2.bold()).frame(width: 58, height: 58)
+            Image(systemName: symbol)
+                .font(.system(size: TamrinControlMetrics.symbolSize, weight: .bold))
+                .frame(width: TamrinControlMetrics.touchTarget, height: TamrinControlMetrics.touchTarget)
                 .background(TamrinTheme.secondary, in: .circle)
         }
         .buttonStyle(.plain).disabled(!enabled).opacity(enabled ? 1 : 0.3)
@@ -1122,7 +1125,7 @@ private struct PriceSheet: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(plan.price == amount ? .white : .primary)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 42)
+                        .frame(minHeight: TamrinControlMetrics.touchTarget)
                         .background(plan.price == amount ? AnyShapeStyle(TamrinTheme.ink) : AnyShapeStyle(TamrinTheme.secondary), in: .capsule)
                 }
                 .buttonStyle(.plain)
@@ -1301,14 +1304,14 @@ private struct MembersStepPage: View {
                         .submitLabel(.done)
                         .onSubmit(addManualName)
                         .padding(.horizontal, 16)
-                        .frame(height: 52)
+                        .frame(height: TamrinControlMetrics.actionHeight)
                         .background(TamrinTheme.glass, in: .capsule)
                         .overlay(Capsule().stroke(TamrinTheme.hairline))
                     Button(action: addManualName) {
                         Image(systemName: "plus")
                             .font(.headline)
                             .foregroundStyle(.white)
-                            .frame(width: 52, height: 52)
+                            .frame(width: TamrinControlMetrics.actionHeight, height: TamrinControlMetrics.actionHeight)
                             .background(TamrinTheme.ink, in: .circle)
                             .opacity(manualName.trimmingCharacters(in: .whitespaces).isEmpty ? 0.3 : 1)
                     }
@@ -1338,6 +1341,8 @@ private struct MembersStepPage: View {
                                             .foregroundStyle(.secondary)
                                             .frame(width: 30, height: 30)
                                             .background(TamrinTheme.secondary.opacity(0.7), in: .circle)
+                                            .frame(width: TamrinControlMetrics.touchTarget, height: TamrinControlMetrics.touchTarget)
+                                            .contentShape(.rect)
                                     }
                                     .buttonStyle(.plain)
                                 }

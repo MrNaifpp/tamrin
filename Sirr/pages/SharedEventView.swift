@@ -238,7 +238,7 @@ struct SharedEventView: View {
                                 .foregroundStyle(.white.opacity(0.7))
                         }
                         .font(.appBodySemibold)
-                        .frame(maxWidth: .infinity, minHeight: 54)
+                        .frame(maxWidth: .infinity, minHeight: TamrinControlMetrics.actionHeight)
                         .background(
                             RoundedRectangle(cornerRadius: 18, style: .continuous)
                                 .fill(Color.gray.opacity(0.4))
@@ -264,7 +264,7 @@ struct SharedEventView: View {
                                 }
                             }
                             .font(.appBodySemibold)
-                            .frame(maxWidth: .infinity, minHeight: 54)
+                            .frame(maxWidth: .infinity, minHeight: TamrinControlMetrics.actionHeight)
                             .background(
                                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                                     .fill(Color.white)

@@ -85,12 +85,12 @@ struct EventDetailView: View {
             Button {
                 dismiss()
             } label: {
-                Image(systemName: "chevron.backward")
-                    .font(.system(size: 17, weight: .semibold))
-                    .frame(width: 44, height: 44)
+                Label("إغلاق", systemImage: "chevron.backward")
+                    .labelStyle(.iconOnly)
             }
             .buttonStyle(.glass)
             .buttonBorderShape(.circle)
+            .controlSize(.regular)
             .padding(.horizontal, 20)
             .padding(.top, 6)
             .accessibilityLabel("إغلاق")
@@ -182,17 +182,20 @@ struct EventDetailView: View {
                         .font(TamrinFont.font(size: 13, weight: .medium))
                         .foregroundStyle(.red.opacity(0.95))
                 }
-                .padding(.horizontal, 18).frame(maxWidth: .infinity).frame(height: 52)
+                .padding(.horizontal, 18)
+                .frame(maxWidth: .infinity)
             }
             .buttonStyle(.glass)
             .buttonBorderShape(.capsule)
+            .controlSize(.regular)
             .accessibilityHint("يفتح تأكيد الاعتذار عن التمرين")
 
             if mine.status == .registered, occurrence.price > 0 {
                 Label("الدفع — قريبًا", systemImage: "creditcard")
                     .font(TamrinFont.headline)
                     .foregroundStyle(TamrinTheme.ink.opacity(0.55))
-                    .frame(maxWidth: .infinity).frame(height: 52)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: TamrinControlMetrics.actionHeight)
                     .background(.white.opacity(0.5), in: .capsule)
                     .accessibilityLabel("الدفع قريبًا")
             }
@@ -205,11 +208,12 @@ struct EventDetailView: View {
                 Label(full ? "انضم لقائمة الانتظار" : "سجل في التمرين", systemImage: "plus")
                     .font(TamrinFont.font(size: 16, weight: .bold))
                     .foregroundStyle(TamrinTheme.ink)
-                    .frame(maxWidth: .infinity).frame(height: 52)
+                    .frame(maxWidth: .infinity)
                     .contentShape(.capsule)
             }
             .buttonStyle(.glassProminent)
             .buttonBorderShape(.capsule)
+            .controlSize(.regular)
             .tint(.white.opacity(0.94))
         }
     }
@@ -287,11 +291,13 @@ struct EventDetailView: View {
                                 .font(TamrinFont.font(size: 13, weight: .bold))
                                 .buttonStyle(.glass)
                                 .buttonBorderShape(.capsule)
+                                .controlSize(.regular)
                         }
                         Button("إنهاء التكرار", role: .destructive) { showEndConfirm = true }
                             .font(TamrinFont.font(size: 13, weight: .bold))
                             .buttonStyle(.glass)
                             .buttonBorderShape(.capsule)
+                            .controlSize(.regular)
                             .tint(.red)
                     }
                 }
@@ -460,11 +466,11 @@ private struct RegistrationFlowSheet: View {
                             }
                         }
                         .padding(.horizontal, 14)
-                        .frame(height: 56)
                         .contentShape(.capsule)
                     }
                     .buttonStyle(.glassProminent)
                     .buttonBorderShape(.capsule)
+                    .controlSize(.regular)
                     .tint(registerMe ? .white.opacity(0.92) : .white.opacity(0.14))
 
                     Divider().overlay(.white.opacity(0.1)).padding(.vertical, 2)
@@ -495,11 +501,11 @@ private struct RegistrationFlowSheet: View {
                                     .font(TamrinFont.font(size: 15, weight: .medium))
                                     .foregroundStyle(.white.opacity(0.85))
                                     .frame(maxWidth: .infinity)
-                                    .frame(height: 52)
                                     .contentShape(.capsule)
                             }
                             .buttonStyle(.glass)
                             .buttonBorderShape(.capsule)
+                            .controlSize(.regular)
                         }
                     } else {
                         Button {
@@ -513,11 +519,11 @@ private struct RegistrationFlowSheet: View {
                                 .font(TamrinFont.font(size: 15, weight: .medium))
                                 .foregroundStyle(.white.opacity(0.85))
                                 .frame(maxWidth: .infinity)
-                                .frame(height: 52)
                                 .contentShape(.capsule)
                         }
                         .buttonStyle(.glass)
                         .buttonBorderShape(.capsule)
+                        .controlSize(.regular)
                     }
 
                     let others = feed.roster(for: occurrence).prefix(3)
@@ -559,10 +565,10 @@ private struct RegistrationFlowSheet: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .frame(height: 42)
             }
             .buttonStyle(.glassProminent)
             .buttonBorderShape(.capsule)
+            .controlSize(.regular)
             .tint(Color(red: 0.20, green: 0.47, blue: 0.96))
             .disabled(!canSubmit || submitting)
             .padding(.horizontal, 20)
@@ -616,10 +622,10 @@ private struct RegistrationFlowSheet: View {
                 Text("تم")
                     .font(TamrinFont.font(size: 17, weight: .bold))
                     .frame(maxWidth: .infinity)
-                    .frame(height: 42)
             }
             .buttonStyle(.glassProminent)
             .buttonBorderShape(.capsule)
+            .controlSize(.regular)
             .tint(Color(red: 0.20, green: 0.47, blue: 0.96))
             .padding(.horizontal, 20)
             .padding(.bottom, 16)

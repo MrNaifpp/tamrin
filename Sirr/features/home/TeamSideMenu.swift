@@ -1,15 +1,12 @@
 import SwiftUI
 
 /// Ported side-menu drawer (designer TeamSideMenu, member view) bound to
-/// HomeStore. Team selection is live; create-team / payments / settings /
-/// notifications are stubbed by the parent via the callbacks below. The
-/// admin/member experience switcher is intentionally dropped.
+/// HomeStore. Team selection is live; create-team and settings are supplied
+/// by the parent. The admin/member experience switcher is intentionally dropped.
 struct TeamSideMenu: View {
     @Bindable var feed: HomeStore
-    let close: () -> Void
     let createTeam: () -> Void
     let openSettings: () -> Void
-    let openPayments: () -> Void
     let onSelectTeam: (UUID) -> Void
 
     var body: some View {
@@ -30,7 +27,7 @@ struct TeamSideMenu: View {
                         }
                         .buttonStyle(.glassProminent)
                         .buttonBorderShape(.circle)
-                        .controlSize(.large)
+                        .controlSize(.regular)
                         .tint(.blue)
                         .accessibilityLabel("إنشاء مجموعة")
                     }
@@ -46,35 +43,12 @@ struct TeamSideMenu: View {
                                     TeamSideMenuRow(team: team, isSelected: team.id == feed.selectedTeamID)
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityAddTraits(team.id == feed.selectedTeamID ? .isSelected : [])
                             }
                         }
                         .frame(width: menuWidth)
                     }
                     .frame(maxHeight: proxy.size.height * 0.46)
-
-                    Button(action: openPayments) {
-                        HStack(spacing: 12) {
-                            Image(systemName: "creditcard.fill")
-                                .frame(width: 34, height: 34)
-                                .background(.white.opacity(0.1), in: .circle)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("دفعاتي")
-                                    .font(TamrinFont.font(size: 15, weight: .bold))
-                                Text("تابع القَطّات القادمة")
-                                    .font(TamrinFont.font(size: 11, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.55))
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(.white.opacity(0.35))
-                        }
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14)
-                        .frame(width: menuWidth, height: 64)
-                        .background(.white.opacity(0.07), in: .rect(cornerRadius: 20, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
 
                     Spacer(minLength: 0)
                 }
@@ -96,11 +70,11 @@ struct TeamSideMenu: View {
                             }
                             Spacer()
                         }
-                        .padding(.horizontal, 14)
-                        .frame(width: menuWidth, height: 60)
+                        .frame(width: menuWidth)
                     }
                     .buttonStyle(.glass)
                     .buttonBorderShape(.capsule)
+                    .controlSize(.regular)
                     .accessibilityLabel("الملف الشخصي")
                 }
                 .padding(.leading, 16)
@@ -126,7 +100,7 @@ private struct TeamSideMenuRow: View {
                 fallbackBackground: AnyShapeStyle(
                     LinearGradient(
                         colors: [
-                            isSelected ? Color(red: 0.86, green: 0.92, blue: 0.78) : Color(red: 0.80, green: 0.83, blue: 0.72),
+                            Color(red: 0.80, green: 0.83, blue: 0.72),
                             Color(red: 0.95, green: 0.95, blue: 0.84)
                         ],
                         startPoint: .topLeading,
@@ -151,15 +125,9 @@ private struct TeamSideMenuRow: View {
         }
         .padding(12)
         .background(
-            isSelected ? Color(red: 0.16, green: 0.18, blue: 0.13) : Color(red: 0.10, green: 0.10, blue: 0.10),
+            isSelected ? Color(red: 0.10, green: 0.10, blue: 0.10) : .clear,
             in: .rect(cornerRadius: 24, style: .continuous)
         )
-        .overlay {
-            if isSelected {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .strokeBorder(TamrinTheme.lime.opacity(0.6), lineWidth: 1.5)
-            }
-        }
     }
 }
 
@@ -168,7 +136,7 @@ private struct MenuProfileAvatar: View {
     var body: some View {
         Circle()
             .fill(.white.opacity(0.18))
-            .frame(width: 36, height: 36)
+            .frame(width: 32, height: 32)
             .overlay {
                 Text(String(name.prefix(1)))
                     .font(TamrinFont.font(size: 15, weight: .bold))
@@ -179,6 +147,6 @@ private struct MenuProfileAvatar: View {
 }
 
 #Preview {
-    TeamSideMenu(feed: HomeStore.preview, close: {}, createTeam: {}, openSettings: {},
-                 openPayments: {}, onSelectTeam: { _ in })
+    TeamSideMenu(feed: HomeStore.preview, createTeam: {}, openSettings: {},
+                 onSelectTeam: { _ in })
 }

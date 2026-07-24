@@ -111,9 +111,9 @@ struct LoginView: View {
                         .fontWeight(.semibold)
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 54)
+                        .frame(minHeight: TamrinControlMetrics.actionHeight)
                         .background(
-                            RoundedRectangle(cornerRadius: 27, style: .continuous)
+                            RoundedRectangle(cornerRadius: 24, style: .continuous)
                                 .fill(isEmailValid ? Color(red: 92/255, green: 92/255, blue: 92/255) : Color(white: 0.25))
                         )
                 }

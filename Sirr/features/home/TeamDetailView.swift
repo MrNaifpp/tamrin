@@ -234,6 +234,8 @@ struct TeamDetailView: View {
                             .padding(.horizontal, 15)
                             .frame(height: 38)
                             .background(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(.white.opacity(0.14)), in: .capsule)
+                            .frame(minHeight: TamrinControlMetrics.touchTarget)
+                            .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -506,6 +508,8 @@ struct TeamDetailView: View {
                                 .padding(.horizontal, 13)
                                 .frame(height: 34)
                                 .background(.white.opacity(0.12), in: .capsule)
+                                .frame(minHeight: TamrinControlMetrics.touchTarget)
+                                .contentShape(.rect)
                         }
                         .buttonStyle(.plain)
                     }
@@ -518,7 +522,7 @@ struct TeamDetailView: View {
                                 .font(TamrinFont.headline)
                                 .foregroundStyle(TamrinTheme.ink)
                                 .frame(maxWidth: .infinity)
-                                .frame(height: 52)
+                                .frame(minHeight: TamrinControlMetrics.actionHeight)
                                 .background(TamrinTheme.lime, in: .rect(cornerRadius: 18, style: .continuous))
                         }
                         .buttonStyle(SpringCardPressStyle())
@@ -558,7 +562,8 @@ private struct PlanPillTabBar: View {
                 .padding(.horizontal, 18)
                 .frame(height: 38)
                 .background(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(.white.opacity(0.14)), in: .capsule)
-                .contentShape(.capsule)
+                .frame(minHeight: TamrinControlMetrics.touchTarget)
+                .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])

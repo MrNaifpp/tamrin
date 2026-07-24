@@ -78,6 +78,15 @@ enum TamrinTheme {
     static let corner: CGFloat = 24
 }
 
+/// Shared control sizing for the iOS 26 interface. Native controls use the
+/// system's regular size; custom actions stay compact while preserving at
+/// least Apple's 44pt touch target.
+enum TamrinControlMetrics {
+    static let touchTarget: CGFloat = 44
+    static let actionHeight: CGFloat = 48
+    static let symbolSize: CGFloat = 17
+}
+
 /// الخلفية الفوتوغرافية المموهة المشتركة في شاشات Figma.
 /// الصورة تبقى ديكورًا فقط، بينما طبقة التعتيم تضمن وضوح النص في الوضعين.
 struct TamrinPhotoBackdrop: View {
@@ -186,7 +195,11 @@ struct TeamAvatarView: View {
 struct FloatingCloseButton: View {
     let action: () -> Void
     var body: some View {
-        Button(action: action) { Image(systemName: "xmark").font(.headline).frame(width: 42, height: 42) }
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.system(size: TamrinControlMetrics.symbolSize, weight: .semibold))
+                .frame(width: TamrinControlMetrics.touchTarget, height: TamrinControlMetrics.touchTarget)
+        }
             .buttonStyle(.plain).background(.thinMaterial, in: .circle)
             .overlay(Circle().stroke(.white.opacity(0.65)))
     }
@@ -211,7 +224,7 @@ struct PrimaryActionStyle: ButtonStyle {
         configuration.label
             .font(TamrinFont.headline)
             .frame(maxWidth: .infinity)
-            .frame(height: 54)
+            .frame(minHeight: TamrinControlMetrics.actionHeight)
             .foregroundStyle(.white)
             .background(TamrinTheme.ink.opacity(isEnabled ? (configuration.isPressed ? 0.75 : 1) : 0.22), in: .capsule)
             .shadow(color: isEnabled ? .black.opacity(0.14) : .clear, radius: 18, y: 9)
@@ -223,7 +236,9 @@ struct PrimaryActionStyle: ButtonStyle {
 struct SecondaryActionStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(TamrinFont.headline).frame(maxWidth: .infinity).frame(height: 52)
+            .font(TamrinFont.headline)
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: TamrinControlMetrics.actionHeight)
             .foregroundStyle(.primary)
             .background(TamrinTheme.secondary, in: .capsule)
             .opacity(configuration.isPressed ? 0.7 : 1)

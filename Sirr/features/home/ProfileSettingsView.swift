@@ -67,18 +67,20 @@ struct ProfileSettingsView: View {
                 withAnimation(.snappy) { isEditing = true; selectedDetent = .large }
             } label: {
                 Label("تعديل حسابي", systemImage: "pencil")
-                    .font(TamrinFont.font(size: 15, weight: .bold)).frame(maxWidth: .infinity).frame(height: 50)
+                    .font(TamrinFont.font(size: 15, weight: .bold))
+                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.glass).buttonBorderShape(.capsule)
+            .buttonStyle(.glass).buttonBorderShape(.capsule).controlSize(.regular)
 
             Button(role: .destructive) {
                 dismiss()
                 feed.onLogout?()
             } label: {
                 Label("تسجيل الخروج", systemImage: "rectangle.portrait.and.arrow.right")
-                    .font(TamrinFont.font(size: 15, weight: .bold)).frame(maxWidth: .infinity).frame(height: 50)
+                    .font(TamrinFont.font(size: 15, weight: .bold))
+                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.glass).buttonBorderShape(.capsule).tint(.red)
+            .buttonStyle(.glass).buttonBorderShape(.capsule).controlSize(.regular).tint(.red)
         }
     }
 

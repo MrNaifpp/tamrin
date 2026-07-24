@@ -2,9 +2,8 @@ import SwiftUI
 
 /// Reskinned Home feed (designer look) on mock data, with the ported side-menu
 /// drawer (open via the header ☰ button or a right-edge swipe) and live team
-/// switching. Deferred to later increments: real backend wiring, plan-template
-/// detail, and the payments / settings / notifications / create-team screens
-/// (their menu entries raise a "قريبًا" placeholder alert).
+/// switching. Deferred to later increments: real backend wiring and any
+/// remaining secondary destinations.
 struct DesignerHomeView: View {
     let appState: AppState
     @State private var feed: HomeStore
@@ -15,11 +14,11 @@ struct DesignerHomeView: View {
 
     @State private var isMenuOpen = false
     @State private var menuDragProgress: CGFloat = 0
+    @State private var isMenuGestureActive = false
     @State private var didMenuHaptic = false
     @State private var showPlanDetails = false
     @State private var showProfile = false
     @State private var showCreateTeam = false
-    @State private var comingSoon: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
 
@@ -79,16 +78,13 @@ struct DesignerHomeView: View {
         GeometryReader { proxy in
             let revealDistance = min(proxy.size.width * 0.84, 340)
             let progress = menuProgress()
-            let pageCorner = 44 * progress
 
             // In RTL, `leading` is the physical right edge.
             ZStack(alignment: .leading) {
                 TeamSideMenu(
                     feed: feed,
-                    close: { setMenu(open: false) },
                     createTeam: { setMenu(open: false); showCreateTeam = true },
                     openSettings: { setMenu(open: false); showProfile = true },
-                    openPayments: { setMenu(open: false); comingSoon = "الدفعات" },
                     onSelectTeam: { id in feed.selectTeam(id); setMenu(open: false) }
                 )
 
@@ -96,7 +92,9 @@ struct DesignerHomeView: View {
                     .ignoresSafeArea()
                     .frame(width: proxy.size.width, height: proxy.size.height)
                     .background { TamrinTheme.page.ignoresSafeArea() }
-                    .clipShape(.rect(cornerRadius: pageCorner, style: .continuous))
+                    // Resolve against the device's own rounded container so the
+                    // page keeps its screen silhouette throughout the drag.
+                    .clipShape(ConcentricRectangle(corners: .concentric(minimum: .fixed(44))))
                     .shadow(color: .black.opacity(0.34 * progress), radius: 32 * progress, x: 14 * progress, y: 0)
                     .overlay {
                         if progress > 0.02 {
@@ -108,21 +106,12 @@ struct DesignerHomeView: View {
                     .opacity(Double(1.0 - 0.18 * progress))
                     .scaleEffect(1 - (0.045 * progress), anchor: .trailing)
                     .offset(x: revealDistance * progress)
-                    .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.86), value: progress)
             }
             .background(Color(red: 0.067, green: 0.067, blue: 0.067))
             .ignoresSafeArea()
             .simultaneousGesture(menuGesture(revealDistance: revealDistance, screenWidth: proxy.size.width))
         }
         .ignoresSafeArea()
-        .alert("قريبًا", isPresented: Binding(
-            get: { comingSoon != nil },
-            set: { if !$0 { comingSoon = nil } }
-        )) {
-            Button("حسنًا", role: .cancel) { comingSoon = nil }
-        } message: {
-            Text("\(comingSoon ?? "") — تحت التطوير")
-        }
     }
 
     private var mainContent: some View {
@@ -228,14 +217,18 @@ struct DesignerHomeView: View {
             isMenuOpen = open
             menuDragProgress = 0
         }
+        isMenuGestureActive = false
         didMenuHaptic = false
     }
 
     private func menuGesture(revealDistance: CGFloat, screenWidth: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 16, coordinateSpace: .local)
+        DragGesture(minimumDistance: 8, coordinateSpace: .local)
             .onChanged { value in
-                let startsAtRightEdge = value.startLocation.x > screenWidth - 34
-                guard isMenuOpen || startsAtRightEdge else { return }
+                if !isMenuGestureActive {
+                    let startsAtRightEdge = value.startLocation.x > screenWidth - 34
+                    guard isMenuOpen || startsAtRightEdge else { return }
+                    isMenuGestureActive = true
+                }
                 if isMenuOpen {
                     menuDragProgress = min(max(-value.translation.width / revealDistance, -1), 0)
                 } else {
@@ -247,6 +240,8 @@ struct DesignerHomeView: View {
                 }
             }
             .onEnded { value in
+                guard isMenuGestureActive else { return }
+                isMenuGestureActive = false
                 let predicted = isMenuOpen
                     ? 1 + min(max(-value.predictedEndTranslation.width / revealDistance, -1), 0)
                     : min(max(-value.predictedEndTranslation.width / revealDistance, 0), 1)
@@ -341,28 +336,28 @@ private struct HomeTopBar: View {
     var body: some View {
         HStack(spacing: 14) {
             Button(action: openMenu) {
-                Image(systemName: "line.3.horizontal")
-                    .font(.system(size: 18, weight: .semibold))
-                    .frame(width: 48, height: 48)
+                Label("المجموعات", systemImage: "line.3.horizontal")
+                    .labelStyle(.iconOnly)
             }
             .buttonStyle(.glass)
             .buttonBorderShape(.circle)
+            .controlSize(.regular)
             .accessibilityLabel("المجموعات")
 
             Button(action: openPlan) {
                 HStack(spacing: 9) {
                     Text(team?.name ?? "المجموعة")
-                        .font(TamrinFont.font(size: 18, weight: .medium))
+                        .font(TamrinFont.font(size: 16, weight: .medium))
                         .foregroundStyle(.primary)
                         .lineLimit(1).minimumScaleFactor(0.74)
                     Image(systemName: "chevron.left")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 18).frame(height: 48)
             }
             .buttonStyle(.glass)
             .buttonBorderShape(.capsule)
+            .controlSize(.regular)
             .accessibilityLabel("تفاصيل قالب التمرين")
 
             Spacer(minLength: 0)
