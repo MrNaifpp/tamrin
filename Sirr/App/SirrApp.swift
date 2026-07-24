@@ -31,13 +31,26 @@ struct SirrApp: App {
     }
     
     private func setupAppFont() {
-        // Fonts are loaded via Info.plist (INFOPLIST_KEY_UIAppFonts in build settings)
-        // Set default font for UI components - TheYearofHandicrafts (عام الحرف)
-        if let customFont = UIFont(name: "TheYearofHandicrafts-Regular", size: 18) {
-            UILabel.appearance().font = customFont
-            UITextField.appearance().font = customFont
-            UITextView.appearance().font = customFont
-        }
+        // Keep UIKit-backed controls on the same Thmanyah + ss01 pipeline as
+        // SwiftUI. The builder fails loudly if a bundled face is ever missing.
+        let customFont = TamrinFont.uiFont(size: 18)
+        UILabel.appearance().font = customFont
+        UITextField.appearance().font = customFont
+        UITextView.appearance().font = customFont
+
+        let navigationBar = UINavigationBar.appearance()
+        navigationBar.titleTextAttributes = [
+            .font: TamrinFont.uiFont(size: 17, weight: .bold)
+        ]
+        navigationBar.largeTitleTextAttributes = [
+            .font: TamrinFont.uiFont(size: 34, weight: .bold)
+        ]
+
+        let barButton = UIBarButtonItem.appearance()
+        let barButtonFont: [NSAttributedString.Key: Any] = [
+            .font: TamrinFont.uiFont(size: 17, weight: .medium)
+        ]
+        barButton.setTitleTextAttributes(barButtonFont, for: .normal)
+        barButton.setTitleTextAttributes(barButtonFont, for: .highlighted)
     }
 }
-

@@ -45,15 +45,13 @@ struct LoginOnbord: View {
                         VStack(spacing: 6) {
                             Spacer(minLength: 0)
                             Text("تمريــن")
-                                .font(.subheadline)
+                                .font(TamrinFont.subheadline)
                                 .foregroundStyle(Color(white: 0.45))
                             Text("تجربــة مثاليـــة")
-                                .font(.title)
-                                .fontWeight(.bold)
+                                .font(TamrinFont.font(size: 28, weight: .bold))
                                 .foregroundStyle(.black)
                             Text("لإدارة التماريـن")
-                                .font(.title)
-                                .fontWeight(.bold)
+                                .font(TamrinFont.font(size: 28, weight: .bold))
                                 .foregroundStyle(.black)
                             HStack(spacing: 2) {
                                 Text("تبـدأ ")
@@ -61,8 +59,7 @@ struct LoginOnbord: View {
                                 Text("مـن هنـــا")
                                     .foregroundStyle(Color(red: 0.35, green: 0.72, blue: 0.45))
                             }
-                            .font(.title)
-                            .fontWeight(.bold)
+                            .font(TamrinFont.font(size: 28, weight: .bold))
                             .padding(.bottom, 24)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -92,7 +89,7 @@ struct LoginOnbord: View {
                     // Second area: dark charcoal background (rounded top)
                     VStack(spacing: 0) {
                         Text("أنشئ وسجِّل في التمارين بطريقة رائعة، وادفع أو اجمع القطة بسهولة.")
-                            .font(.body)
+                            .font(TamrinFont.body)
                             .foregroundStyle(Color(.black.opacity(0.5)))
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 28)
@@ -103,8 +100,7 @@ struct LoginOnbord: View {
                             onNavigateToLogin?()
                         } label: {
                             Text("سجل بالبريد الالكتروني")
-                                .font(.headline)
-                                .fontWeight(.semibold)
+                                .font(TamrinFont.font(size: 17, weight: .medium))
                                 .foregroundStyle(.white)
                                 .frame(maxWidth: .infinity)
                                 .frame(minHeight: TamrinControlMetrics.actionHeight)
@@ -129,8 +125,7 @@ struct LoginOnbord: View {
                                         Image(systemName: "apple.logo")
                                             .font(.system(size: 20, weight: .medium))
                                         Text("المتابعة عبر Apple")
-                                            .font(.headline)
-                                            .fontWeight(.semibold)
+                                            .font(TamrinFont.font(size: 17, weight: .medium))
                                     }
                                     .foregroundStyle(.black)
                                 }

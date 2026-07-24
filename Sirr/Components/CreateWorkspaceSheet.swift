@@ -54,7 +54,7 @@ struct CreateWorkspaceSheet: View {
                             ProgressView().tint(.black)
                         } else {
                             Text("إنشاء")
-                                .font(.headline)
+                                .font(TamrinFont.font(size: 17, weight: .bold))
                                 .foregroundStyle(.black)
                         }
                     }

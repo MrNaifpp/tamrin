@@ -148,10 +148,6 @@ struct UpcomingScheduleView: View {
                 }
                 .frame(minWidth: 52)
 
-                Rectangle()
-                    .fill(Color.black.opacity(0.08))
-                    .frame(width: 1, height: 56)
-
                 VStack(alignment: .leading, spacing: 6) {
                     Text(event.name)
                         .font(.appBodySemibold)
@@ -190,10 +186,6 @@ struct UpcomingScheduleView: View {
                         .foregroundStyle(.secondary)
                 }
                 .frame(minWidth: 52)
-
-                Rectangle()
-                    .fill(Color.black.opacity(0.08))
-                    .frame(width: 1, height: 36)
 
                 Text(event.name)
                     .font(.appBodyMedium)

@@ -78,6 +78,12 @@ struct DesignerHomeView: View {
         GeometryReader { proxy in
             let revealDistance = min(proxy.size.width * 0.84, 340)
             let progress = menuProgress()
+            // A single, non-animated silhouette is used for the whole gesture.
+            // `isUniform` keeps all four corners identical while the page moves.
+            let screenSilhouette = ConcentricRectangle(
+                corners: .concentric(minimum: .fixed(44)),
+                isUniform: true
+            )
 
             // In RTL, `leading` is the physical right edge.
             ZStack(alignment: .leading) {
@@ -92,9 +98,9 @@ struct DesignerHomeView: View {
                     .ignoresSafeArea()
                     .frame(width: proxy.size.width, height: proxy.size.height)
                     .background { TamrinTheme.page.ignoresSafeArea() }
-                    // Resolve against the device's own rounded container so the
-                    // page keeps its screen silhouette throughout the drag.
-                    .clipShape(ConcentricRectangle(corners: .concentric(minimum: .fixed(44))))
+                    // Clip from the first drag point with the same concentric
+                    // iPhone silhouette used at the final drawer position.
+                    .clipShape(screenSilhouette)
                     .shadow(color: .black.opacity(0.34 * progress), radius: 32 * progress, x: 14 * progress, y: 0)
                     .overlay {
                         if progress > 0.02 {
@@ -104,8 +110,13 @@ struct DesignerHomeView: View {
                         }
                     }
                     .opacity(Double(1.0 - 0.18 * progress))
-                    .scaleEffect(1 - (0.045 * progress), anchor: .trailing)
-                    .offset(x: revealDistance * progress)
+                    // Deliberately avoid scaling after clipping: scaling also
+                    // scales the corner radius and caused the square-to-round
+                    // transition during an interactive swipe.
+                    // Gesture translations use the screen's physical x-axis:
+                    // opening starts at the right edge and moves left, so the
+                    // page follows the finger with a negative translation.
+                    .offset(x: -revealDistance * progress)
             }
             .background(Color(red: 0.067, green: 0.067, blue: 0.067))
             .ignoresSafeArea()

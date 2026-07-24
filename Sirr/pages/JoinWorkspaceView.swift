@@ -98,7 +98,7 @@ struct JoinWorkspaceView: View {
                     ProgressView().tint(.black)
                 } else {
                     Text(p.isMember ? "فتح المجموعة" : (isLoggedIn ? "انضمام" : "سجّل الدخول للانضمام"))
-                        .font(.headline)
+                        .font(TamrinFont.font(size: 17, weight: .bold))
                         .foregroundStyle(.black)
                 }
             }

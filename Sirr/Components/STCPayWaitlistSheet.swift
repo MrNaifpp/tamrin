@@ -46,19 +46,19 @@ struct STCPayWaitlistSheet: View {
                     .foregroundStyle(.white)
 
                 Text("امتلأت المقاعد")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(TamrinFont.font(size: 22, weight: .bold))
                     .foregroundStyle(.white)
                     .padding(.top, 16)
 
                 Text(eventName)
-                    .font(.system(size: 15))
+                    .font(TamrinFont.font(size: 15))
                     .foregroundStyle(Color(white: 0.7))
                     .padding(.top, 4)
 
                 Text(didJoin
                      ? "أنت الآن في قائمة الانتظار. سنرسل لك تنبيهاً عندما يتوفر مقعد."
                      : "انضم لقائمة الانتظار، وسنرسل لك تنبيهاً عندما يلغي شخص ما حجزه.")
-                    .font(.system(size: 15))
+                    .font(TamrinFont.font(size: 15))
                     .foregroundStyle(Color(white: 0.85))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
@@ -83,7 +83,7 @@ struct STCPayWaitlistSheet: View {
                             ProgressView().tint(.black)
                         }
                         Text(didJoin ? "تم — حسناً" : "انضم لقائمة الانتظار")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(TamrinFont.font(size: 17, weight: .bold))
                             .foregroundStyle(.black)
                     }
                     .frame(maxWidth: .infinity)

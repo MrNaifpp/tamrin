@@ -178,11 +178,6 @@ struct NewEventView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 6)
                 
-                Divider()
-                    .background(Color.white.opacity(0.4))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
-                
                 // Price and People section
                 priceAndPeopleSection
                     .padding(.horizontal, 16)
@@ -337,12 +332,12 @@ struct NewEventView: View {
                     .foregroundStyle(.white)
 
                 Text("أضف رقم STC Pay")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(TamrinFont.font(size: 22, weight: .bold))
                     .foregroundStyle(.white)
                     .padding(.top, 16)
 
                 Text("لاستلام مدفوعات الفعاليات المدفوعة، أضف رقم STC Pay الخاص بك.")
-                    .font(.system(size: 14))
+                    .font(TamrinFont.font(size: 14))
                     .foregroundStyle(Color(white: 0.8))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 28)
@@ -357,7 +352,7 @@ struct NewEventView: View {
                 .textContentType(.telephoneNumber)
                 .focused($guardrailFieldFocused)
                 .multilineTextAlignment(.trailing)
-                .font(.system(size: 16))
+                .font(TamrinFont.font(size: 16))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 18)
                 .frame(height: 52)
@@ -370,7 +365,7 @@ struct NewEventView: View {
 
                 if let err = guardrailError {
                     Text(err)
-                        .font(.system(size: 12))
+                        .font(TamrinFont.font(size: 12))
                         .foregroundStyle(.red)
                         .padding(.top, 8)
                 }
@@ -383,7 +378,7 @@ struct NewEventView: View {
                     HStack {
                         if isSavingGuardrailNumber { ProgressView().tint(.black) }
                         Text("حفظ ومتابعة")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(TamrinFont.font(size: 17, weight: .bold))
                             .foregroundStyle(.black)
                     }
                     .frame(maxWidth: .infinity)
@@ -553,7 +548,7 @@ struct NewEventView: View {
                     TextField("", text: value, prompt: Text("0").foregroundColor(.white.opacity(0.5)))
                         .keyboardType(.numberPad)
                         .multilineTextAlignment(.center)
-                        .font(.system(size: 32, weight: .bold))
+                        .font(TamrinFont.font(size: 32, weight: .bold))
                         .foregroundStyle(.white)
                     // If first row/field selected (field is for الملعب price input)
                     if title.contains("قيمة الملعب") {
@@ -564,7 +559,7 @@ struct NewEventView: View {
                             .padding(.leading, 4)
                     }
                 }
-                    .font(.system(size: 32, weight: .bold))
+                    .font(TamrinFont.font(size: 32, weight: .bold))
                     .foregroundStyle(.white)
                     .keyboardType(.numberPad)
                     .multilineTextAlignment(.center)
@@ -748,12 +743,6 @@ struct NewEventView: View {
                 }
                 .buttonStyle(.plain)
                 
-                // Horizontal separator line
-                Rectangle()
-                    .fill(.white.opacity(0.1))
-                    .frame(height: 1)
-                    .padding(.horizontal, 36)
-                
                 // Bottom section - End date
                 Button {
                     dismissKeyboard()
@@ -792,24 +781,17 @@ struct NewEventView: View {
                         .fill(.white.opacity(0.7))
                         .frame(width: 8, height: 8)
                     
-                    // Dashed line using Path
-                    Path { path in
-                        let dashLength: CGFloat = 4
-                        let dashGap: CGFloat = 4
-                        var y: CGFloat = 0
-                        let totalHeight: CGFloat = 40
-                        
-                        while y < totalHeight {
-                            path.move(to: CGPoint(x: 0, y: y))
-                            path.addLine(to: CGPoint(x: 0, y: min(y + dashLength, totalHeight)))
-                            y += dashLength + dashGap
+                    VStack(spacing: 4) {
+                        ForEach(0..<5, id: \.self) { _ in
+                            Capsule()
+                                .fill(.white.opacity(0.3))
+                                .frame(width: 1, height: 4)
                         }
                     }
-                    .stroke(.white.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                    .frame(width: 1, height: 40)
+                    .frame(width: 1, height: 40, alignment: .top)
                     
                     Circle()
-                        .stroke(.white.opacity(0.7), lineWidth: 2)
+                        .fill(.white.opacity(0.3))
                         .frame(width: 8, height: 8)
                 }
                 .padding(.leading, 20)
@@ -951,12 +933,6 @@ struct NewEventView: View {
                     .frame(height: 60)
                 }
                 .buttonStyle(.plain)
-                
-                // Horizontal separator line
-                Rectangle()
-                    .fill(.white.opacity(0.1))
-                    .frame(height: 1)
-                    .padding(.horizontal, 36)
                 
                 // Second row - Number of People
                 Button {
@@ -1127,10 +1103,6 @@ struct NewEventView: View {
                                 
                                 // Selection indicator
                                 if selectedImageResource == imageResource {
-                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .stroke(Color.blue, lineWidth: 3)
-                                        .frame(width: 140, height: 140)
-                                    
                                     VStack {
                                         Spacer()
                                         HStack {

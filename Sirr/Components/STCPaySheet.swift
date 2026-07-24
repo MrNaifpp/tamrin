@@ -47,21 +47,21 @@ struct STCPaySheet: View {
                 Spacer().frame(height: 20)
 
                 Text("ادفع عبر STC Pay")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(TamrinFont.font(size: 22, weight: .bold))
                     .foregroundStyle(.white)
 
                 Text(eventName)
-                    .font(.system(size: 15))
+                    .font(TamrinFont.font(size: 15))
                     .foregroundStyle(Color(white: 0.7))
                     .padding(.top, 4)
 
                 // Amount card
                 VStack(spacing: 4) {
                     Text("المبلغ")
-                        .font(.system(size: 13))
+                        .font(TamrinFont.font(size: 13))
                         .foregroundStyle(Color(white: 0.6))
                     Text(String(format: "%.0f ر.س", amount * Double(groupSize)))
-                        .font(.system(size: 32, weight: .bold))
+                        .font(TamrinFont.font(size: 32, weight: .bold))
                         .foregroundStyle(.white)
                 }
                 .frame(maxWidth: .infinity)
@@ -76,12 +76,13 @@ struct STCPaySheet: View {
                 // STC Pay number card with copy
                 VStack(spacing: 8) {
                     Text("أرسل إلى رقم STC Pay")
-                        .font(.system(size: 13))
+                        .font(TamrinFont.font(size: 13))
                         .foregroundStyle(Color(white: 0.6))
 
                     HStack(spacing: 12) {
                         Text(prettyNumber)
-                            .font(.system(size: 22, weight: .semibold, design: .monospaced))
+                            .font(TamrinFont.font(size: 22, weight: .bold))
+                            .monospacedDigit()
                             .foregroundStyle(.white)
 
                         Button {
@@ -127,7 +128,7 @@ struct STCPaySheet: View {
                     dismiss()
                 } label: {
                     Text("أرسلت المبلغ")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(TamrinFont.font(size: 17, weight: .bold))
                         .foregroundStyle(.black)
                         .frame(maxWidth: .infinity)
                         .frame(height: 54)
@@ -145,7 +146,7 @@ struct STCPaySheet: View {
                 VStack {
                     Spacer()
                     Text("تم نسخ الرقم")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(TamrinFont.font(size: 14, weight: .bold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)
@@ -163,14 +164,14 @@ struct STCPaySheet: View {
     private func stepRow(index: Int, text: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Text(text)
-                .font(.system(size: 14))
+                .font(TamrinFont.font(size: 14))
                 .foregroundStyle(Color(white: 0.85))
                 .multilineTextAlignment(.trailing)
                 .frame(maxWidth: .infinity, alignment: .trailing)
             ZStack {
                 Circle().fill(Color.white.opacity(0.15)).frame(width: 24, height: 24)
                 Text("\(index)")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(TamrinFont.font(size: 13, weight: .bold))
                     .foregroundStyle(.white)
             }
         }

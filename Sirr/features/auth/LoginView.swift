@@ -107,8 +107,7 @@ struct LoginView: View {
                 // Next button fixed at bottom (navigates to OTP when tapped)
                 NavigationLink(destination: LoginOTPView(email: trimmedEmail, vm: vm)) {
                     Text("التالي")
-                        .font(.headline)
-                        .fontWeight(.semibold)
+                        .font(TamrinFont.font(size: 17, weight: .medium))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: TamrinControlMetrics.actionHeight)

@@ -369,7 +369,7 @@ private extension EventPageView {
                 navigationPath.append(NavigationDestination.newEvent)
             } label: {
                 Text("إنشاء تمرين")
-                    .font(.headline)
+                    .font(TamrinFont.font(size: 17, weight: .bold))
                     .foregroundStyle(.black)
                     .frame(maxWidth: .infinity)
                     .frame(height: 54)
@@ -400,7 +400,7 @@ private extension EventPageView {
                 showCreateWorkspace = true
             } label: {
                 Text("إنشاء مجموعة")
-                    .font(.headline)
+                    .font(TamrinFont.font(size: 17, weight: .bold))
                     .foregroundStyle(.black)
                     .frame(maxWidth: .infinity)
                     .frame(height: 54)

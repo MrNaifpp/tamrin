@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreText
+import UIKit
 
 enum TamrinFontWeight {
     case light, regular, medium, bold
@@ -12,23 +13,49 @@ enum TamrinFontWeight {
         case .bold: "Thmanyahsans12-Bold"
         }
     }
+
+    init(_ weight: Font.Weight) {
+        switch weight {
+        case .ultraLight, .thin, .light:
+            self = .light
+        case .medium:
+            self = .medium
+        case .semibold, .bold, .heavy, .black:
+            self = .bold
+        default:
+            self = .regular
+        }
+    }
 }
 
 enum TamrinFont {
-    static func font(size: CGFloat, weight: TamrinFontWeight = .regular, features: Bool = true) -> Font {
-        guard features else { return .custom(weight.postScriptName, size: size) }
-        let attributes: [CFString: Any] = [
-            kCTFontNameAttribute: weight.postScriptName,
-            kCTFontSizeAttribute: size,
-            kCTFontFeatureSettingsAttribute: [
-                [
-                    kCTFontFeatureTypeIdentifierKey: 35,
-                    kCTFontFeatureSelectorIdentifierKey: 2
-                ]
-            ]
+    /// Thmanyah's identity alternates. CoreText enables Arabic shaping,
+    /// ligatures, kerning and marks automatically; `ss01` is the intentional
+    /// brand alternate and must stay enabled everywhere text is rendered.
+    private static let brandFeatures: [[UIFontDescriptor.FeatureKey: Any]] = [
+        [
+            .type: kStylisticAlternativesType,
+            .selector: kStylisticAltOneOnSelector
         ]
-        let descriptor = CTFontDescriptorCreateWithAttributes(attributes as CFDictionary)
-        return Font(CTFontCreateWithFontDescriptor(descriptor, size, nil))
+    ]
+
+    static func uiFont(size: CGFloat, weight: TamrinFontWeight = .regular) -> UIFont {
+        guard let base = UIFont(name: weight.postScriptName, size: size) else {
+            preconditionFailure("Missing bundled Thmanyah font: \(weight.postScriptName)")
+        }
+        let descriptor = base.fontDescriptor.addingAttributes([
+            .featureSettings: brandFeatures
+        ])
+        let result = UIFont(descriptor: descriptor, size: size)
+        precondition(
+            result.fontName == weight.postScriptName,
+            "Unexpected font fallback: \(result.fontName)"
+        )
+        return result
+    }
+
+    static func font(size: CGFloat, weight: TamrinFontWeight = .regular) -> Font {
+        Font(uiFont(size: size, weight: weight) as CTFont)
     }
 
     static let body = font(size: 17, weight: .regular)
@@ -68,7 +95,6 @@ enum TamrinTheme {
             ? UIColor(white: 0.13, alpha: 0.94)
             : UIColor(white: 1, alpha: 0.74)
     })
-    static let hairline = Color.primary.opacity(0.08)
     static let ink = Color(red: 0.075, green: 0.08, blue: 0.07)
     static let lime = Color(red: 0.76, green: 0.92, blue: 0.39)
     /// اللون الأخضر المستخدم كلَكْنة في ملف Figma (العناوين والحالات الإيجابية).
@@ -131,10 +157,6 @@ struct TamrinCapsuleField: ViewModifier {
             .padding(.horizontal, 18)
             .frame(minHeight: 56)
             .background(.thinMaterial, in: .capsule)
-            .overlay {
-                Capsule()
-                    .stroke(.white.opacity(focused ? 0.78 : 0.22), lineWidth: focused ? 1.5 : 1)
-            }
     }
 }
 
@@ -164,7 +186,6 @@ struct IconOrb: View {
         Image(systemName: symbol).font(.system(size: size * 0.38, weight: .semibold))
             .foregroundStyle(tint).frame(width: size, height: size)
             .background(TamrinTheme.glass, in: .circle)
-            .overlay(Circle().stroke(TamrinTheme.hairline, lineWidth: 1))
             .shadow(color: .black.opacity(0.06), radius: 14, y: 6)
     }
 }
@@ -205,7 +226,6 @@ struct FloatingCloseButton: View {
                 .frame(width: TamrinControlMetrics.touchTarget, height: TamrinControlMetrics.touchTarget)
         }
             .buttonStyle(.plain).background(.thinMaterial, in: .circle)
-            .overlay(Circle().stroke(.white.opacity(0.65)))
     }
 }
 
@@ -278,7 +298,7 @@ struct DayPicker: View {
                     if selection.contains(day) { selection.remove(day) } else { selection.insert(day) }
                     UISelectionFeedbackGenerator().selectionChanged()
                 } label: {
-                    Text(label).font(.subheadline.weight(.semibold))
+                    Text(label).font(TamrinFont.font(size: 15, weight: .bold))
                         .frame(maxWidth: .infinity).frame(height: 42)
                         .foregroundStyle(selection.contains(day) ? .white : .primary)
                         .background(selection.contains(day) ? Color.black : TamrinTheme.secondary, in: .circle)
@@ -304,7 +324,7 @@ struct StatusPill: View {
         } icon: {
             if let symbol { Image(systemName: symbol) }
         }
-        .font(.caption.weight(.semibold)).foregroundStyle(color)
+        .font(TamrinFont.font(size: 12, weight: .bold)).foregroundStyle(color)
         .padding(.horizontal, 10).padding(.vertical, 7)
         .background(color.opacity(0.1), in: .capsule)
     }

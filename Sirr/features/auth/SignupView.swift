@@ -68,8 +68,7 @@ struct SignupView: View {
                     onComplete?()
                 } label: {
                     Text("التالي - الصفحة الرئيسية")
-                        .font(.headline)
-                        .fontWeight(.semibold)
+                        .font(TamrinFont.font(size: 17, weight: .medium))
                         .foregroundStyle(.black)
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: TamrinControlMetrics.actionHeight)
@@ -220,8 +219,7 @@ struct SignupView: View {
                                 .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         } else {
                             Text("التالي")
-                                .font(.headline)
-                                .fontWeight(.semibold)
+                                .font(TamrinFont.font(size: 17, weight: .medium))
                                 .foregroundStyle(.white)
                         }
                     }

@@ -27,7 +27,7 @@ struct WorkspaceAvatar: View {
             .frame(width: size, height: size)
             .overlay(
                 Text(String(name.trimmingCharacters(in: .whitespaces).prefix(1)))
-                    .font(.system(size: size * 0.45, weight: .bold))
+                    .font(TamrinFont.font(size: size * 0.45, weight: .bold))
                     .foregroundStyle(.white)
             )
     }

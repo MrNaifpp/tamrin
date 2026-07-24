@@ -13,79 +13,134 @@ struct TeamSideMenu: View {
         GeometryReader { proxy in
             let menuWidth = min(proxy.size.width - 94, 308)
 
-            ZStack(alignment: .bottomLeading) {
-                Color(red: 0.067, green: 0.067, blue: 0.067).ignoresSafeArea()
+            ZStack(alignment: .topLeading) {
+                Color(red: 0.067, green: 0.067, blue: 0.067)
+                    .ignoresSafeArea()
 
-                VStack(alignment: .leading, spacing: 20) {
-                    HStack(alignment: .center, spacing: 14) {
-                        Text("المجموعات")
-                            .font(TamrinFont.font(size: 22, weight: .bold))
-                            .foregroundStyle(.white)
-                        Spacer()
-                        Button(action: createTeam) {
-                            Label("إنشاء مجموعة", systemImage: "plus")
-                                .labelStyle(.iconOnly)
-                                .font(.system(size: 18, weight: .semibold))
-                                .frame(width: TamrinControlMetrics.glassIconContent, height: TamrinControlMetrics.glassIconContent)
-                        }
-                        .buttonStyle(.glassProminent)
-                        .buttonBorderShape(.circle)
-                        .controlSize(.regular)
-                        .tint(.blue)
-                        .accessibilityLabel("إنشاء مجموعة")
-                    }
-                    .frame(width: menuWidth)
+                VStack(alignment: .leading, spacing: 0) {
+                    menuHeader(width: menuWidth)
+                        .padding(.bottom, 10)
 
-                    ScrollView(showsIndicators: false) {
-                        VStack(spacing: 8) {
-                            ForEach(feed.teams) { team in
-                                Button {
-                                    UISelectionFeedbackGenerator().selectionChanged()
-                                    onSelectTeam(team.id)
-                                } label: {
-                                    TeamSideMenuRow(team: team, isSelected: team.id == feed.selectedTeamID)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityAddTraits(team.id == feed.selectedTeamID ? .isSelected : [])
-                            }
-                        }
-                        .frame(width: menuWidth)
-                    }
-                    .frame(maxHeight: proxy.size.height * 0.46)
+                    groupsScrollWithEdgeEffects(width: menuWidth)
+                        .frame(maxHeight: .infinity)
 
-                    Spacer(minLength: 0)
+                    profileButton(width: menuWidth)
+                        .padding(.top, 12)
                 }
-                .padding(.top, max(proxy.safeAreaInsets.top + 40, 82))
+                .frame(width: menuWidth, alignment: .leading)
+                .frame(maxHeight: .infinity, alignment: .topLeading)
+                .padding(.top, max(proxy.safeAreaInsets.top + 24, 68))
+                .padding(.bottom, max(proxy.safeAreaInsets.bottom + 16, 30))
                 .padding(.leading, 16)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-
-                VStack {
-                    Spacer()
-                    Button(action: openSettings) {
-                        HStack(spacing: 10) {
-                            MenuProfileAvatar(name: feed.profileName)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(feed.profileName.isEmpty ? "حسابي" : feed.profileName)
-                                    .font(TamrinFont.font(size: 14, weight: .bold))
-                                Text("الملف الشخصي")
-                                    .font(TamrinFont.font(size: 10, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.5))
-                            }
-                            Spacer()
-                        }
-                        .frame(width: menuWidth)
-                    }
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.capsule)
-                    .controlSize(.regular)
-                    .accessibilityLabel("الملف الشخصي")
-                }
-                .padding(.leading, 16)
-                .padding(.bottom, max(proxy.safeAreaInsets.bottom + 24, 40))
             }
         }
         .environment(\.layoutDirection, .rightToLeft)
         .colorScheme(.dark)
+    }
+
+    private func menuHeader(width: CGFloat) -> some View {
+        HStack(alignment: .center, spacing: 14) {
+            Text("المجموعات")
+                .font(TamrinFont.font(size: 22, weight: .bold))
+                .foregroundStyle(.white)
+
+            Spacer()
+
+            Button(action: createTeam) {
+                Label("إنشاء مجموعة", systemImage: "plus")
+                    .labelStyle(.iconOnly)
+                    .font(.system(size: 18, weight: .semibold))
+                    .frame(width: TamrinControlMetrics.glassIconContent, height: TamrinControlMetrics.glassIconContent)
+            }
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.circle)
+            .controlSize(.regular)
+            .tint(.blue)
+            .accessibilityLabel("إنشاء مجموعة")
+            .accessibilityHint("يفتح شاشة إنشاء مجموعة جديدة")
+        }
+        .frame(width: width)
+    }
+
+    @ViewBuilder
+    private func groupsScrollWithEdgeEffects(width: CGFloat) -> some View {
+        if #available(iOS 26.0, *) {
+            groupsScroll(width: width)
+                // Native iOS 26 scroll-edge material creates the same soft
+                // fade under the title and above the anchored profile card.
+                .scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
+        } else {
+            groupsScroll(width: width)
+                .mask {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .black, location: 0.055),
+                            .init(color: .black, location: 0.945),
+                            .init(color: .clear, location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+        }
+    }
+
+    private func groupsScroll(width: CGFloat) -> some View {
+        ScrollView(showsIndicators: false) {
+            LazyVStack(spacing: 4) {
+                ForEach(feed.teams) { team in
+                    let isSelected = team.id == feed.selectedTeamID
+
+                    Button {
+                        UISelectionFeedbackGenerator().selectionChanged()
+                        onSelectTeam(team.id)
+                    } label: {
+                        TeamSideMenuRow(team: team, isSelected: isSelected)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(team.name)
+                    .accessibilityValue(isSelected ? "المجموعة الحالية" : "\(team.memberCount) عضو")
+                    .accessibilityHint(isSelected ? "المجموعة محددة حاليًا" : "التبديل إلى هذه المجموعة")
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
+                }
+            }
+            .padding(.vertical, 10)
+            .frame(width: width)
+        }
+    }
+
+    private func profileButton(width: CGFloat) -> some View {
+        Button(action: openSettings) {
+            HStack(spacing: 11) {
+                MenuProfileAvatar(name: feed.profileName)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(feed.profileName.isEmpty ? "حسابي" : feed.profileName)
+                        .font(TamrinFont.font(size: 15, weight: .bold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Text("الملف الشخصي")
+                        .font(TamrinFont.font(size: 11, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.54))
+                }
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.38))
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 12)
+            .frame(width: width)
+            .frame(minHeight: 62)
+            .background(.white.opacity(0.075), in: .rect(cornerRadius: 20, style: .continuous))
+            .contentShape(.rect(cornerRadius: 20, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("الملف الشخصي")
+        .accessibilityHint("يفتح إعدادات الملف الشخصي")
     }
 }
 
@@ -94,12 +149,12 @@ private struct TeamSideMenuRow: View {
     let isSelected: Bool
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 11) {
             TeamAvatarView(
                 avatarData: team.avatarData,
                 symbol: team.symbol,
-                size: 56,
-                cornerRadiusRatio: 12 / 56,
+                size: 44,
+                cornerRadiusRatio: 13 / 44,
                 fallbackBackground: AnyShapeStyle(
                     LinearGradient(
                         colors: [
@@ -114,23 +169,24 @@ private struct TeamSideMenuRow: View {
             )
             VStack(alignment: .leading, spacing: 3) {
                 Text(team.name)
-                    .font(TamrinFont.font(size: 16, weight: .bold))
+                    .font(TamrinFont.font(size: 16, weight: isSelected ? .bold : .medium))
                     .foregroundStyle(.white)
                     .lineLimit(1)
-                Text("الأعضاء  \(team.memberCount)")
-                    .font(TamrinFont.font(size: 12, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.8))
+                Text("\(team.memberCount.formatted(.number.locale(Locale(identifier: "ar_SA")).grouping(.never))) عضو")
+                    .font(TamrinFont.font(size: 11, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.52))
                     .lineLimit(1)
-                    .frame(height: 20, alignment: .center)
             }
-            .padding(.vertical, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(12)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .frame(minHeight: 64)
         .background(
-            isSelected ? Color(red: 0.10, green: 0.10, blue: 0.10) : .clear,
-            in: .rect(cornerRadius: 24, style: .continuous)
+            isSelected ? Color.white.opacity(0.105) : .clear,
+            in: .rect(cornerRadius: 18, style: .continuous)
         )
+        .contentShape(.rect(cornerRadius: 18, style: .continuous))
     }
 }
 
@@ -139,11 +195,17 @@ private struct MenuProfileAvatar: View {
     var body: some View {
         Circle()
             .fill(.white.opacity(0.18))
-            .frame(width: 36, height: 36)
+            .frame(width: 40, height: 40)
             .overlay {
-                Text(String(name.prefix(1)))
-                    .font(TamrinFont.font(size: 15, weight: .bold))
-                    .foregroundStyle(.white)
+                if name.isEmpty {
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.82))
+                } else {
+                    Text(String(name.prefix(1)))
+                        .font(TamrinFont.font(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                }
             }
             .accessibilityHidden(true)
     }

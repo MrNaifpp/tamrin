@@ -12,23 +12,21 @@ struct QuickFontTest: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 Text("Font Test - اختبار الخط")
-                    .font(.system(size: 24, weight: .bold))
+                    .font(TamrinFont.font(size: 24, weight: .bold))
                     .padding(.bottom, 10)
                 
                 Group {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("System Font (Default):")
-                            .font(.system(size: 14))
+                        Text("Thmanyah Regular + ss01:")
+                            .font(TamrinFont.font(size: 14, weight: .medium))
                             .foregroundStyle(.gray)
                         Text("مرحباً بكم في التطبيق - Welcome")
-                            .font(.system(size: 20))
+                            .font(TamrinFont.font(size: 20))
                     }
-                    
-                    Divider()
                     
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Custom Font (appFont Regular):")
-                            .font(.system(size: 14))
+                            .font(TamrinFont.font(size: 14, weight: .medium))
                             .foregroundStyle(.gray)
                         Text("مرحباً بكم في التطبيق - Welcome")
                             .font(.appFont(size: 20, weight: .regular))
@@ -36,20 +34,18 @@ struct QuickFontTest: View {
                     
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Custom Font (appFont Bold):")
-                            .font(.system(size: 14))
+                            .font(TamrinFont.font(size: 14, weight: .medium))
                             .foregroundStyle(.gray)
                         Text("مرحباً بكم في التطبيق - Welcome")
                             .font(.appFont(size: 20, weight: .bold))
                     }
                     
-                    Divider()
-                    
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Direct Font Name Test:")
-                            .font(.system(size: 14))
+                            .font(TamrinFont.font(size: 14, weight: .medium))
                             .foregroundStyle(.gray)
                         Text("مرحباً بكم في التطبيق - Welcome")
-                            .font(.custom("TheYearofHandicrafts-Regular", size: 20))
+                            .font(TamrinFont.font(size: 20))
                     }
                 }
             }
@@ -75,5 +71,4 @@ struct QuickFontTest: View {
 #Preview {
     QuickFontTest()
 }
-
 

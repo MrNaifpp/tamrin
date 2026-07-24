@@ -30,6 +30,11 @@ struct EventRecord: Codable {
     let createdAt: Date?
     let workspaceId: UUID?
     let templateId: UUID?
+    /// Organizer-selected reusable payment destination for this event.
+    let paymentMethodId: UUID?
+    /// All organizer-selected destinations, in the order shown to players.
+    /// The scalar field above remains as a compatibility alias for the first.
+    let paymentMethodIds: [UUID]
     /// Computed by get_workspace_events: template linked AND not ended.
     let isRecurring: Bool?
 
@@ -51,7 +56,35 @@ struct EventRecord: Codable {
         case createdAt = "created_at"
         case workspaceId = "workspace_id"
         case templateId = "template_id"
+        case paymentMethodId = "payment_method_id"
+        case paymentMethodIds = "payment_method_ids"
         case isRecurring = "is_recurring"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        creatorId = try container.decode(UUID.self, forKey: .creatorId)
+        name = try container.decode(String.self, forKey: .name)
+        location = try container.decode(String.self, forKey: .location)
+        description = try container.decode(String.self, forKey: .description)
+        startDate = try container.decode(Date.self, forKey: .startDate)
+        endDate = try container.decodeIfPresent(Date.self, forKey: .endDate)
+        imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
+        maxParticipants = try container.decodeIfPresent(Int.self, forKey: .maxParticipants)
+        registrationLocked = try container.decodeIfPresent(Bool.self, forKey: .registrationLocked)
+        totalPrice = try container.decodeIfPresent(Int.self, forKey: .totalPrice)
+        pricePerPerson = try container.decodeIfPresent(Double.self, forKey: .pricePerPerson)
+        latitude = try container.decodeIfPresent(Double.self, forKey: .latitude)
+        longitude = try container.decodeIfPresent(Double.self, forKey: .longitude)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
+        workspaceId = try container.decodeIfPresent(UUID.self, forKey: .workspaceId)
+        templateId = try container.decodeIfPresent(UUID.self, forKey: .templateId)
+        paymentMethodId = try container.decodeIfPresent(UUID.self, forKey: .paymentMethodId)
+        paymentMethodIds = try container.decodeIfPresent([UUID].self, forKey: .paymentMethodIds)
+            ?? paymentMethodId.map { [$0] }
+            ?? []
+        isRecurring = try container.decodeIfPresent(Bool.self, forKey: .isRecurring)
     }
 }
 
@@ -196,7 +229,9 @@ final class EventService {
         pricePerPerson: Double = 0,
         latitude: Double? = nil,
         longitude: Double? = nil,
-        recurrence: String = "none"
+        recurrence: String = "none",
+        paymentMethodId: UUID? = nil,
+        paymentMethodIds: [UUID] = []
     ) async throws -> EventRecord {
         let session: Session
         do {
@@ -208,26 +243,40 @@ final class EventService {
         let userId = session.user.id
 
         let iso = ISO8601DateFormatter()
-        var params: [String: String] = [
-            "p_creator_id": userId.uuidString,
-            "p_workspace_id": workspaceId.uuidString,
-            "p_name": name,
-            "p_location": location,
-            "p_description": description,
-            "p_start_date": iso.string(from: startDate)
+        let selectedPaymentMethodIds = paymentMethodIds.isEmpty
+            ? paymentMethodId.map { [$0] } ?? []
+            : paymentMethodIds
+        var params: [String: AnyJSON] = [
+            "p_creator_id": .string(userId.uuidString),
+            "p_workspace_id": .string(workspaceId.uuidString),
+            "p_name": .string(name),
+            "p_location": .string(location),
+            "p_description": .string(description),
+            "p_start_date": .string(iso.string(from: startDate)),
+            "p_total_price": .integer(totalPrice),
+            "p_price_per_person": .double(pricePerPerson),
+            "p_recurrence": .string(recurrence),
+            "p_payment_method_id": selectedPaymentMethodIds.first.map {
+                .string($0.uuidString)
+            } ?? .null,
+            "p_payment_method_ids": .array(
+                selectedPaymentMethodIds.map { .string($0.uuidString) }
+            )
         ]
-        if let endDate { params["p_end_date"] = iso.string(from: endDate) }
-        if let imageUrl { params["p_image_url"] = imageUrl }
-        if let maxParticipants { params["p_max_participants"] = "\(maxParticipants)" }
-        if totalPrice > 0 { params["p_total_price"] = "\(totalPrice)" }
-        if pricePerPerson > 0 { params["p_price_per_person"] = "\(pricePerPerson)" }
-        if let latitude { params["p_latitude"] = "\(latitude)" }
-        if let longitude { params["p_longitude"] = "\(longitude)" }
-        if recurrence != "none" { params["p_recurrence"] = recurrence }
+        if let endDate { params["p_end_date"] = .string(iso.string(from: endDate)) }
+        if let imageUrl { params["p_image_url"] = .string(imageUrl) }
+        if let maxParticipants { params["p_max_participants"] = .integer(maxParticipants) }
+        if let latitude { params["p_latitude"] = .double(latitude) }
+        if let longitude { params["p_longitude"] = .double(longitude) }
 
-        let response = try await client
-            .rpc("create_event", params: params)
-            .execute()
+        let response: PostgrestResponse<Void>
+        do {
+            response = try await client
+                .rpc("create_event", params: params)
+                .execute()
+        } catch {
+            throw Self.translatedPaymentSchemaError(error)
+        }
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
@@ -263,6 +312,8 @@ final class EventService {
         let pricePerPerson: Double
         let latitude: Double?
         let longitude: Double?
+        let paymentMethodId: UUID?
+        let paymentMethodIds: [UUID]
 
         enum CodingKeys: String, CodingKey {
             case name, location, latitude, longitude
@@ -271,6 +322,8 @@ final class EventService {
             case maxParticipants = "max_participants"
             case totalPrice = "total_price"
             case pricePerPerson = "price_per_person"
+            case paymentMethodId = "payment_method_id"
+            case paymentMethodIds = "payment_method_ids"
         }
     }
 
@@ -286,9 +339,14 @@ final class EventService {
         totalPrice: Int,
         pricePerPerson: Double,
         latitude: Double?,
-        longitude: Double?
+        longitude: Double?,
+        paymentMethodId: UUID? = nil,
+        paymentMethodIds: [UUID] = []
     ) async throws {
         let iso = ISO8601DateFormatter()
+        let selectedPaymentMethodIds = paymentMethodIds.isEmpty
+            ? paymentMethodId.map { [$0] } ?? []
+            : paymentMethodIds
         let payload = UpdateEventPayload(
             name: name,
             location: location,
@@ -298,14 +356,39 @@ final class EventService {
             totalPrice: totalPrice,
             pricePerPerson: pricePerPerson,
             latitude: latitude,
-            longitude: longitude
+            longitude: longitude,
+            paymentMethodId: selectedPaymentMethodIds.first,
+            paymentMethodIds: selectedPaymentMethodIds
         )
-        try await client
-            .from("events")
-            .update(payload)
-            .eq("id", value: eventId.uuidString)
-            .execute()
+        do {
+            try await client
+                .from("events")
+                .update(payload)
+                .eq("id", value: eventId.uuidString)
+                .execute()
+        } catch {
+            throw Self.translatedPaymentSchemaError(error)
+        }
         eventLogger.info("API updateEvent succeeded (id: \(eventId))")
+    }
+
+    private static func translatedPaymentSchemaError(_ error: Error) -> Error {
+        let description = error.localizedDescription.lowercased()
+        let postgrestCode = (error as? PostgrestError)?.code
+        let isPaymentSchemaError = description.contains("payment_method")
+            || description.contains("create_event")
+        let isMissingSchemaEntry = postgrestCode == "PGRST202"
+            || postgrestCode == "PGRST203"
+            || postgrestCode == "PGRST204"
+            || description.contains("schema cache")
+
+        if isPaymentSchemaError && isMissingSchemaEntry {
+            eventLogger.error(
+                "Payment schema unavailable while saving an event (code: \(postgrestCode ?? "unknown", privacy: .public))"
+            )
+            return ManualPaymentServiceError.featureUnavailable
+        }
+        return error
     }
 
     /// Detaches an event from its series template (creator-only via the same

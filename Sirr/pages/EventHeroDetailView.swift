@@ -110,8 +110,6 @@ struct EventHeroDetailView: View {
                             .foregroundStyle(.white)
                     }
 
-                    Divider().background(.white.opacity(0.25))
-
                     Button {
                         showSkipConfirm = true
                     } label: {
@@ -131,10 +129,6 @@ struct EventHeroDetailView: View {
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
                                 .fill(.white.opacity(0.14))
                         )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .stroke(.white.opacity(0.22), lineWidth: 1)
-                        )
                     }
                     .buttonStyle(.plain)
                     .disabled(isSeriesActionInFlight)
@@ -148,10 +142,6 @@ struct EventHeroDetailView: View {
             }
             .padding()
             .background(Color.white.opacity(0.2))
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(.white.opacity(0.2), lineWidth: 1)
-            )
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .shadow(color: .black.opacity(0.25), radius: 12, y: 6)
         }
@@ -227,9 +217,6 @@ struct EventHeroDetailView: View {
                                 .padding(.vertical, 8)
                                 .background(
                                     Capsule().fill(.white.opacity(0.14))
-                                )
-                                .overlay(
-                                    Capsule().stroke(.white.opacity(0.22), lineWidth: 1)
                                 )
                             }
                             .buttonStyle(.plain)
@@ -410,10 +397,6 @@ struct EventHeroDetailView: View {
                         }
                         .padding()
                         .background(Color.white.opacity(0.2))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .stroke(.white.opacity(0.2), lineWidth: 1)
-                        )
                         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                         .shadow(color: .black.opacity(0.25), radius: 12, y: 6)
                     }
@@ -536,10 +519,6 @@ struct EventHeroDetailView: View {
                                 .padding(.vertical, 12)
                                 .padding(.horizontal, 14)
                                 .background(Color.white.opacity(0.2))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .stroke(.white.opacity(0.18), lineWidth: 1)
-                                )
                                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                                 .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
                             }
@@ -765,10 +744,6 @@ private struct IconButton: View {
                 .foregroundStyle(.white)
                 .frame(width: 40, height: 40)
                 .background(.ultraThinMaterial)
-                .overlay(
-                    Circle()
-                        .stroke(.white.opacity(0.25), lineWidth: 1)
-                )
                 .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
                 .clipShape(Circle())
         }
@@ -815,10 +790,6 @@ private struct ActionChip: View {
                         .fill(Color.white)
                 }
             }
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(style == .translucent ? Color.white.opacity(0.15) : Color.clear, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
@@ -983,10 +954,6 @@ struct EnrollmentSheetView: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                             }
 
-                            Divider()
-                                .background(Color.white.opacity(0.25))
-                                .padding(.vertical, 12)
-                            
                             // Participants list
                             if participants.count > 0 {
                                 VStack(spacing: 12) {

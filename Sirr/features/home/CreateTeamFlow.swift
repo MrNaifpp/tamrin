@@ -74,7 +74,9 @@ private extension PlanDraft {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         (scheduleKind == .oneOff || !weekdays.isEmpty) &&
         !locationName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        price > 0
+        totalVenueCost > 0 &&
+        !paymentMethods.isEmpty &&
+        paymentMethods.allSatisfy(\.isValid)
     }
 }
 
@@ -88,6 +90,8 @@ struct CreateTeamFlow: View {
     @State private var composerPlan = PlanDraft()
     @State private var composerInitialSheet: ComposerSheet?
     @State private var createdTeam: FeedTeam?
+    @State private var isCreating = false
+    @State private var failureMessage: String?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var stepTransition: AnyTransition {
@@ -115,7 +119,6 @@ struct CreateTeamFlow: View {
                             if isComposing {
                                 TemplateComposerPage(
                                     plan: $composerPlan,
-                                    paymentMethods: $draft.paymentMethods,
                                     initialSheet: composerInitialSheet,
                                     save: savePlan,
                                     cancel: cancelComposer
@@ -131,7 +134,7 @@ struct CreateTeamFlow: View {
                                 .transition(stepTransition)
                             }
                         case .members:
-                            MembersStepPage(draft: $draft, create: create)
+                            MembersStepPage(draft: $draft, isCreating: isCreating, create: create)
                                 .transition(stepTransition)
                         }
                     }
@@ -143,6 +146,15 @@ struct CreateTeamFlow: View {
         .animation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.9), value: createdTeam?.id)
         .environment(\.layoutDirection, .rightToLeft)
         .interactiveDismissDisabled()
+        .alert("تعذر إنشاء المجموعة", isPresented: Binding(
+            get: { failureMessage != nil },
+            set: { if !$0 { failureMessage = nil } }
+        )) {
+            Button("حسنًا", role: .cancel) { failureMessage = nil }
+        } message: {
+            Text(failureMessage ?? "")
+                .font(TamrinFont.body)
+        }
     }
 
     private func move(to next: CreationStep) {
@@ -188,13 +200,18 @@ struct CreateTeamFlow: View {
     }
 
     private func create() {
+        guard !isCreating else { return }
+        isCreating = true
         Task {
-            if let team = await feed.createTeam(from: draft) {
+            do {
+                let team = try await feed.createTeam(from: draft)
                 createdTeam = team
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
-            } else {
+            } catch {
+                failureMessage = error.localizedDescription
                 UINotificationFeedbackGenerator().notificationOccurred(.error)
             }
+            isCreating = false
         }
     }
 
@@ -226,7 +243,6 @@ private struct FlowHeader: View {
                 }
                 .buttonStyle(.plain)
                 .background(TamrinTheme.glass, in: .circle)
-                .overlay(Circle().stroke(TamrinTheme.hairline))
                 .accessibilityLabel(step == .identity ? "إغلاق" : "رجوع")
 
                 Spacer()
@@ -238,7 +254,7 @@ private struct FlowHeader: View {
                 Spacer()
 
                 Text(step.counter)
-                    .font(.footnote.weight(.medium))
+                    .font(TamrinFont.font(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
                     .frame(width: 42)
             }
@@ -291,7 +307,6 @@ private struct IdentityStepPage: View {
                         }
                         .frame(width: 138, height: 138)
                         .clipShape(.rect(cornerRadius: 42, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 42, style: .continuous).stroke(.white.opacity(0.85), lineWidth: 1.5))
                         .shadow(color: .black.opacity(0.09), radius: 26, y: 12)
 
                         Image(systemName: "camera.fill")
@@ -299,7 +314,6 @@ private struct IdentityStepPage: View {
                             .foregroundStyle(.white)
                             .frame(width: 38, height: 38)
                             .background(TamrinTheme.ink, in: .circle)
-                            .overlay(Circle().stroke(.white, lineWidth: 2.5))
                             .offset(x: -6, y: 8)
                     }
                 }
@@ -307,7 +321,7 @@ private struct IdentityStepPage: View {
                 .accessibilityLabel("صورة المجموعة")
 
                 Text(draft.avatarData == nil ? "أضف صورة للمجموعة" : "اضغط لتغيير الصورة")
-                    .font(.footnote)
+                    .font(TamrinFont.footnote)
                     .foregroundStyle(.tertiary)
                     .padding(.top, 14)
 
@@ -318,18 +332,12 @@ private struct IdentityStepPage: View {
                     .submitLabel(.continue)
                     .onSubmit(advance)
                     .padding(.vertical, 18)
-                    .overlay(alignment: .bottom) {
-                        Rectangle()
-                            .fill(nameFocused ? TamrinTheme.ink : Color.primary.opacity(0.14))
-                            .frame(height: nameFocused ? 2 : 1)
-                            .animation(.easeOut(duration: 0.18), value: nameFocused)
-                    }
                     .padding(.horizontal, 42)
                     .padding(.top, 26)
 
                 VStack(spacing: 14) {
                     Text("أو اختر رمزًا يعبر عنكم")
-                        .font(.footnote)
+                        .font(TamrinFont.footnote)
                         .foregroundStyle(.tertiary)
                     ScrollView(.horizontal) {
                         HStack(spacing: 10) {
@@ -345,7 +353,6 @@ private struct IdentityStepPage: View {
                                         .foregroundStyle(isSymbolSelected(symbol) ? .white : .secondary)
                                         .frame(width: TamrinControlMetrics.roundButton, height: TamrinControlMetrics.roundButton)
                                         .background(isSymbolSelected(symbol) ? AnyShapeStyle(TamrinTheme.ink) : AnyShapeStyle(TamrinTheme.glass), in: .circle)
-                                        .overlay(Circle().stroke(TamrinTheme.hairline))
                                 }
                                 .buttonStyle(.plain)
                                 .accessibilityAddTraits(isSymbolSelected(symbol) ? .isSelected : [])
@@ -399,7 +406,7 @@ private struct TemplatesListPage: View {
                         .font(TamrinFont.largeTitle)
                         .tracking(-0.8)
                     Text("كل قالب ينشئ مواعيده أسبوعيًا بشكل تلقائي. أضف ما تحتاجه من تمارين.")
-                        .font(.body)
+                        .font(TamrinFont.body)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.top, 8)
@@ -426,10 +433,7 @@ private struct TemplatesListPage: View {
                     .foregroundStyle(TamrinTheme.ink)
                     .frame(maxWidth: .infinity)
                     .frame(minHeight: TamrinControlMetrics.actionHeight)
-                    .background {
-                        RoundedRectangle(cornerRadius: 24, style: .continuous)
-                            .strokeBorder(TamrinTheme.ink.opacity(0.28), style: StrokeStyle(lineWidth: 1.6, dash: [7, 6]))
-                    }
+                    .background(TamrinTheme.secondary.opacity(0.78), in: .rect(cornerRadius: 24, style: .continuous))
                     .contentShape(.rect)
                 }
                 .buttonStyle(SpringCardPressStyle())
@@ -461,7 +465,7 @@ private struct TemplateCard: View {
                         Text(plan.name)
                             .font(TamrinFont.title3)
                         Text("\(plan.daysSummary) · \(plan.timeSummary)")
-                            .font(.subheadline)
+                            .font(TamrinFont.subheadline)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -480,13 +484,17 @@ private struct TemplateCard: View {
                 HStack(spacing: 8) {
                     TemplateTag(symbol: "mappin", text: plan.locationName)
                     TemplateTag(symbol: "person.2", text: "\(plan.capacity.arabicDigits) لاعب")
-                    TemplateTag(symbol: "banknote", text: plan.price == 0 ? "مجاني" : "\(plan.price.cleanAmount) ر.س")
+                    TemplateTag(
+                        symbol: "banknote",
+                        text: plan.totalVenueCost == 0
+                            ? "بدون تكلفة"
+                            : "القطة \(plan.pricePerPerson.cleanAmount) ر.س"
+                    )
                 }
             }
             .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(TamrinTheme.glass, in: .rect(cornerRadius: 26))
-            .overlay(RoundedRectangle(cornerRadius: 26).stroke(.white.opacity(0.85)))
             .shadow(color: .black.opacity(0.05), radius: 20, y: 10)
             .contentShape(.rect)
         }
@@ -504,7 +512,7 @@ private struct TemplateTag: View {
         } icon: {
             Image(systemName: symbol)
         }
-        .font(.caption.weight(.medium))
+        .font(TamrinFont.font(size: 12, weight: .medium))
         .foregroundStyle(.secondary)
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
@@ -515,13 +523,12 @@ private struct TemplateTag: View {
 // MARK: - Step 2: Template composer
 
 private enum ComposerSheet: String, Identifiable {
-    case schedule, location, capacity, price, publishing
+    case schedule, location, capacity, venueCost, payment, publishing
     var id: String { rawValue }
 }
 
 private struct TemplateComposerPage: View {
     @Binding var plan: PlanDraft
-    @Binding var paymentMethods: [PaymentMethodDraft]
     var initialSheet: ComposerSheet?
     let save: () -> Void
     let cancel: () -> Void
@@ -540,7 +547,7 @@ private struct TemplateComposerPage: View {
                         .font(TamrinFont.largeTitle)
                         .tracking(-0.8)
                     Text("سمّه، وحدد تفاصيله بلمسة على كل بطاقة.")
-                        .font(.body)
+                        .font(TamrinFont.body)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.top, 8)
@@ -553,7 +560,6 @@ private struct TemplateComposerPage: View {
                         .padding(.horizontal, 18)
                         .frame(height: 62)
                         .background(TamrinTheme.glass, in: .rect(cornerRadius: 21))
-                        .overlay(RoundedRectangle(cornerRadius: 21).stroke(nameFocused ? TamrinTheme.ink.opacity(0.5) : Color.white.opacity(0.85)))
 
                     if plan.name.isEmpty {
                         HStack(spacing: 8) {
@@ -563,7 +569,7 @@ private struct TemplateComposerPage: View {
                                     UISelectionFeedbackGenerator().selectionChanged()
                                 } label: {
                                     Text(suggestion)
-                                        .font(.footnote.weight(.medium))
+                                        .font(TamrinFont.font(size: 13, weight: .medium))
                                         .padding(.horizontal, 12)
                                         .padding(.vertical, 8)
                                         .background(TamrinTheme.secondary, in: .capsule)
@@ -595,9 +601,20 @@ private struct TemplateComposerPage: View {
                     ) { activeSheet = .capacity }
                     ComposerTile(
                         symbol: "banknote.fill",
-                        title: "القَطّة",
-                        value: plan.price == 0 ? "مجاني" : "\(plan.price.cleanAmount) ر.س"
-                    ) { activeSheet = .price }
+                        title: "قيمة الملعب",
+                        value: plan.totalVenueCost == 0
+                            ? nil
+                            : "\(plan.totalVenueCost.cleanAmount) ر.س\nالقطة \(plan.pricePerPerson.cleanAmount) ر.س"
+                    ) { activeSheet = .venueCost }
+                    ComposerTile(
+                        symbol: "creditcard.fill",
+                        title: "وسائل الدفع",
+                        value: plan.paymentMethods.isEmpty
+                            ? nil
+                            : (plan.paymentMethods.count == 1
+                               ? plan.paymentMethods[0].provider.displayName
+                               : "\(plan.paymentMethods.count.arabicDigits) وسائل دفع")
+                    ) { activeSheet = .payment }
                     ComposerTile(
                         symbol: "paperplane.fill",
                         title: "التجهيز والإرسال",
@@ -606,7 +623,7 @@ private struct TemplateComposerPage: View {
                 }
 
                 Text("تقدر تعدّل أي موعد لحاله لاحقًا بدون تغيير القالب.")
-                    .font(.footnote)
+                    .font(TamrinFont.footnote)
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity)
                     .padding(.top, 4)
@@ -631,8 +648,10 @@ private struct TemplateComposerPage: View {
                 LocationSheet(plan: $plan, search: locationSearch)
             case .capacity:
                 CapacitySheet(plan: $plan)
-            case .price:
-                PriceSheet(plan: $plan, paymentMethods: $paymentMethods)
+            case .venueCost:
+                VenueCostSheet(plan: $plan)
+            case .payment:
+                PaymentMethodSelectionSheet(selections: $plan.paymentMethods)
             case .publishing:
                 PublishingReminderSheet(plan: $plan)
             }
@@ -668,7 +687,7 @@ private struct ComposerTile: View {
                 }
                 Spacer(minLength: 12)
                 Text(title)
-                    .font(.footnote.weight(.medium))
+                    .font(TamrinFont.font(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
                 Text(value ?? "اضغط للتحديد")
                     .font(TamrinFont.font(size: 15, weight: .medium))
@@ -680,7 +699,6 @@ private struct ComposerTile: View {
             .padding(16)
             .frame(maxWidth: .infinity, minHeight: 136, alignment: .leading)
             .background(TamrinTheme.glass, in: .rect(cornerRadius: 26))
-            .overlay(RoundedRectangle(cornerRadius: 26).stroke(.white.opacity(0.85)))
             .shadow(color: .black.opacity(0.045), radius: 18, y: 9)
             .contentShape(.rect)
         }
@@ -697,7 +715,7 @@ private struct SheetGrabberTitle: View {
     var body: some View {
         VStack(spacing: 5) {
             Text(title).font(TamrinFont.title2)
-            Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
+            Text(subtitle).font(TamrinFont.subheadline).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
         .multilineTextAlignment(.center)
@@ -742,7 +760,7 @@ private struct ScheduleSheet: View {
                 }
 
                 Text(plan.weekdays.isEmpty ? "اختر يومًا واحدًا على الأقل" : "كل \(plan.daysSummary)")
-                    .font(.footnote.weight(.medium))
+                    .font(TamrinFont.font(size: 13, weight: .medium))
                     .foregroundStyle(plan.weekdays.isEmpty ? .tertiary : .secondary)
                     .contentTransition(.opacity)
                     .animation(.easeOut(duration: 0.18), value: plan.daysSummary)
@@ -794,7 +812,7 @@ private struct TimeTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text(title).font(TamrinFont.font(size: 12, weight: .medium)).foregroundStyle(.secondary)
             DatePicker(title, selection: $selection, displayedComponents: .hourAndMinute).labelsHidden()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -834,7 +852,7 @@ private struct CapacitySheet: View {
                         UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     } label: {
                         Text(value.arabicDigits)
-                            .font(.subheadline.weight(.semibold))
+                            .font(TamrinFont.font(size: 15, weight: .medium))
                             .monospacedDigit()
                             .foregroundStyle(plan.capacity == value ? .white : .primary)
                             .frame(maxWidth: .infinity)
@@ -885,7 +903,6 @@ private struct CapacityRoundButton: View {
                 .foregroundStyle(TamrinTheme.ink)
                 .frame(width: TamrinControlMetrics.roundButton, height: TamrinControlMetrics.roundButton)
                 .background(TamrinTheme.glass, in: .circle)
-                .overlay(Circle().stroke(TamrinTheme.hairline))
                 .shadow(color: .black.opacity(0.06), radius: 12, y: 5)
         }
         .buttonStyle(.plain)
@@ -907,20 +924,19 @@ private struct CapacityPolicyCard: View {
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Text(title).font(.subheadline.weight(.bold))
+                    Text(title).font(TamrinFont.font(size: 15, weight: .bold))
                     Spacer()
                     Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                         .foregroundStyle(selected ? TamrinTheme.ink : .secondary.opacity(0.5))
                 }
                 Text(subtitle)
-                    .font(.caption)
+                    .font(TamrinFont.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.leading)
             }
             .padding(14)
             .frame(maxWidth: .infinity, minHeight: 88, alignment: .topLeading)
-            .background(TamrinTheme.glass, in: .rect(cornerRadius: 20))
-            .overlay(RoundedRectangle(cornerRadius: 20).stroke(selected ? TamrinTheme.ink.opacity(0.55) : TamrinTheme.hairline, lineWidth: selected ? 1.5 : 1))
+            .background(selected ? AnyShapeStyle(TamrinTheme.secondary) : AnyShapeStyle(TamrinTheme.glass), in: .rect(cornerRadius: 20))
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -951,7 +967,7 @@ private struct PublishingReminderSheet: View {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("وقت التذكير").font(TamrinFont.font(size: 15, weight: .bold))
-                    Text("الافتراضي ١٢ الظهر").font(.caption).foregroundStyle(.secondary)
+                    Text("الافتراضي ١٢ الظهر").font(TamrinFont.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
                 DatePicker("وقت التذكير", selection: $plan.publishTime, displayedComponents: .hourAndMinute).labelsHidden()
@@ -1015,9 +1031,9 @@ private struct LocationSheet: View {
                             .font(.system(size: 44, weight: .light))
                             .foregroundStyle(.secondary)
                         Text("اكتب اسم الملعب ثم اضغط بحث")
-                            .font(.headline)
+                            .font(TamrinFont.headline)
                         Text("أو اكتب الاسم مباشرة إن كان مكانًا خاصًا.")
-                            .font(.subheadline)
+                            .font(TamrinFont.subheadline)
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity)
@@ -1041,8 +1057,8 @@ private struct LocationSheet: View {
                                 HStack(spacing: 14) {
                                     IconOrb(symbol: "mappin", tint: TamrinTheme.ink, size: 42)
                                     VStack(alignment: .leading, spacing: 4) {
-                                        Text(result.title).font(.headline)
-                                        Text(result.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                                        Text(result.title).font(TamrinFont.headline)
+                                        Text(result.subtitle).font(TamrinFont.caption).foregroundStyle(.secondary).lineLimit(2)
                                     }
                                     Spacer()
                                     Image(systemName: "chevron.left").font(.caption.bold()).foregroundStyle(.tertiary)
@@ -1052,7 +1068,6 @@ private struct LocationSheet: View {
                                 .contentShape(.rect)
                             }
                             .buttonStyle(.plain)
-                            if result.id != search.results.last?.id { Divider().padding(.leading, 70) }
                         }
                     }
                     .background(TamrinTheme.glass, in: .rect(cornerRadius: 24))
@@ -1068,196 +1083,95 @@ private struct LocationSheet: View {
     }
 }
 
-private struct PriceSheet: View {
+private struct VenueCostSheet: View {
     @Binding var plan: PlanDraft
-    @Binding var paymentMethods: [PaymentMethodDraft]
     @Environment(\.dismiss) private var dismiss
-    @State private var showAddMethod = false
-    private let quickAmounts: [Double] = [20, 35, 50, 75]
+    @FocusState private var amountFocused: Bool
+    private let quickAmounts: [Double] = [300, 400, 480, 600]
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                SheetGrabberTitle(title: "كم القَطّة؟", subtitle: "المبلغ على كل لاعب في الموعد الواحد")
-                amountField
-                quickChips
-                if plan.price > 0 {
-                    methodsSection
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
-                }
-                Button("تم") { dismiss() }
-                    .buttonStyle(PrimaryActionStyle())
-            }
-            .padding(22)
-            .padding(.top, 12)
-            .animation(.spring(response: 0.34, dampingFraction: 0.88), value: plan.price > 0)
-        }
-        .scrollDismissesKeyboard(.interactively)
-        .environment(\.layoutDirection, .rightToLeft)
-        .presentationDetents([.height(620), .large])
-        .presentationDragIndicator(.visible)
-        .sheet(isPresented: $showAddMethod) { PaymentMethodEditor(methods: $paymentMethods) }
-    }
+        VStack(spacing: 22) {
+            SheetGrabberTitle(
+                title: "كم قيمة الملعب؟",
+                subtitle: "أدخل إجمالي الإيجار ونحسب القطة تلقائيًا"
+            )
 
-    private var amountField: some View {
-        HStack(alignment: .lastTextBaseline, spacing: 10) {
-            TextField("0", value: $plan.price, format: .number)
-                .font(TamrinFont.font(size: 64, weight: .bold))
-                .keyboardType(.decimalPad)
+            HStack(alignment: .lastTextBaseline, spacing: 10) {
+                TextField(
+                    "0",
+                    value: $plan.totalVenueCost,
+                    format: .number.precision(.fractionLength(0))
+                )
+                .font(TamrinFont.font(size: 56, weight: .bold))
+                .keyboardType(.numberPad)
                 .multilineTextAlignment(.center)
+                .focused($amountFocused)
                 .fixedSize()
-            Text("ر.س")
-                .font(TamrinFont.title3)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
-    }
 
-    private var quickChips: some View {
-        HStack(spacing: 8) {
-            ForEach(quickAmounts, id: \.self) { amount in
-                Button {
-                    plan.price = amount
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                } label: {
-                    Text(amount == 0 ? "مجاني" : amount.cleanAmount)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(plan.price == amount ? .white : .primary)
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: TamrinControlMetrics.touchTarget)
-                        .background(plan.price == amount ? AnyShapeStyle(TamrinTheme.ink) : AnyShapeStyle(TamrinTheme.secondary), in: .capsule)
-                }
-                .buttonStyle(.plain)
+                Text("ر.س")
+                    .font(TamrinFont.title3)
+                    .foregroundStyle(.secondary)
             }
-        }
-    }
-
-    private var methodsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("طرق الدفع").font(TamrinFont.title3)
-                Spacer()
-                Button { showAddMethod = true } label: { Label("إضافة", systemImage: "plus") }
-                    .buttonStyle(.bordered)
-                    .tint(.primary)
-            }
-            if paymentMethods.isEmpty {
-                emptyMethodsButton
-            } else {
-                VStack(spacing: 10) {
-                    ForEach(paymentMethods) { method in
-                        methodRow(method)
-                    }
-                }
-            }
-        }
-    }
-
-    private var emptyMethodsButton: some View {
-        Button { showAddMethod = true } label: {
-            VStack(spacing: 10) {
-                Image(systemName: "plus.circle.fill").font(.title)
-                Text("أضف حسابًا بنكيًا أو خيار الدفع نقدًا")
-                    .font(.subheadline.weight(.medium))
-                    .multilineTextAlignment(.center)
-            }
-            .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 30)
-            .background {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .strokeBorder(TamrinTheme.ink.opacity(0.2), style: StrokeStyle(lineWidth: 1.4, dash: [7, 6]))
-            }
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-    }
 
-    private func methodRow(_ method: PaymentMethodDraft) -> some View {
-        HStack(spacing: 14) {
-            IconOrb(symbol: method.kind == .cash ? "banknote" : "building.columns", size: 44)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(method.title).font(.headline)
-                Text(method.kind == .cash ? "في الملعب" : method.iban)
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-            }
-            Spacer()
-            Button {
-                paymentMethods.removeAll { $0.id == method.id }
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(.secondary.opacity(0.6))
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(14)
-        .background(TamrinTheme.glass, in: .rect(cornerRadius: 20))
-    }
-}
-
-struct PaymentMethodEditor: View {
-    @Binding var methods: [PaymentMethodDraft]
-    @Environment(\.dismiss) private var dismiss
-    @State private var method = PaymentMethodDraft()
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    HStack(alignment: .top, spacing: 14) {
-                        IconOrb(symbol: "creditcard.fill", tint: TamrinTheme.ink, size: 48)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("طريقة دفع").font(TamrinFont.title2)
-                            Text("أدخل ما يحتاجه اللاعب للتحويل").font(.subheadline).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        FloatingCloseButton { dismiss() }
+            HStack(spacing: 8) {
+                ForEach(quickAmounts, id: \.self) { amount in
+                    Button {
+                        plan.totalVenueCost = amount
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    } label: {
+                        Text(amount.cleanAmount)
+                            .font(TamrinFont.font(size: 15, weight: .medium))
+                            .foregroundStyle(plan.totalVenueCost == amount ? .white : .primary)
+                            .frame(maxWidth: .infinity)
+                            .frame(minHeight: TamrinControlMetrics.touchTarget)
+                            .background(
+                                plan.totalVenueCost == amount
+                                    ? AnyShapeStyle(TamrinTheme.ink)
+                                    : AnyShapeStyle(TamrinTheme.secondary),
+                                in: .capsule
+                            )
                     }
-                    Picker("النوع", selection: $method.kind) {
-                        Text("حساب بنكي").tag(FeedPaymentKind.bank)
-                        Text("نقداً").tag(FeedPaymentKind.cash)
-                    }.pickerStyle(.segmented)
-                    VStack(spacing: 0) {
-                        FloatingField(title: method.kind == .bank ? "اسم البنك" : "اسم الخيار", text: $method.title)
-                        if method.kind == .bank {
-                            Divider().padding(.leading, 16)
-                            FloatingField(title: "اسم المستفيد", text: $method.accountHolder)
-                            Divider().padding(.leading, 16)
-                            FloatingField(title: "IBAN", text: $method.iban)
-                                .textInputAutocapitalization(.characters).autocorrectionDisabled()
-                            Divider().padding(.leading, 16)
-                            FloatingField(title: "رقم الحساب — اختياري", text: $method.accountNumber)
-                            Divider().padding(.leading, 16)
-                            FloatingField(title: "رابط تطبيق البنك — اختياري", text: $method.appURL)
-                                .textInputAutocapitalization(.never).keyboardType(.URL)
-                        }
-                    }
-                    .background(TamrinTheme.glass, in: .rect(cornerRadius: 24))
-                    Button("إضافة الطريقة") { methods.append(method); dismiss() }
-                        .buttonStyle(PrimaryActionStyle())
-                        .disabled(method.title.isEmpty || (method.kind == .bank && method.iban.isEmpty))
+                    .buttonStyle(.plain)
                 }
-                .padding(22)
             }
-            .background(Color(uiColor: .secondarySystemBackground))
-        }
-        .environment(\.layoutDirection, .rightToLeft)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
-    }
-}
 
-private struct FloatingField: View {
-    let title: String
-    @Binding var text: String
-    var body: some View { TextField(title, text: $text).padding(.horizontal, 16).frame(height: 58) }
+            HStack(spacing: 14) {
+                IconOrb(symbol: "person.2.fill", tint: TamrinTheme.ink, size: 46)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("قطة اللاعب الواحد")
+                        .font(TamrinFont.font(size: 13, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Text("\(plan.pricePerPerson.cleanAmount) ر.س")
+                        .font(TamrinFont.title2)
+                        .contentTransition(.numericText())
+                }
+                Spacer()
+                Text("على \(plan.capacity.arabicDigits) لاعب")
+                    .font(TamrinFont.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(16)
+            .background(TamrinTheme.glass, in: .rect(cornerRadius: 22, style: .continuous))
+
+            Button("اعتماد القيمة") { dismiss() }
+                .buttonStyle(PrimaryActionStyle())
+                .disabled(plan.totalVenueCost <= 0)
+        }
+        .padding(22)
+        .padding(.top, 12)
+        .environment(\.layoutDirection, .rightToLeft)
+        .presentationDetents([.height(480)])
+        .presentationDragIndicator(.visible)
+        .onAppear { amountFocused = plan.totalVenueCost == 0 }
+    }
 }
 
 // MARK: - Step 3: Members
 
 private struct MembersStepPage: View {
     @Binding var draft: TeamDraft
+    let isCreating: Bool
     let create: () -> Void
     @State private var showContacts = false
     @State private var manualName = ""
@@ -1271,7 +1185,7 @@ private struct MembersStepPage: View {
                         .font(TamrinFont.largeTitle)
                         .tracking(-0.8)
                     Text("أضفهم الآن أو شارك رابط الدعوة بعد الإنشاء — الخطوة اختيارية.")
-                        .font(.body)
+                        .font(TamrinFont.body)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.top, 8)
@@ -1285,14 +1199,13 @@ private struct MembersStepPage: View {
                             .background(TamrinTheme.ink, in: .circle)
                         VStack(alignment: .leading, spacing: 3) {
                             Text("أضف من جهات الاتصال").font(TamrinFont.headline)
-                            Text("اختر عدة أشخاص دفعة واحدة").font(.caption).foregroundStyle(.secondary)
+                            Text("اختر عدة أشخاص دفعة واحدة").font(TamrinFont.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
                         Image(systemName: "chevron.left").font(.caption.bold()).foregroundStyle(.tertiary)
                     }
                     .padding(16)
                     .background(TamrinTheme.glass, in: .rect(cornerRadius: 24))
-                    .overlay(RoundedRectangle(cornerRadius: 24).stroke(.white.opacity(0.85)))
                     .shadow(color: .black.opacity(0.05), radius: 18, y: 9)
                     .contentShape(.rect)
                 }
@@ -1306,7 +1219,6 @@ private struct MembersStepPage: View {
                         .padding(.horizontal, 16)
                         .frame(height: TamrinControlMetrics.actionHeight)
                         .background(TamrinTheme.glass, in: .capsule)
-                        .overlay(Capsule().stroke(TamrinTheme.hairline))
                     Button(action: addManualName) {
                         Image(systemName: "plus")
                             .font(.headline)
@@ -1329,7 +1241,7 @@ private struct MembersStepPage: View {
                                         .font(TamrinFont.headline)
                                         .frame(width: 40, height: 40)
                                         .background(TamrinTheme.secondary, in: .circle)
-                                    Text(name).font(.body.weight(.medium))
+                                    Text(name).font(TamrinFont.font(size: 17, weight: .medium))
                                     Spacer()
                                     Button {
                                         withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
@@ -1348,11 +1260,9 @@ private struct MembersStepPage: View {
                                 }
                                 .padding(.horizontal, 16)
                                 .frame(height: 60)
-                                if name != draft.invitedNames.last { Divider().padding(.leading, 68) }
                             }
                         }
                         .background(TamrinTheme.glass, in: .rect(cornerRadius: 24))
-                        .overlay(RoundedRectangle(cornerRadius: 24).stroke(.white.opacity(0.85)))
                     }
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
@@ -1364,8 +1274,18 @@ private struct MembersStepPage: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .bottom) {
-            Button("أنشئ المجموعة", action: create)
+            Button(action: create) {
+                Group {
+                    if isCreating {
+                        ProgressView()
+                    } else {
+                        Text("أنشئ المجموعة")
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
                 .buttonStyle(PrimaryActionStyle())
+                .disabled(isCreating)
                 .padding(.horizontal, 22)
                 .padding(.bottom, 10)
         }
@@ -1416,7 +1336,6 @@ private struct CreationSuccessPage: View {
                     .frame(width: 118, height: 118)
                 }
             }
-            .overlay(RoundedRectangle(cornerRadius: 38, style: .continuous).stroke(.white.opacity(0.85), lineWidth: 1.5))
             .shadow(color: .black.opacity(0.16), radius: 30, y: 14)
             .scaleEffect(appeared ? 1 : 0.6)
             .animation(.spring(response: 0.5, dampingFraction: 0.68), value: appeared)
@@ -1428,7 +1347,7 @@ private struct CreationSuccessPage: View {
                 Text(draft.plans.count == 1
                      ? "التمرين ومواعيده القادمة صارت جاهزة. شارك الرمز وخل الربع يوفرون أماكنهم."
                      : "\(draft.plans.count.arabicDigits) تمارين ومواعيدها صارت جاهزة. شارك الرمز وخل الربع يوفرون أماكنهم.")
-                    .font(.body)
+                    .font(TamrinFont.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 30)
@@ -1436,16 +1355,15 @@ private struct CreationSuccessPage: View {
 
             VStack(spacing: 6) {
                 Text("رمز الانضمام")
-                    .font(.caption.weight(.semibold))
+                    .font(TamrinFont.font(size: 12, weight: .medium))
                     .foregroundStyle(.tertiary)
                 Text(team.inviteCode)
-                    .font(.title.monospaced().bold())
+                    .font(TamrinFont.font(size: 28, weight: .bold))
                     .tracking(5)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 18)
             .background(TamrinTheme.glass, in: .rect(cornerRadius: 26))
-            .overlay(RoundedRectangle(cornerRadius: 26).stroke(.white.opacity(0.85)))
             .padding(.horizontal, 40)
 
             Spacer()
@@ -1505,8 +1423,8 @@ struct AddSessionSheet: View {
     let editingEventID: UUID?
     let editingTemplateID: UUID?
     @State private var plan: PlanDraft
-    @State private var paymentMethods: [PaymentMethodDraft] = []
     @State private var saving = false
+    @State private var failureMessage: String?
 
     init(feed: HomeStore, isPresented: Binding<Bool>,
          editingEventID: UUID? = nil, editingTemplateID: UUID? = nil,
@@ -1524,22 +1442,38 @@ struct AddSessionSheet: View {
                 TamrinTheme.page.ignoresSafeArea()
                 TemplateComposerPage(
                     plan: $plan,
-                    paymentMethods: $paymentMethods,
                     initialSheet: nil,
                     save: {
                         guard !saving else { return }
                         saving = true
                         Task {
-                            if let eventID = editingEventID {
-                                await feed.updateSession(plan, eventID: eventID, templateID: editingTemplateID)
-                            } else {
-                                await feed.addSession(plan)
+                            do {
+                                if let eventID = editingEventID {
+                                    try await feed.updateSession(plan, eventID: eventID, templateID: editingTemplateID)
+                                } else {
+                                    try await feed.addSession(plan)
+                                }
+                                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                                isPresented = false
+                            } catch {
+                                saving = false
+                                failureMessage = error.localizedDescription
+                                UINotificationFeedbackGenerator().notificationOccurred(.error)
                             }
-                            isPresented = false
                         }
                     },
                     cancel: { isPresented = false }
                 )
+            }
+            .allowsHitTesting(!saving)
+            .overlay {
+                if saving {
+                    ProgressView("جاري الحفظ…")
+                        .font(TamrinFont.subheadline)
+                        .padding(.horizontal, 22)
+                        .padding(.vertical, 16)
+                        .background(.ultraThinMaterial, in: .capsule)
+                }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1550,5 +1484,14 @@ struct AddSessionSheet: View {
         }
         .environment(\.layoutDirection, .rightToLeft)
         .interactiveDismissDisabled(saving)
+        .alert("تعذر حفظ التمرين", isPresented: Binding(
+            get: { failureMessage != nil },
+            set: { if !$0 { failureMessage = nil } }
+        )) {
+            Button("حسنًا", role: .cancel) { failureMessage = nil }
+        } message: {
+            Text(failureMessage ?? "")
+                .font(TamrinFont.body)
+        }
     }
 }

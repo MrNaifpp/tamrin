@@ -206,7 +206,10 @@ struct TeamDetailView: View {
         d.longitude = plan.longitude
         d.capacity = plan.capacity
         d.capacityPolicy = plan.capacityPolicy
-        d.price = plan.price
+        d.totalVenueCost = plan.totalVenueCost > 0
+            ? plan.totalVenueCost
+            : plan.price * Double(plan.capacity)
+        d.paymentMethods = plan.paymentMethods
         d.scheduleKind = .oneOff
         d.oneOffDate = plan.startDate
         return d
@@ -267,7 +270,6 @@ struct TeamDetailView: View {
                 fallbackBackground: AnyShapeStyle(TamrinTheme.lime),
                 symbolColor: TamrinTheme.ink
             )
-            .overlay(Circle().stroke(.white.opacity(0.3), lineWidth: 1))
             .shadow(color: TamrinTheme.lime.opacity(0.35), radius: 26, y: 10)
 
             VStack(spacing: 5) {
@@ -338,9 +340,7 @@ struct TeamDetailView: View {
         PlanGlassSection(title: "الجدول") {
             VStack(spacing: 0) {
                 PlanInfoRow(symbol: "calendar", title: "أيام التمرين", value: dayText.isEmpty ? "بدون تكرار" : dayText)
-                Divider().overlay(.white.opacity(0.08))
                 PlanInfoRow(symbol: "play.circle", title: "تاريخ البداية", value: plan.startDate.arabicDate)
-                Divider().overlay(.white.opacity(0.08))
                 PlanInfoRow(
                     symbol: "flag.checkered",
                     title: "تاريخ النهاية",
@@ -384,7 +384,7 @@ struct TeamDetailView: View {
     private var membersCard: some View {
         PlanGlassSection(title: "الأعضاء · \(members.count.formatted())") {
             VStack(spacing: 0) {
-                ForEach(Array(members.enumerated()), id: \.element.id) { index, member in
+                ForEach(Array(members.enumerated()), id: \.element.id) { _, member in
                     HStack(spacing: 12) {
                         PlanMemberAvatar(
                             name: member.displayName,
@@ -415,9 +415,6 @@ struct TeamDetailView: View {
                     }
                     .padding(.vertical, 10)
 
-                    if index < members.count - 1 {
-                        Divider().overlay(.white.opacity(0.08))
-                    }
                 }
 
                 if members.isEmpty {
@@ -442,25 +439,27 @@ struct TeamDetailView: View {
             let methods = feed.methodsForCurrentTeam()
 
             VStack(spacing: 0) {
-                if methods.isEmpty {
+                if !feed.isCurrentTeamOwner {
+                    Text("تظهر لك وسيلة الدفع الآمنة وبيانات التحويل عند التسجيل في التمرين.")
+                        .font(TamrinFont.subheadline)
+                        .foregroundStyle(.white.opacity(0.55))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.vertical, 8)
+                } else if methods.isEmpty {
                     Text("لم تُضف طرق دفع بعد.")
                         .font(TamrinFont.subheadline)
                         .foregroundStyle(.white.opacity(0.55))
                         .padding(.vertical, 8)
                 } else {
-                    ForEach(Array(methods.enumerated()), id: \.element.id) { index, method in
+                    ForEach(Array(methods.enumerated()), id: \.element.id) { _, method in
                         HStack(spacing: 12) {
-                            Image(systemName: method.kind == .bank ? "building.columns.fill" : "banknote.fill")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(TamrinTheme.lime)
-                                .frame(width: 40, height: 40)
-                                .background(.white.opacity(0.1), in: .circle)
+                            PaymentProviderLogo(provider: method.provider, size: 40)
 
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(method.title)
+                                Text(method.provider.displayName)
                                     .font(TamrinFont.font(size: 16, weight: .medium))
                                     .foregroundStyle(.white)
-                                Text(method.kind == .bank ? "تحويل بنكي" : "دفع نقدي")
+                                Text(method.provider == .cash ? "الدفع في الملعب" : method.maskedSummary)
                                     .font(TamrinFont.font(size: 12, weight: .regular))
                                     .foregroundStyle(.white.opacity(0.5))
                             }
@@ -469,9 +468,6 @@ struct TeamDetailView: View {
                         }
                         .padding(.vertical, 10)
 
-                        if index < methods.count - 1 {
-                            Divider().overlay(.white.opacity(0.08))
-                        }
                     }
                 }
             }
@@ -486,7 +482,7 @@ struct TeamDetailView: View {
                 VStack(spacing: 12) {
                     HStack(spacing: 12) {
                         Text(team.inviteCode)
-                            .font(.system(size: 22, weight: .bold, design: .monospaced))
+                            .font(TamrinFont.font(size: 22, weight: .bold))
                             .foregroundStyle(.white)
                             .kerning(2)
 
@@ -614,10 +610,6 @@ private struct PlanGlassSection<Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)
         .background(.white.opacity(0.08), in: .rect(cornerRadius: 26, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .strokeBorder(.white.opacity(0.09), lineWidth: 1)
-        }
     }
 }
 
@@ -648,10 +640,6 @@ private struct PlanGlassStat: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(.white.opacity(0.08), in: .rect(cornerRadius: 22, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(.white.opacity(0.09), lineWidth: 1)
-        }
     }
 }
 
@@ -664,7 +652,6 @@ private struct PlanMemberAvatar: View {
             .fill(tint)
             .frame(width: size, height: size)
             .overlay(Text(String(name.prefix(1))).font(TamrinFont.font(size: size * 0.38, weight: .bold)).foregroundStyle(TamrinTheme.ink))
-            .overlay(Circle().stroke(Color(uiColor: .systemBackground), lineWidth: 3))
             .shadow(color: .black.opacity(0.10), radius: 14, y: 6)
     }
 }

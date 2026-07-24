@@ -22,15 +22,14 @@ struct FontDebugger {
         print("=====================================\n")
     }
     
-    /// Check if TheYearofHandicrafts fonts are loaded
+    /// Check if every bundled Thmanyah face is loaded.
     static func verifyCustomFonts() {
         print("\n========== CUSTOM FONT CHECK ==========")
         let fontsToCheck = [
-            "TheYearofHandicrafts-Regular",
-            "TheYearofHandicrafts-Medium",
-            "TheYearofHandicrafts-SemiBold",
-            "TheYearofHandicrafts-Bold",
-            "TheYearofHandicrafts-Black"
+            "Thmanyahsans12-Light",
+            "Thmanyahsans12-Regular",
+            "Thmanyahsans12-Medium",
+            "Thmanyahsans12-Bold"
         ]
         
         for fontName in fontsToCheck {
@@ -55,7 +54,7 @@ struct FontDebugView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text("Font Test - عام الحرف")
+                Text("Font Test - ثمانية")
                     .font(.appTitle)
                 
                 Group {
@@ -75,10 +74,8 @@ struct FontDebugView: View {
                         .font(.appFont(size: 20, weight: .black))
                 }
                 
-                Divider()
-                
                 Text("If fonts look different, they're working! 🎉")
-                    .font(.system(size: 14))
+                    .font(TamrinFont.font(size: 14))
                     .foregroundStyle(.gray)
             }
             .padding()
@@ -92,5 +89,4 @@ struct FontDebugView: View {
 #Preview {
     FontDebugView()
 }
-
 

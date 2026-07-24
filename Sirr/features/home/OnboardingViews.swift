@@ -25,7 +25,7 @@ struct WelcomeView: View {
                     Spacer()
                     Text("حيّاك \(feed.profileName)")
                         .font(TamrinFont.display).tracking(-1)
-                    Text("اختر كيف تبدأ، والباقي علينا.").font(.title3).foregroundStyle(.secondary).padding(.top, 8)
+                    Text("اختر كيف تبدأ، والباقي علينا.").font(TamrinFont.title3).foregroundStyle(.secondary).padding(.top, 8)
                     Spacer().frame(height: 34)
                     Button { showCreate = true } label: {
                         WelcomeChoiceCard(title: "أنشئ مجموعتك", subtitle: "رتّب روتين اللعب وادعُ الربع", symbol: "sparkles", dark: true)
@@ -34,7 +34,7 @@ struct WelcomeView: View {
                         WelcomeChoiceCard(title: "انضم لمجموعة", subtitle: "ادخل برمز الدعوة ووفر مكانك", symbol: "link", dark: false)
                     }.buttonStyle(SpringCardPressStyle()).padding(.top, 12)
                     Spacer()
-                    Text("مجموعاتك خاصة — ما يدخلها إلا بدعوة").font(.footnote).foregroundStyle(.tertiary)
+                    Text("مجموعاتك خاصة — ما يدخلها إلا بدعوة").font(TamrinFont.footnote).foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity).padding(.bottom, 24)
                 }
                 .padding(.horizontal, 22)
@@ -59,7 +59,7 @@ private struct WelcomeChoiceCard: View {
                 .foregroundStyle(TamrinTheme.ink)
             VStack(alignment: .leading, spacing: 5) {
                 Text(title).font(TamrinFont.title3)
-                Text(subtitle).font(.subheadline).foregroundStyle(dark ? .white.opacity(0.6) : .secondary)
+                Text(subtitle).font(TamrinFont.subheadline).foregroundStyle(dark ? .white.opacity(0.6) : .secondary)
             }
             Spacer()
             Image(systemName: "chevron.left").font(.caption.bold()).opacity(0.55)
@@ -68,7 +68,6 @@ private struct WelcomeChoiceCard: View {
         .padding(16)
         .frame(maxWidth: .infinity, minHeight: 100)
         .background(dark ? TamrinTheme.ink : TamrinTheme.glass, in: .rect(cornerRadius: 26))
-        .overlay(RoundedRectangle(cornerRadius: 26).stroke(.white.opacity(0.8)))
         .shadow(color: .black.opacity(dark ? 0.14 : 0.04), radius: 22, y: 10)
     }
 }
@@ -95,7 +94,7 @@ struct JoinTeamView: View {
                     }
                     TextField("رمز الانضمام", text: $code)
                         .textInputAutocapitalization(.characters).autocorrectionDisabled()
-                        .font(.title2.monospaced().weight(.semibold)).multilineTextAlignment(.center)
+                        .font(TamrinFont.font(size: 22, weight: .medium)).multilineTextAlignment(.center)
                         .padding(18).background(TamrinTheme.glass, in: .rect(cornerRadius: 20))
                         .onChange(of: code) { _, _ in invalid = false }
                     if let preview {
@@ -110,14 +109,14 @@ struct JoinTeamView: View {
                                 VStack(alignment: .leading) {
                                     Text(preview.name).font(TamrinFont.headline)
                                     Text("\(preview.memberCount) عضو" + (preview.ownerName.map { " · \($0)" } ?? ""))
-                                        .font(.subheadline).foregroundStyle(.secondary)
+                                        .font(TamrinFont.subheadline).foregroundStyle(.secondary)
                                 }
                             }
                         }
-                        .padding(20).background(TamrinTheme.glass, in: .rect(cornerRadius: 24)).overlay(RoundedRectangle(cornerRadius: 24).stroke(TamrinTheme.hairline))
+                        .padding(20).background(TamrinTheme.glass, in: .rect(cornerRadius: 24))
                         .transition(.scale.combined(with: .opacity))
                     }
-                    if invalid { Label("الرمز غير صحيح. تأكد منه وحاول مرة ثانية.", systemImage: "exclamationmark.circle.fill").foregroundStyle(.red).font(.subheadline) }
+                    if invalid { Label("الرمز غير صحيح. تأكد منه وحاول مرة ثانية.", systemImage: "exclamationmark.circle.fill").foregroundStyle(.red).font(TamrinFont.subheadline) }
                     Button(preview?.isMember == true ? "أنت عضو بالفعل" : "الانضمام للمجموعة") {
                         joining = true
                         Task {

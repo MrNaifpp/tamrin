@@ -49,7 +49,7 @@ struct SplashView: View {
             VStack {
                 Spacer()
                 Text("تمريــن")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(TamrinFont.font(size: 18, weight: .bold))
                     .foregroundStyle(Color(white: 0.55))
                     .opacity(wordmarkOpacity)
                     .padding(.bottom, 48)

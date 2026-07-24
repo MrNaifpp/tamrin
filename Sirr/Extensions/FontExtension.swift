@@ -2,36 +2,16 @@
 //  FontExtension.swift
 //  Sirr
 //
-//  Font configuration for the app
+//  App-wide Thmanyah typography aliases
 //
 
 import SwiftUI
 
 extension Font {
-    // Custom font: TheYearofHandicrafts (خط عام الحرف)
-    static func yearOfHandicrafts(size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        let fontName: String
-        
-        switch weight {
-        case .black, .heavy:
-            fontName = "TheYearofHandicrafts-Black"
-        case .bold:
-            fontName = "TheYearofHandicrafts-Bold"
-        case .semibold:
-            fontName = "TheYearofHandicrafts-SemiBold"
-        case .medium:
-            fontName = "TheYearofHandicrafts-Medium"
-        default:
-            fontName = "TheYearofHandicrafts-Regular"
-        }
-        
-        // Try to use custom font, fallback to system font
-        return Font.custom(fontName, size: size)
-    }
-    
-    // App-wide font defaults
+    /// Compatibility entry point used by the legacy screens. It deliberately
+    /// routes through the same Thmanyah + ss01 builder as the current UI.
     static func appFont(size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        return yearOfHandicrafts(size: size, weight: weight)
+        TamrinFont.font(size: size, weight: TamrinFontWeight(weight))
     }
     
     // Common font sizes
@@ -46,11 +26,10 @@ extension Font {
     static let appCaption = appFont(size: 12, weight: .medium)
 }
 
-// View modifier to apply custom font globally
 struct CustomFontModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .environment(\.font, .appBody)
+            .environment(\.font, TamrinFont.body)
     }
 }
 
@@ -59,4 +38,3 @@ extension View {
         modifier(CustomFontModifier())
     }
 }
-

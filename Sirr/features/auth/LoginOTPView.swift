@@ -35,8 +35,7 @@ struct LoginOTPView: View {
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 24)
                         Text(email)
-                            .font(.appBody)
-                            .fontWeight(.medium)
+                            .font(TamrinFont.font(size: 18, weight: .medium))
                             .foregroundStyle(Color(white: 0.3))
 
                         // OTP input: 6 slots with dashed lines in one rounded container (LTR fill)
@@ -82,8 +81,7 @@ struct LoginOTPView: View {
                                 .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         } else {
                             Text("التالي")
-                                .font(.headline)
-                                .fontWeight(.semibold)
+                                .font(TamrinFont.font(size: 17, weight: .medium))
                                 .foregroundStyle(.white)
                         }
                     }
@@ -164,13 +162,12 @@ private struct OTPInputView: View {
                         if index < otpCode.count {
                             let i = otpCode.index(otpCode.startIndex, offsetBy: index)
                             Text(String(otpCode[i]))
-                                .font(.system(size: 28, weight: .semibold))
+                                .font(TamrinFont.font(size: 28, weight: .medium))
                                 .foregroundStyle(Color(white: 0.2))
                         } else {
-                            // Dashed horizontal line placeholder
-                            Rectangle()
+                            Circle()
                                 .fill(dashColor)
-                                .frame(height: 2)
+                                .frame(width: 6, height: 6)
                         }
                     }
                     .frame(maxWidth: .infinity)

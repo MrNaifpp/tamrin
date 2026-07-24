@@ -251,7 +251,6 @@ struct WorkspaceSettingsSheet: View {
 
     private var appSection: some View {
         VStack(spacing: 8) {
-            Divider().overlay(Color(white: 0.25))
             Button {
                 dismiss()
                 onLogout()

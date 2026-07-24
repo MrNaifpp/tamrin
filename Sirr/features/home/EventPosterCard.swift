@@ -94,10 +94,6 @@ struct EmptyScheduleCard: View {
         .padding(.vertical, 48)
         .padding(.horizontal, 24)
         .background(.white.opacity(0.08), in: .rect(cornerRadius: 32, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 32, style: .continuous)
-                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
-        }
     }
 }
 

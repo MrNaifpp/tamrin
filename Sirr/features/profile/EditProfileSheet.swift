@@ -45,10 +45,10 @@ struct EditProfileSheet: View {
                     VStack(spacing: 0) {
                         // Title and description
                         Text("عدل حسابك")
-                            .font(.system(size: 22, weight: .bold))
+                            .font(TamrinFont.font(size: 22, weight: .bold))
                             .foregroundStyle(.white)
                         Text("عرف بنفسك، هذا اسمك وصورتك اللي بيشوفونها الناس.")
-                            .font(.system(size: 14))
+                            .font(TamrinFont.font(size: 14, weight: .regular))
                             .foregroundStyle(Color(white: 0.75))
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 24)
@@ -115,7 +115,7 @@ struct EditProfileSheet: View {
 
                         // Name text field
                         TextField("", text: $name, prompt: Text("الاسم").foregroundColor(Color(white: 0.5)))
-                            .font(.system(size: 16))
+                            .font(TamrinFont.font(size: 16, weight: .regular))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 18)
                             .frame(height: 52)
@@ -135,7 +135,7 @@ struct EditProfileSheet: View {
                             )
                             .keyboardType(.phonePad)
                             .textContentType(.telephoneNumber)
-                            .font(.system(size: 16))
+                            .font(TamrinFont.font(size: 16, weight: .regular))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 18)
                             .frame(height: 52)
@@ -143,17 +143,13 @@ struct EditProfileSheet: View {
                                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                                     .fill(Color(white: 0.25))
                             )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .stroke(isSTCPayInputValid ? Color.clear : Color.red.opacity(0.7), lineWidth: 1)
-                            )
                             if let err = stcPayError {
                                 Text(err)
-                                    .font(.system(size: 12))
+                                    .font(TamrinFont.caption)
                                     .foregroundStyle(.red)
                             } else {
                                 Text("هذا الرقم يستلم مدفوعات الفعاليات المدفوعة.")
-                                    .font(.system(size: 12))
+                                    .font(TamrinFont.caption)
                                     .foregroundStyle(Color(white: 0.6))
                             }
                         }
@@ -195,7 +191,7 @@ struct EditProfileSheet: View {
                             }
                         } label: {
                             Text("حفظ")
-                                .font(.system(size: 17, weight: .semibold))
+                                .font(TamrinFont.font(size: 17, weight: .medium))
                                 .foregroundStyle(.black)
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 52)
