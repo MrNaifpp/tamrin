@@ -109,7 +109,7 @@ struct LoginOnbord: View {
                                 .frame(maxWidth: .infinity)
                                 .frame(minHeight: TamrinControlMetrics.actionHeight)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                    RoundedRectangle(cornerRadius: 25, style: .continuous)
                                         .fill(Color.black)
                                 )
                         }
@@ -127,7 +127,7 @@ struct LoginOnbord: View {
                                 } else {
                                     HStack(spacing: 8) {
                                         Image(systemName: "apple.logo")
-                                            .font(.system(size: 18, weight: .medium))
+                                            .font(.system(size: 20, weight: .medium))
                                         Text("المتابعة عبر Apple")
                                             .font(.headline)
                                             .fontWeight(.semibold)
@@ -138,7 +138,7 @@ struct LoginOnbord: View {
                             .frame(maxWidth: .infinity)
                             .frame(minHeight: TamrinControlMetrics.actionHeight)
                             .background(
-                                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                RoundedRectangle(cornerRadius: 25, style: .continuous)
                                     .fill(Color(white: 0.95))
                             )
                         }

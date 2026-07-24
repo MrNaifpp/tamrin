@@ -23,7 +23,10 @@ struct TeamSideMenu: View {
                             .foregroundStyle(.white)
                         Spacer()
                         Button(action: createTeam) {
-                            Label("إنشاء مجموعة", systemImage: "plus").labelStyle(.iconOnly)
+                            Label("إنشاء مجموعة", systemImage: "plus")
+                                .labelStyle(.iconOnly)
+                                .font(.system(size: 18, weight: .semibold))
+                                .frame(width: TamrinControlMetrics.glassIconContent, height: TamrinControlMetrics.glassIconContent)
                         }
                         .buttonStyle(.glassProminent)
                         .buttonBorderShape(.circle)
@@ -136,7 +139,7 @@ private struct MenuProfileAvatar: View {
     var body: some View {
         Circle()
             .fill(.white.opacity(0.18))
-            .frame(width: 32, height: 32)
+            .frame(width: 36, height: 36)
             .overlay {
                 Text(String(name.prefix(1)))
                     .font(TamrinFont.font(size: 15, weight: .bold))

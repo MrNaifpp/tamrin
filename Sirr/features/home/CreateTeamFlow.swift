@@ -343,7 +343,7 @@ private struct IdentityStepPage: View {
                                     Image(systemName: symbol)
                                         .font(.system(size: TamrinControlMetrics.symbolSize, weight: .semibold))
                                         .foregroundStyle(isSymbolSelected(symbol) ? .white : .secondary)
-                                        .frame(width: TamrinControlMetrics.touchTarget, height: TamrinControlMetrics.touchTarget)
+                                        .frame(width: TamrinControlMetrics.roundButton, height: TamrinControlMetrics.roundButton)
                                         .background(isSymbolSelected(symbol) ? AnyShapeStyle(TamrinTheme.ink) : AnyShapeStyle(TamrinTheme.glass), in: .circle)
                                         .overlay(Circle().stroke(TamrinTheme.hairline))
                                 }
@@ -781,7 +781,7 @@ private struct ScheduleSheet: View {
                 .font(TamrinFont.font(size: 15, weight: .bold))
                 .foregroundStyle(plan.scheduleKind == kind ? .white : .primary)
                 .frame(maxWidth: .infinity)
-                .frame(minHeight: TamrinControlMetrics.touchTarget)
+                .frame(minHeight: TamrinControlMetrics.actionHeight)
                 .background(plan.scheduleKind == kind ? TamrinTheme.ink : TamrinTheme.secondary, in: .capsule)
         }
         .buttonStyle(.plain)
@@ -883,7 +883,7 @@ private struct CapacityRoundButton: View {
             Image(systemName: symbol)
                 .font(.system(size: TamrinControlMetrics.symbolSize, weight: .bold))
                 .foregroundStyle(TamrinTheme.ink)
-                .frame(width: TamrinControlMetrics.touchTarget, height: TamrinControlMetrics.touchTarget)
+                .frame(width: TamrinControlMetrics.roundButton, height: TamrinControlMetrics.roundButton)
                 .background(TamrinTheme.glass, in: .circle)
                 .overlay(Circle().stroke(TamrinTheme.hairline))
                 .shadow(color: .black.opacity(0.06), radius: 12, y: 5)
@@ -972,7 +972,7 @@ private struct PublishingReminderSheet: View {
         Button { action(); UIImpactFeedbackGenerator(style: .light).impactOccurred() } label: {
             Image(systemName: symbol)
                 .font(.system(size: TamrinControlMetrics.symbolSize, weight: .bold))
-                .frame(width: TamrinControlMetrics.touchTarget, height: TamrinControlMetrics.touchTarget)
+                .frame(width: TamrinControlMetrics.roundButton, height: TamrinControlMetrics.roundButton)
                 .background(TamrinTheme.secondary, in: .circle)
         }
         .buttonStyle(.plain).disabled(!enabled).opacity(enabled ? 1 : 0.3)

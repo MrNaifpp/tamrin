@@ -83,8 +83,12 @@ enum TamrinTheme {
 /// least Apple's 44pt touch target.
 enum TamrinControlMetrics {
     static let touchTarget: CGFloat = 44
-    static let actionHeight: CGFloat = 48
-    static let symbolSize: CGFloat = 17
+    /// Content frame inside iOS 26 glass chrome (the style adds its own inset).
+    static let glassIconContent: CGFloat = 36
+    static let glassActionHeight: CGFloat = 40
+    static let actionHeight: CGFloat = 50
+    static let roundButton: CGFloat = 50
+    static let symbolSize: CGFloat = 18
 }
 
 /// الخلفية الفوتوغرافية المموهة المشتركة في شاشات Figma.

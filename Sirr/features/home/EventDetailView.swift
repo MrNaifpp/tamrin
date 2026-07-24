@@ -87,6 +87,8 @@ struct EventDetailView: View {
             } label: {
                 Label("إغلاق", systemImage: "chevron.backward")
                     .labelStyle(.iconOnly)
+                    .font(.system(size: 17, weight: .semibold))
+                    .frame(width: TamrinControlMetrics.glassIconContent, height: TamrinControlMetrics.glassIconContent)
             }
             .buttonStyle(.glass)
             .buttonBorderShape(.circle)
@@ -184,6 +186,7 @@ struct EventDetailView: View {
                 }
                 .padding(.horizontal, 18)
                 .frame(maxWidth: .infinity)
+                .frame(height: TamrinControlMetrics.glassActionHeight)
             }
             .buttonStyle(.glass)
             .buttonBorderShape(.capsule)
@@ -209,6 +212,7 @@ struct EventDetailView: View {
                     .font(TamrinFont.font(size: 16, weight: .bold))
                     .foregroundStyle(TamrinTheme.ink)
                     .frame(maxWidth: .infinity)
+                    .frame(height: TamrinControlMetrics.glassActionHeight)
                     .contentShape(.capsule)
             }
             .buttonStyle(.glassProminent)
@@ -466,6 +470,7 @@ private struct RegistrationFlowSheet: View {
                             }
                         }
                         .padding(.horizontal, 14)
+                        .frame(height: TamrinControlMetrics.glassActionHeight)
                         .contentShape(.capsule)
                     }
                     .buttonStyle(.glassProminent)
@@ -501,6 +506,7 @@ private struct RegistrationFlowSheet: View {
                                     .font(TamrinFont.font(size: 15, weight: .medium))
                                     .foregroundStyle(.white.opacity(0.85))
                                     .frame(maxWidth: .infinity)
+                                    .frame(height: TamrinControlMetrics.glassActionHeight)
                                     .contentShape(.capsule)
                             }
                             .buttonStyle(.glass)
@@ -519,6 +525,7 @@ private struct RegistrationFlowSheet: View {
                                 .font(TamrinFont.font(size: 15, weight: .medium))
                                 .foregroundStyle(.white.opacity(0.85))
                                 .frame(maxWidth: .infinity)
+                                .frame(height: TamrinControlMetrics.glassActionHeight)
                                 .contentShape(.capsule)
                         }
                         .buttonStyle(.glass)
@@ -565,6 +572,7 @@ private struct RegistrationFlowSheet: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
+                .frame(height: TamrinControlMetrics.glassActionHeight)
             }
             .buttonStyle(.glassProminent)
             .buttonBorderShape(.capsule)
@@ -622,6 +630,7 @@ private struct RegistrationFlowSheet: View {
                 Text("تم")
                     .font(TamrinFont.font(size: 17, weight: .bold))
                     .frame(maxWidth: .infinity)
+                    .frame(height: TamrinControlMetrics.glassActionHeight)
             }
             .buttonStyle(.glassProminent)
             .buttonBorderShape(.capsule)

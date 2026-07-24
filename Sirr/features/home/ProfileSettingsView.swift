@@ -69,6 +69,7 @@ struct ProfileSettingsView: View {
                 Label("تعديل حسابي", systemImage: "pencil")
                     .font(TamrinFont.font(size: 15, weight: .bold))
                     .frame(maxWidth: .infinity)
+                    .frame(height: TamrinControlMetrics.glassActionHeight)
             }
             .buttonStyle(.glass).buttonBorderShape(.capsule).controlSize(.regular)
 
@@ -79,6 +80,7 @@ struct ProfileSettingsView: View {
                 Label("تسجيل الخروج", systemImage: "rectangle.portrait.and.arrow.right")
                     .font(TamrinFont.font(size: 15, weight: .bold))
                     .frame(maxWidth: .infinity)
+                    .frame(height: TamrinControlMetrics.glassActionHeight)
             }
             .buttonStyle(.glass).buttonBorderShape(.capsule).controlSize(.regular).tint(.red)
         }

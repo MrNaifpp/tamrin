@@ -74,7 +74,7 @@ struct SignupView: View {
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: TamrinControlMetrics.actionHeight)
                         .background(
-                            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            RoundedRectangle(cornerRadius: 25, style: .continuous)
                                 .fill(Color.white)
                         )
                 }
@@ -228,7 +228,7 @@ struct SignupView: View {
                     .frame(maxWidth: .infinity)
                     .frame(minHeight: TamrinControlMetrics.actionHeight)
                     .background(
-                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        RoundedRectangle(cornerRadius: 25, style: .continuous)
                             .fill(isFormValid ? Color(red: 92/255, green: 92/255, blue: 92/255) : Color(white: 0.25))
                     )
                 }

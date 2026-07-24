@@ -104,7 +104,7 @@ struct JoinWorkspaceView: View {
             }
             .frame(maxWidth: .infinity)
             .frame(minHeight: TamrinControlMetrics.actionHeight)
-            .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.white))
+            .background(RoundedRectangle(cornerRadius: 25, style: .continuous).fill(Color.white))
         }
         .buttonStyle(.plain)
         .disabled(isJoining)

@@ -338,6 +338,8 @@ private struct HomeTopBar: View {
             Button(action: openMenu) {
                 Label("المجموعات", systemImage: "line.3.horizontal")
                     .labelStyle(.iconOnly)
+                    .font(.system(size: 18, weight: .semibold))
+                    .frame(width: TamrinControlMetrics.glassIconContent, height: TamrinControlMetrics.glassIconContent)
             }
             .buttonStyle(.glass)
             .buttonBorderShape(.circle)
@@ -347,13 +349,15 @@ private struct HomeTopBar: View {
             Button(action: openPlan) {
                 HStack(spacing: 9) {
                     Text(team?.name ?? "المجموعة")
-                        .font(TamrinFont.font(size: 16, weight: .medium))
+                        .font(TamrinFont.font(size: 17, weight: .medium))
                         .foregroundStyle(.primary)
                         .lineLimit(1).minimumScaleFactor(0.74)
                     Image(systemName: "chevron.left")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(.secondary)
                 }
+                .padding(.horizontal, 16)
+                .frame(height: TamrinControlMetrics.glassIconContent)
             }
             .buttonStyle(.glass)
             .buttonBorderShape(.capsule)
