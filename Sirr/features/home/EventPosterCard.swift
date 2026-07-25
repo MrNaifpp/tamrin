@@ -228,14 +228,25 @@ private struct EventActionPressStyle: ButtonStyle {
 struct EmptyScheduleCard: View {
     @Environment(\.colorScheme) private var colorScheme
 
+    /// `secondarySystemBackground` sits at roughly the same value as the page
+    /// behind it in dark mode, so the card had almost no edge. Lift it into its
+    /// own step above the background instead.
+    private var surface: Color {
+        Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark
+                ? UIColor(white: 0.19, alpha: 1)
+                : .secondarySystemBackground
+        })
+    }
+
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 36, style: .continuous)
-                .fill(Color(uiColor: .secondarySystemBackground))
+                .fill(surface)
 
             LinearGradient(
                 colors: colorScheme == .dark
-                    ? [Color.white.opacity(0.035), .clear]
+                    ? [Color.white.opacity(0.05), .clear]
                     : [Color.white.opacity(0.92), Color(uiColor: .secondarySystemBackground)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
