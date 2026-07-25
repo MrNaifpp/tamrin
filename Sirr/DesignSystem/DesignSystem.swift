@@ -98,23 +98,32 @@ enum TamrinTheme {
             ? UIColor(white: 0.058, alpha: 1)
             : UIColor(white: 0.953, alpha: 1)
     })
-    /// A card raised above `page`. `systemBackground` would be pure black here.
+    /// A presented sheet floats above `page`, so in dark mode it steps up from
+    /// it — painting a sheet at `page` makes it read as an unlit hole.
+    static let sheet = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 0.12, alpha: 1)
+            : UIColor(white: 0.953, alpha: 1)
+    })
+    /// A card raised above `page` or `sheet`.
     static let card = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(white: 0.13, alpha: 1)
+            ? UIColor(white: 0.19, alpha: 1)
             : .systemBackground
     })
     /// Near-opaque chrome that floats over artwork (toasts, pills). Fixed dark
     /// because its content is always white, but still off pure black.
     static let floatingChrome = Color(white: 0.11)
+    /// Input fields, chips and unselected controls. Must clear `sheet` by a
+    /// visible margin, since that is what it usually sits on.
     static let secondary = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(white: 0.16, alpha: 1)
+            ? UIColor(white: 0.24, alpha: 1)
             : UIColor(white: 0.917, alpha: 1)
     })
     static let glass = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(white: 0.13, alpha: 0.94)
+            ? UIColor(white: 0.20, alpha: 0.95)
             : UIColor(white: 1, alpha: 0.74)
     })
     /// Fixed near-black: used both as a filled surface (with white content on
@@ -293,7 +302,7 @@ extension View {
         maxFraction: CGFloat = 0.92,
         allowsExpansion: Bool = false,
         includesNavigationBar: Bool = false,
-        background: some ShapeStyle = TamrinTheme.page,
+        background: some ShapeStyle = TamrinTheme.sheet,
         extraHeight: CGFloat = 0
     ) -> some View {
         modifier(FittedSheetDetent(

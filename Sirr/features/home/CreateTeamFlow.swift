@@ -262,7 +262,7 @@ private struct FlowHeader: View {
             HStack(spacing: 6) {
                 ForEach(CreationStep.allCases, id: \.rawValue) { item in
                     Capsule()
-                        .fill(item.rawValue <= step.rawValue ? TamrinTheme.ink : Color.primary.opacity(0.09))
+                        .fill(item.rawValue <= step.rawValue ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color.primary.opacity(0.09)))
                         .frame(height: 4)
                 }
             }
@@ -352,7 +352,7 @@ private struct IdentityStepPage: View {
                                         .font(.system(size: TamrinControlMetrics.symbolSize, weight: .semibold))
                                         .foregroundStyle(isSymbolSelected(symbol) ? .white : .secondary)
                                         .frame(width: TamrinControlMetrics.roundButton, height: TamrinControlMetrics.roundButton)
-                                        .background(isSymbolSelected(symbol) ? AnyShapeStyle(TamrinTheme.ink) : AnyShapeStyle(TamrinTheme.glass), in: .circle)
+                                        .background(isSymbolSelected(symbol) ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(TamrinTheme.glass), in: .circle)
                                 }
                                 .buttonStyle(.plain)
                                 .accessibilityAddTraits(isSymbolSelected(symbol) ? .isSelected : [])
@@ -674,13 +674,13 @@ private struct ComposerTile: View {
                 HStack {
                     Image(systemName: symbol)
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(isSet ? .white : TamrinTheme.ink.opacity(0.75))
+                        .foregroundStyle(isSet ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color.secondary))
                         .frame(width: 40, height: 40)
-                        .background(isSet ? AnyShapeStyle(TamrinTheme.ink) : AnyShapeStyle(TamrinTheme.secondary), in: .circle)
+                        .background(isSet ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(TamrinTheme.secondary), in: .circle)
                     Spacer()
                     Image(systemName: isSet ? "checkmark.circle.fill" : "plus.circle")
                         .font(.title3)
-                        .foregroundStyle(isSet ? TamrinTheme.ink : Color.secondary.opacity(0.55))
+                        .foregroundStyle(isSet ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color.secondary.opacity(0.55)))
                 }
                 Spacer(minLength: 12)
                 Text(title)
@@ -1220,7 +1220,7 @@ private struct MembersStepPage: View {
                             .font(.title3.weight(.semibold))
                             .foregroundStyle(.white)
                             .frame(width: 46, height: 46)
-                            .background(TamrinTheme.ink, in: .circle)
+                            .background(Color.accentColor, in: .circle)
                         VStack(alignment: .leading, spacing: 3) {
                             Text("أضف من جهات الاتصال").font(TamrinFont.headline)
                             Text("اختر عدة أشخاص دفعة واحدة").font(TamrinFont.caption).foregroundStyle(.secondary)
@@ -1248,7 +1248,7 @@ private struct MembersStepPage: View {
                             .font(.headline)
                             .foregroundStyle(.white)
                             .frame(width: TamrinControlMetrics.actionHeight, height: TamrinControlMetrics.actionHeight)
-                            .background(TamrinTheme.ink, in: .circle)
+                            .background(Color.accentColor, in: .circle)
                             .opacity(manualName.trimmingCharacters(in: .whitespaces).isEmpty ? 0.3 : 1)
                     }
                     .buttonStyle(.plain)

@@ -539,10 +539,6 @@ private struct MemberAvatar: View {
 /// submitted only after the player reviews the destination and confirms from
 /// the detail step.
 struct RegistrationFlowSheet: View {
-    /// Lifted off pure black so the sheet reads as a raised surface over the
-    /// event artwork instead of a hole punched in the screen.
-    static let surface = Color(white: 0.13)
-
     @Bindable var feed: HomeStore
     let occurrence: FeedOccurrence
     var artName: String = "ExerciseArt1"
@@ -678,7 +674,7 @@ struct RegistrationFlowSheet: View {
         .fittedSheet(
             minHeight: 300,
             includesNavigationBar: true,
-            background: RegistrationFlowSheet.surface
+            background: TamrinTheme.sheet
         )
         .task {
             if reviewOnly, destination == nil {

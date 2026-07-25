@@ -154,8 +154,10 @@ struct ProfileSettingsView: View {
                             .foregroundStyle(position == value ? .white : .primary)
                             .frame(maxWidth: .infinity)
                             .frame(height: 44)
+                            // Accent, not `ink`: an ink chip is darker than the
+                            // sheet in dark mode and reads as recessed.
                             .background(
-                                position == value ? AnyShapeStyle(TamrinTheme.ink) : AnyShapeStyle(TamrinTheme.secondary),
+                                position == value ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(TamrinTheme.secondary),
                                 in: .capsule
                             )
                     }

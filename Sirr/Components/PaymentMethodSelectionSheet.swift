@@ -36,7 +36,7 @@ struct PaymentMethodSelectionSheet: View {
                 .padding(.bottom, 40)
             }
             .scrollIndicators(.hidden)
-            .background(TamrinTheme.page)
+            .background(TamrinTheme.sheet)
             .navigationTitle("وسائل الدفع")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -369,7 +369,7 @@ private struct PaymentMethodDetailsEditor: View {
             .padding(.bottom, existing == nil ? 112 : 184)
         }
         .scrollDismissesKeyboard(.interactively)
-        .background(TamrinTheme.page)
+        .background(TamrinTheme.sheet)
         .navigationTitle(existing == nil ? "إضافة وسيلة الدفع" : "تعديل وسيلة الدفع")
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
