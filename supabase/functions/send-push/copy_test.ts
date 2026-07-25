@@ -41,6 +41,22 @@ Deno.test("event_opened copy interpolates the event name", () => {
   });
 });
 
+Deno.test("event_invited copy interpolates the event name", () => {
+  const c = copyFor("event_invited", "تمرين الخميس");
+  assertEquals(c, {
+    title: "دعوة لتمرين ⚽",
+    body: "دعاك المشرف لحضور تمرين الخميس — افتح التطبيق لتأكيد حضورك.",
+  });
+});
+
+Deno.test("event_cancelled copy interpolates the event name", () => {
+  const c = copyFor("event_cancelled", "تمرين الخميس");
+  assertEquals(c, {
+    title: "تم تخطي تمرين هذا الأسبوع",
+    body: "أُلغي تمرين الخميس. افتح التمرين لمعرفة السبب والتفاصيل.",
+  });
+});
+
 Deno.test("unknown type returns null", () => {
   assertEquals(copyFor("nope", "x"), null);
 });

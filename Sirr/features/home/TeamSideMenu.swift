@@ -1,5 +1,16 @@
 import SwiftUI
 
+enum HomeDrawerMetrics {
+    static let horizontalInset: CGFloat = 12
+    static let chromeInset: CGFloat = 18
+
+    /// Matches the roughly 300pt drawer used by ChatGPT on a 402pt iPhone,
+    /// while retaining enough of the page to make the spatial relationship clear.
+    static func width(for containerWidth: CGFloat) -> CGFloat {
+        min(300, max(0, containerWidth - 72))
+    }
+}
+
 /// Ported side-menu drawer (designer TeamSideMenu, member view) bound to
 /// HomeStore. Team selection is live; create-team and settings are supplied
 /// by the parent. The admin/member experience switcher is intentionally dropped.
@@ -8,82 +19,95 @@ struct TeamSideMenu: View {
     let createTeam: () -> Void
     let openSettings: () -> Void
     let onSelectTeam: (UUID) -> Void
+    @State private var scrollOffset: CGFloat = 0
 
     var body: some View {
         GeometryReader { proxy in
-            let menuWidth = min(proxy.size.width - 94, 308)
+            let drawerWidth = HomeDrawerMetrics.width(for: proxy.size.width)
+            let contentWidth = max(
+                drawerWidth - (HomeDrawerMetrics.horizontalInset * 2),
+                0
+            )
+            let chromeWidth = max(
+                drawerWidth - (HomeDrawerMetrics.chromeInset * 2),
+                0
+            )
+            let pulledPastTop = max(-scrollOffset, 0)
 
-            ZStack(alignment: .topLeading) {
-                Color(red: 0.067, green: 0.067, blue: 0.067)
+            ZStack {
+                Color(uiColor: .systemBackground)
                     .ignoresSafeArea()
 
-                VStack(alignment: .leading, spacing: 0) {
-                    menuHeader(width: menuWidth)
-                        .padding(.bottom, 10)
+                ZStack {
+                    groupsScroll(width: contentWidth)
+                        .frame(width: drawerWidth)
+                        .scrollBounceBehavior(.always)
+                        // Fade only the scrolling rows. Keeping the drawer
+                        // background outside this mask preserves one solid
+                        // black surface with no toolbar-shaped rectangles.
+                        .mask { scrollContentMask }
+                        .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                            geometry.contentOffset.y - geometry.contentInsets.top
+                        } action: { _, newOffset in
+                            scrollOffset = newOffset
+                        }
 
-                    groupsScrollWithEdgeEffects(width: menuWidth)
-                        .frame(maxHeight: .infinity)
+                    menuHeader(width: chromeWidth)
+                        // ChatGPT's header follows a strong rubber-band pull at
+                        // a slower rate, then settles back with the list.
+                        .offset(y: min(pulledPastTop * 0.32, 42))
+                        .padding(.horizontal, HomeDrawerMetrics.chromeInset)
+                        .padding(.top, 62)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
-                    profileButton(width: menuWidth)
-                        .padding(.top, 12)
+                    profileButton(width: contentWidth)
+                        .padding(.horizontal, HomeDrawerMetrics.horizontalInset)
+                        .padding(.bottom, 30)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
                 }
-                .frame(width: menuWidth, alignment: .leading)
-                .frame(maxHeight: .infinity, alignment: .topLeading)
-                .padding(.top, max(proxy.safeAreaInsets.top + 24, 68))
-                .padding(.bottom, max(proxy.safeAreaInsets.bottom + 16, 30))
-                .padding(.leading, 16)
+                .frame(width: drawerWidth)
+                .environment(\.layoutDirection, .rightToLeft)
+                // The drawer itself is placed on the physical right. RTL
+                // applies only inside it so semantic alignment cannot move
+                // the whole 300pt surface back to the left.
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
         .colorScheme(.dark)
     }
 
     private func menuHeader(width: CGFloat) -> some View {
-        HStack(alignment: .center, spacing: 14) {
+        ZStack {
             Text("المجموعات")
                 .font(TamrinFont.font(size: 22, weight: .bold))
                 .foregroundStyle(.white)
-
-            Spacer()
+                .frame(maxWidth: .infinity, alignment: .trailing)
 
             Button(action: createTeam) {
-                Label("إنشاء مجموعة", systemImage: "plus")
+                Label("إضافة", systemImage: "plus")
                     .labelStyle(.iconOnly)
                     .font(.system(size: 18, weight: .semibold))
-                    .frame(width: TamrinControlMetrics.glassIconContent, height: TamrinControlMetrics.glassIconContent)
+                    .frame(
+                        width: 30,
+                        height: 30
+                    )
             }
             .buttonStyle(.glassProminent)
             .buttonBorderShape(.circle)
             .controlSize(.regular)
             .tint(.blue)
-            .accessibilityLabel("إنشاء مجموعة")
-            .accessibilityHint("يفتح شاشة إنشاء مجموعة جديدة")
+            .accessibilityLabel("إضافة")
+            .accessibilityHint(
+                feed.isCurrentTeamOwner
+                    ? "يفتح خيارات إنشاء تمرين أو مجموعة"
+                    : "يفتح خيارات إنشاء مجموعة أو الانضمام إلى مجموعة"
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(width: width)
-    }
-
-    @ViewBuilder
-    private func groupsScrollWithEdgeEffects(width: CGFloat) -> some View {
-        if #available(iOS 26.0, *) {
-            groupsScroll(width: width)
-                // Native iOS 26 scroll-edge material creates the same soft
-                // fade under the title and above the anchored profile card.
-                .scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
-        } else {
-            groupsScroll(width: width)
-                .mask {
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: .black, location: 0.055),
-                            .init(color: .black, location: 0.945),
-                            .init(color: .clear, location: 1)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                }
-        }
+        // Physical placement is fixed: Arabic title on the right and the
+        // primary action on the left, independent of an ancestor's RTL rules.
+        .environment(\.layoutDirection, .leftToRight)
     }
 
     private func groupsScroll(width: CGFloat) -> some View {
@@ -105,42 +129,89 @@ struct TeamSideMenu: View {
                     .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
             }
-            .padding(.vertical, 10)
+            .padding(.top, 128)
+            .padding(.bottom, 110)
             .frame(width: width)
         }
     }
 
+    private var scrollContentMask: some View {
+        VStack(spacing: 0) {
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: 0),
+                    .init(color: .clear, location: 0.58),
+                    .init(color: .black.opacity(0.45), location: 0.78),
+                    .init(color: .black, location: 1)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 128)
+
+            Rectangle().fill(.black)
+
+            LinearGradient(
+                stops: [
+                    .init(color: .black, location: 0),
+                    .init(color: .black.opacity(0.88), location: 0.06),
+                    .init(color: .black.opacity(0.18), location: 0.18),
+                    .init(color: .clear, location: 0.32),
+                    .init(color: .clear, location: 1)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 112)
+        }
+    }
+
+    /// Bottom-anchored account control. The subtitle names exactly what is
+    /// editable behind it (name + position) and the trailing pencil makes the
+    /// row read as an entry point rather than a static profile badge.
+    ///
+    /// Uses `glassEffect` rather than `buttonStyle(.glass)`: the button style
+    /// insets its label by an amount we can't read, so the capsule ended up
+    /// wider than the team cards above it. Here the capsule is exactly the card
+    /// width and the content uses the cards' own 10pt inset, so the avatars and
+    /// both edges line up down the whole drawer.
     private func profileButton(width: CGFloat) -> some View {
         Button(action: openSettings) {
             HStack(spacing: 11) {
-                MenuProfileAvatar(name: feed.profileName)
+                MenuProfileAvatar(name: feed.profileName, avatarData: feed.avatarData)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(feed.profileName.isEmpty ? "حسابي" : feed.profileName)
                         .font(TamrinFont.font(size: 15, weight: .bold))
                         .foregroundStyle(.white)
                         .lineLimit(1)
-                    Text("الملف الشخصي")
+                    Text(profileSubtitle)
                         .font(TamrinFont.font(size: 11, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.54))
+                        .foregroundStyle(.white.opacity(0.55))
+                        .lineLimit(1)
                 }
 
                 Spacer(minLength: 8)
 
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.38))
-                    .accessibilityHidden(true)
+                Image(systemName: "pencil")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .frame(width: 28, height: 28)
+                    .background(.white.opacity(0.14), in: .circle)
             }
-            .padding(.horizontal, 12)
-            .frame(width: width)
-            .frame(minHeight: 62)
-            .background(.white.opacity(0.075), in: .rect(cornerRadius: 20, style: .continuous))
-            .contentShape(.rect(cornerRadius: 20, style: .continuous))
+            .padding(.horizontal, 10)
+            .frame(width: width, height: 62)
+            .glassEffect(.regular.interactive(), in: .capsule)
+            .contentShape(.capsule)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("الملف الشخصي")
-        .accessibilityHint("يفتح إعدادات الملف الشخصي")
+        .accessibilityLabel(feed.profileName.isEmpty ? "حسابي" : feed.profileName)
+        .accessibilityHint("يفتح تعديل الاسم والمركز")
+    }
+
+    private var profileSubtitle: String {
+        let position = feed.playerPosition.trimmingCharacters(in: .whitespacesAndNewlines)
+        return position.isEmpty ? "عدّل اسمك ومركزك" : "\(position) · عدّل معلوماتك"
     }
 }
 
@@ -158,14 +229,14 @@ private struct TeamSideMenuRow: View {
                 fallbackBackground: AnyShapeStyle(
                     LinearGradient(
                         colors: [
-                            Color(red: 0.80, green: 0.83, blue: 0.72),
-                            Color(red: 0.95, green: 0.95, blue: 0.84)
+                            Color(white: 0.26),
+                            Color(white: 0.17)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
                 ),
-                symbolColor: Color(red: 0.10, green: 0.13, blue: 0.10)
+                symbolColor: .white.opacity(0.88)
             )
             VStack(alignment: .leading, spacing: 3) {
                 Text(team.name)
@@ -192,22 +263,31 @@ private struct TeamSideMenuRow: View {
 
 private struct MenuProfileAvatar: View {
     let name: String
+    var avatarData: Data?
+
     var body: some View {
-        Circle()
-            .fill(.white.opacity(0.18))
-            .frame(width: 40, height: 40)
-            .overlay {
-                if name.isEmpty {
-                    Image(systemName: "person.fill")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.82))
-                } else {
-                    Text(String(name.prefix(1)))
-                        .font(TamrinFont.font(size: 16, weight: .bold))
-                        .foregroundStyle(.white)
-                }
+        Group {
+            if let avatarData, let image = UIImage(data: avatarData) {
+                Image(uiImage: image).resizable().scaledToFill()
+            } else {
+                Circle()
+                    .fill(.white.opacity(0.18))
+                    .overlay {
+                        if name.isEmpty {
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.82))
+                        } else {
+                            Text(String(name.prefix(1)))
+                                .font(TamrinFont.font(size: 16, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                    }
             }
-            .accessibilityHidden(true)
+        }
+        .frame(width: 38, height: 38)
+        .clipShape(.circle)
+        .accessibilityHidden(true)
     }
 }
 

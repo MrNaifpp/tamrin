@@ -1,31 +1,15 @@
 import SwiftUI
 import MapKit
 
-/// Team / plan details page — the designer's PlanTemplateDetailView (member
-/// view) bound to HomeStore. Admin edit/publish affordances are omitted;
-/// the plan switcher only appears when a team has more than one plan.
-private enum PlanDetailTab: String, CaseIterable, Identifiable {
-    case info, members, payments
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .info: "التمرين"
-        case .members: "الأعضاء"
-        case .payments: "الدفع"
-        }
-    }
-}
-
+/// Group details. The page answers three questions in this order, top to
+/// bottom, with nothing between them: what the standing session is (day, time,
+/// venue, venue cost, per-player share), who is in the group, and — for the
+/// organizer only — how to invite more people.
 struct TeamDetailView: View {
     @Bindable var feed: HomeStore
     @Environment(\.dismiss) private var dismiss
     @State private var mapPosition: MapCameraPosition = .automatic
-    @State private var selectedTab: PlanDetailTab = .info
     @State private var selectedPlanID: UUID?
-    @State private var isBarPinned = false
-    @State private var isTabJumping = false
     @State private var didCopyCode = false
     @State private var showDeleteConfirm = false
     @State private var showAddSession = false
@@ -41,84 +25,70 @@ struct TeamDetailView: View {
             return $0.displayName < $1.displayName
         }
     }
+
     private var dayText: String {
         guard let plan else { return "" }
         return plan.weekdays.compactMap { weekdayName($0) }.joined(separator: "، ")
     }
-    private var artName: String {
-        let seed = team?.id.uuidString.unicodeScalars.reduce(0) { $0 + Int($1.value) } ?? 0
-        return "ExerciseArt\((seed % 3) + 1)"
+
+    /// A neutral surface rather than Home's blurred photograph. The artwork is
+    /// warm, and behind this much text and this many cards it washed the whole
+    /// page out to a muddy brown instead of letting the content read.
+    private var backdrop: some View {
+        ZStack {
+            Color(white: 0.07)
+            Circle()
+                .fill(TamrinTheme.lime.opacity(0.14))
+                .frame(width: 300, height: 300)
+                .blur(radius: 120)
+                .offset(y: -320)
+        }
+        .ignoresSafeArea()
+        .accessibilityHidden(true)
+    }
+
+    /// Older plans stored only the per-player share, so rebuild the venue total
+    /// from it rather than showing a zero.
+    private func venueTotal(_ plan: FeedPlan) -> Double {
+        plan.totalVenueCost > 0 ? plan.totalVenueCost : plan.price * Double(plan.capacity)
     }
 
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                HomeArtBackdrop(artName: artName, hasArt: true)
+                backdrop
 
-                ScrollViewReader { proxy in
-                    ScrollView(showsIndicators: false) {
-                        VStack(alignment: .leading, spacing: 14) {
-                            heroHeader
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 16) {
+                        heroHeader
 
-                            if teamPlans.count > 1 {
-                                planSwitcher
-                            }
-
-                            PlanPillTabBar(selection: $selectedTab) { tab in
-                                jump(to: tab, proxy: proxy)
-                            }
-                            .onGeometryChange(for: CGFloat.self) { proxy in
-                                proxy.frame(in: .global).minY
-                            } action: { minY in
-                                let pinned = minY <= geo.safeAreaInsets.top + 1
-                                if pinned != isBarPinned {
-                                    withAnimation(.easeInOut(duration: 0.2)) { isBarPinned = pinned }
-                                }
-                            }
-
-                            infoSection
-                                .id(PlanDetailTab.info)
-                                .onScrollVisibilityChange(threshold: 0.4) { visible in
-                                    if visible, !isTabJumping { withAnimation(.snappy(duration: 0.25)) { selectedTab = .info } }
-                                }
-
-                            membersCard
-                                .id(PlanDetailTab.members)
-                                .onScrollVisibilityChange(threshold: 0.35) { visible in
-                                    if visible, !isTabJumping { withAnimation(.snappy(duration: 0.25)) { selectedTab = .members } }
-                                }
-
-                            paymentsSection
-                                .id(PlanDetailTab.payments)
-                                .onScrollVisibilityChange(threshold: 0.5) { visible in
-                                    if visible, !isTabJumping { withAnimation(.snappy(duration: 0.25)) { selectedTab = .payments } }
-                                }
+                        if teamPlans.count > 1 {
+                            planSwitcher
                         }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 10)
-                        .padding(.bottom, 40)
-                    }
-                    .refreshable { await feed.refresh() }
-                    .mask {
-                        // Fades content passing behind the nav bar / pinned tabs.
-                        VStack(spacing: 0) {
-                            Color.clear
-                                .frame(height: geo.safeAreaInsets.top + (isBarPinned ? 54 : 0))
-                            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                                .frame(height: 16)
-                            Color.black
-                        }
-                        .ignoresSafeArea()
-                    }
-                    .overlay(alignment: .top) {
-                        if isBarPinned {
-                            PlanPillTabBar(selection: $selectedTab) { tab in
-                                jump(to: tab, proxy: proxy)
-                            }
-                            .padding(.horizontal, 20)
-                            .transition(.opacity)
+
+                        planSection
+                        membersCard
+
+                        if feed.isCurrentTeamOwner {
+                            inviteCard
+                            paymentsCard
                         }
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+                    .padding(.bottom, 40)
+                }
+                .refreshable { await feed.refresh() }
+                // The navigation bar is transparent by design, so scrolling
+                // content has to fade out beneath it instead of colliding.
+                .mask {
+                    VStack(spacing: 0) {
+                        Color.clear.frame(height: geo.safeAreaInsets.top)
+                        LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                            .frame(height: 18)
+                        Color.black
+                    }
+                    .ignoresSafeArea()
                 }
             }
         }
@@ -129,14 +99,8 @@ struct TeamDetailView: View {
         .toolbar(.visible, for: .navigationBar)
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
-        .onAppear {
-            if let plan {
-                mapPosition = .region(MKCoordinateRegion(
-                    center: CLLocationCoordinate2D(latitude: plan.latitude, longitude: plan.longitude),
-                    span: MKCoordinateSpan(latitudeDelta: 0.018, longitudeDelta: 0.018)
-                ))
-            }
-        }
+        .onAppear { centreMap(on: plan) }
+        .onChange(of: plan?.id) { _, _ in centreMap(on: plan) }
         .toolbar {
             // Contextual actions live in an ellipsis menu (the designer's pattern).
             // Deleting the last group is allowed — Home falls back to WelcomeView.
@@ -191,6 +155,16 @@ struct TeamDetailView: View {
         }
     }
 
+    private func centreMap(on plan: FeedPlan?) {
+        guard let plan else { return }
+        withAnimation(.easeOut(duration: 0.4)) {
+            mapPosition = .region(MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: plan.latitude, longitude: plan.longitude),
+                span: MKCoordinateSpan(latitudeDelta: 0.018, longitudeDelta: 0.018)
+            ))
+        }
+    }
+
     /// Prefills the composer from the displayed session (edit mode). Presented
     /// as a one-off on the event's actual date; the weekday stays selected in
     /// case the user switches to recurring.
@@ -206,13 +180,42 @@ struct TeamDetailView: View {
         d.longitude = plan.longitude
         d.capacity = plan.capacity
         d.capacityPolicy = plan.capacityPolicy
-        d.totalVenueCost = plan.totalVenueCost > 0
-            ? plan.totalVenueCost
-            : plan.price * Double(plan.capacity)
+        d.totalVenueCost = venueTotal(plan)
         d.paymentMethods = plan.paymentMethods
         d.scheduleKind = .oneOff
         d.oneOffDate = plan.startDate
         return d
+    }
+
+    // MARK: - Hero
+
+    private var heroHeader: some View {
+        VStack(spacing: 14) {
+            TeamAvatarView(
+                avatarData: team?.avatarData ?? nil,
+                symbol: team?.symbol ?? "figure.run",
+                size: 78,
+                cornerRadiusRatio: 0.5,
+                fallbackBackground: AnyShapeStyle(TamrinTheme.lime),
+                symbolColor: TamrinTheme.ink
+            )
+            .shadow(color: TamrinTheme.lime.opacity(0.3), radius: 24, y: 10)
+
+            VStack(spacing: 4) {
+                Text(team?.name ?? "المجموعة")
+                    .font(TamrinFont.font(size: 26, weight: .bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+
+                Text("\(members.count.formatted()) عضوًا")
+                    .font(TamrinFont.font(size: 14, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 10)
+        .padding(.bottom, 2)
     }
 
     private var planSwitcher: some View {
@@ -223,12 +226,6 @@ struct TeamDetailView: View {
                     Button {
                         selectedPlanID = item.id
                         UISelectionFeedbackGenerator().selectionChanged()
-                        withAnimation(.easeOut(duration: 0.4)) {
-                            mapPosition = .region(MKCoordinateRegion(
-                                center: CLLocationCoordinate2D(latitude: item.latitude, longitude: item.longitude),
-                                span: MKCoordinateSpan(latitudeDelta: 0.018, longitudeDelta: 0.018)
-                            ))
-                        }
                     } label: {
                         Text(item.name)
                             .font(TamrinFont.font(size: 14, weight: .medium))
@@ -247,246 +244,218 @@ struct TeamDetailView: View {
         }
     }
 
-    private func jump(to tab: PlanDetailTab, proxy: ScrollViewProxy) {
-        UISelectionFeedbackGenerator().selectionChanged()
-        isTabJumping = true
-        withAnimation(.snappy(duration: 0.35)) {
-            selectedTab = tab
-            proxy.scrollTo(tab, anchor: UnitPoint(x: 0.5, y: 0.082))
-        }
-        Task {
-            try? await Task.sleep(for: .milliseconds(700))
-            isTabJumping = false
-        }
-    }
+    // MARK: - The standing session
 
-    private var heroHeader: some View {
-        VStack(spacing: 16) {
-            TeamAvatarView(
-                avatarData: team?.avatarData ?? nil,
-                symbol: team?.symbol ?? "figure.run",
-                size: 84,
-                cornerRadiusRatio: 0.5,
-                fallbackBackground: AnyShapeStyle(TamrinTheme.lime),
-                symbolColor: TamrinTheme.ink
-            )
-            .shadow(color: TamrinTheme.lime.opacity(0.35), radius: 26, y: 10)
+    @ViewBuilder
+    private var planSection: some View {
+        if let plan {
+            PlanGlassSection(title: "قالب التمرين", caption: plan.name) {
+                VStack(spacing: 12) {
+                    // The four facts the group actually asks about: which day,
+                    // what time, what the pitch costs, what each player owes.
+                    LazyVGrid(
+                        columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)],
+                        spacing: 10
+                    ) {
+                        PlanGlassStat(
+                            symbol: "calendar",
+                            value: dayText.isEmpty ? "بدون تكرار" : dayText,
+                            title: "يوم التمرين"
+                        )
+                        PlanGlassStat(
+                            symbol: "clock.fill",
+                            value: "\(plan.startTime.arabicTime) – \(plan.endTime.arabicTime)",
+                            title: "وقت التمرين"
+                        )
+                        PlanGlassStat(
+                            symbol: "banknote.fill",
+                            value: venueTotal(plan) == 0 ? "بدون تكلفة" : "\(venueTotal(plan).cleanAmount) \(plan.currency)",
+                            title: "قيمة الملعب"
+                        )
+                        PlanGlassStat(
+                            symbol: "person.fill",
+                            value: plan.price == 0 ? "مجاني" : "\(plan.price.cleanAmount) \(plan.currency)",
+                            title: "قطة كل لاعب",
+                            emphasised: true
+                        )
+                    }
 
-            VStack(spacing: 5) {
-                Text(plan?.name ?? "قالب التمرين")
-                    .font(TamrinFont.font(size: 28, weight: .bold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                    venueBlock(plan)
 
-                Text(heroSubtitle)
-                    .font(TamrinFont.font(size: 15, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.62))
+                    PlanInfoRow(
+                        symbol: "person.2.fill",
+                        title: "سعة الموعد",
+                        value: "\(plan.capacity.formatted()) لاعب"
+                    )
+                }
             }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 12)
-        .padding(.bottom, 4)
-    }
-
-    private var heroSubtitle: String {
-        var parts: [String] = ["\(members.count.formatted()) عضوًا"]
-        if !dayText.isEmpty { parts.append("كل \(dayText)") }
-        return parts.joined(separator: " · ")
-    }
-
-    private var infoSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            if let plan {
-                quickStats(plan)
-                scheduleCard(plan)
-                locationCard(plan)
-            } else {
-                PlanGlassSection(title: "قالب التمرين") {
-                    Text("لا يوجد قالب تمرين بعد.")
+        } else {
+            PlanGlassSection(title: "قالب التمرين") {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("ما فيه قالب تمرين بعد.")
                         .font(TamrinFont.subheadline)
                         .foregroundStyle(.white.opacity(0.6))
-                }
-            }
-        }
-    }
 
-    private func quickStats(_ plan: FeedPlan) -> some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-            PlanGlassStat(
-                symbol: "clock.fill",
-                value: "\(plan.startTime.arabicTime) – \(plan.endTime.arabicTime)",
-                title: "وقت التمرين"
-            )
-            PlanGlassStat(
-                symbol: "person.2.fill",
-                value: members.count.formatted(),
-                title: "الأعضاء"
-            )
-            PlanGlassStat(
-                symbol: "creditcard.fill",
-                value: plan.price == 0 ? "مجاني" : "\(plan.price.cleanAmount) \(plan.currency)",
-                title: "القَطّة"
-            )
-            PlanGlassStat(
-                symbol: "figure.run",
-                value: plan.capacity.formatted(),
-                title: plan.capacityPolicy == .waitlist ? "السعة · قائمة انتظار" : "السعة · إغلاق التسجيل"
-            )
-        }
-    }
-
-    private func scheduleCard(_ plan: FeedPlan) -> some View {
-        PlanGlassSection(title: "الجدول") {
-            VStack(spacing: 0) {
-                PlanInfoRow(symbol: "calendar", title: "أيام التمرين", value: dayText.isEmpty ? "بدون تكرار" : dayText)
-                PlanInfoRow(symbol: "play.circle", title: "تاريخ البداية", value: plan.startDate.arabicDate)
-                PlanInfoRow(
-                    symbol: "flag.checkered",
-                    title: "تاريخ النهاية",
-                    value: plan.endDate.map { $0.arabicDate } ?? "مستمرة بدون نهاية"
-                )
-            }
-        }
-    }
-
-    private func locationCard(_ plan: FeedPlan) -> some View {
-        PlanGlassSection(title: "الموقع") {
-            VStack(alignment: .leading, spacing: 12) {
-                Map(position: $mapPosition) {
-                    Marker(plan.locationName, coordinate: CLLocationCoordinate2D(latitude: plan.latitude, longitude: plan.longitude))
-                        .tint(TamrinTheme.lime)
-                }
-                .frame(height: 168)
-                .clipShape(.rect(cornerRadius: 18, style: .continuous))
-                .allowsHitTesting(false)
-
-                HStack(spacing: 10) {
-                    Image(systemName: "mappin.and.ellipse")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(TamrinTheme.lime)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(plan.locationName)
-                            .font(TamrinFont.font(size: 16, weight: .medium))
-                            .foregroundStyle(.white)
-                        if !plan.locationAddress.isEmpty {
-                            Text(plan.locationAddress)
-                                .font(TamrinFont.font(size: 13, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.55))
+                    if feed.isCurrentTeamOwner {
+                        Button {
+                            showAddSession = true
+                        } label: {
+                            Label("أضف موعد التمرين", systemImage: "calendar.badge.plus")
+                                .font(TamrinFont.font(size: 15, weight: .bold))
+                                .foregroundStyle(TamrinTheme.ink)
+                                .frame(maxWidth: .infinity)
+                                .frame(minHeight: TamrinControlMetrics.actionHeight)
+                                .background(TamrinTheme.lime, in: .capsule)
                         }
+                        .buttonStyle(SpringCardPressStyle())
                     }
                 }
             }
         }
     }
+
+    private func venueBlock(_ plan: FeedPlan) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Map(position: $mapPosition) {
+                Marker(plan.locationName, coordinate: CLLocationCoordinate2D(latitude: plan.latitude, longitude: plan.longitude))
+                    .tint(TamrinTheme.lime)
+            }
+            .frame(height: 128)
+            // MapKit draws into its own layer, which the enclosing clipShape
+            // does not round — the corners have to be applied here.
+            .clipShape(.rect(
+                topLeadingRadius: 20,
+                bottomLeadingRadius: 0,
+                bottomTrailingRadius: 0,
+                topTrailingRadius: 20,
+                style: .continuous
+            ))
+            .allowsHitTesting(false)
+
+            HStack(spacing: 11) {
+                Image(systemName: "mappin.and.ellipse")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(TamrinTheme.lime)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(plan.locationName.isEmpty ? "الملعب غير محدد" : plan.locationName)
+                        .font(TamrinFont.font(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    if !plan.locationAddress.isEmpty {
+                        Text(plan.locationAddress)
+                            .font(TamrinFont.font(size: 12, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.55))
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(14)
+        }
+        .background(.white.opacity(0.07), in: .rect(cornerRadius: 20, style: .continuous))
+        .clipShape(.rect(cornerRadius: 20, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("الملعب: \(plan.locationName)")
+    }
+
+    // MARK: - Members
 
     private var membersCard: some View {
-        PlanGlassSection(title: "الأعضاء · \(members.count.formatted())") {
-            VStack(spacing: 0) {
-                ForEach(Array(members.enumerated()), id: \.element.id) { _, member in
-                    HStack(spacing: 12) {
-                        PlanMemberAvatar(
-                            name: member.displayName,
-                            size: 40,
-                            tint: member.role == .admin ? TamrinTheme.lime : Color.white.opacity(0.22)
-                        )
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(member.displayName)
-                                .font(TamrinFont.font(size: 16, weight: .medium))
-                                .foregroundStyle(.white)
-                            Text(member.isPending ? "بانتظار الانضمام" : (member.role == .admin ? "مشرف المجموعة" : "عضو"))
-                                .font(TamrinFont.font(size: 12, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.5))
-                        }
-
-                        Spacer()
-
-                        if member.role == .admin {
-                            Image(systemName: "crown.fill")
-                                .font(.system(size: 14))
-                                .foregroundStyle(TamrinTheme.lime)
-                        } else if member.isPending {
-                            Image(systemName: "clock")
-                                .font(.system(size: 14))
-                                .foregroundStyle(.orange)
-                        }
-                    }
-                    .padding(.vertical, 10)
-
-                }
-
-                if members.isEmpty {
-                    Text("لا يوجد أعضاء بعد.")
-                        .font(TamrinFont.subheadline)
-                        .foregroundStyle(.white.opacity(0.55))
-                        .padding(.vertical, 8)
-                }
-            }
-        }
-    }
-
-    private var paymentsSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            paymentsCard
-            inviteCard
-        }
-    }
-
-    private var paymentsCard: some View {
-        PlanGlassSection(title: "طرق الدفع") {
-            let methods = feed.methodsForCurrentTeam()
-
-            VStack(spacing: 0) {
-                if !feed.isCurrentTeamOwner {
-                    Text("تظهر لك وسيلة الدفع الآمنة وبيانات التحويل عند التسجيل في التمرين.")
-                        .font(TamrinFont.subheadline)
-                        .foregroundStyle(.white.opacity(0.55))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.vertical, 8)
-                } else if methods.isEmpty {
-                    Text("لم تُضف طرق دفع بعد.")
-                        .font(TamrinFont.subheadline)
-                        .foregroundStyle(.white.opacity(0.55))
-                        .padding(.vertical, 8)
-                } else {
-                    ForEach(Array(methods.enumerated()), id: \.element.id) { _, method in
+        PlanGlassSection(
+            title: "الأعضاء",
+            caption: members.isEmpty ? nil : "\(members.count.formatted()) عضوًا"
+        ) {
+            if members.isEmpty {
+                Text("ما انضم أحد بعد. شارك رابط الدعوة عشان يدخلون.")
+                    .font(TamrinFont.subheadline)
+                    .foregroundStyle(.white.opacity(0.55))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(members) { member in
                         HStack(spacing: 12) {
-                            PaymentProviderLogo(provider: method.provider, size: 40)
+                            PlanMemberAvatar(
+                                name: member.displayName,
+                                size: 40,
+                                tint: member.role == .admin ? TamrinTheme.lime : Color.white.opacity(0.24)
+                            )
 
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(method.provider.displayName)
+                                Text(member.displayName)
                                     .font(TamrinFont.font(size: 16, weight: .medium))
                                     .foregroundStyle(.white)
-                                Text(method.provider == .cash ? "الدفع في الملعب" : method.maskedSummary)
+                                    .lineLimit(1)
+                                Text(member.isPending
+                                     ? "بانتظار الانضمام"
+                                     : (member.role == .admin ? "مشرف المجموعة" : "عضو"))
                                     .font(TamrinFont.font(size: 12, weight: .regular))
                                     .foregroundStyle(.white.opacity(0.5))
                             }
 
-                            Spacer()
-                        }
-                        .padding(.vertical, 10)
+                            Spacer(minLength: 6)
 
+                            if member.role == .admin {
+                                Image(systemName: "crown.fill")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(TamrinTheme.lime)
+                            } else if member.isPending {
+                                Image(systemName: "clock")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(.orange)
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .frame(minHeight: 58)
+                        .background(.white.opacity(0.06), in: .rect(cornerRadius: 18, style: .continuous))
+                        .accessibilityElement(children: .combine)
                     }
                 }
             }
         }
     }
 
+    // MARK: - Invite (organizer only)
+
     @ViewBuilder
     private var inviteCard: some View {
         // Inviting is an owner (admin) action — members don't see the code/link.
-        if let team, feed.isCurrentTeamOwner {
-            PlanGlassSection(title: "الدعوة") {
+        if let team {
+            PlanGlassSection(title: "مشاركة المجموعة") {
                 VStack(spacing: 12) {
-                    HStack(spacing: 12) {
-                        Text(team.inviteCode)
-                            .font(TamrinFont.font(size: 22, weight: .bold))
-                            .foregroundStyle(.white)
-                            .kerning(2)
+                    // Share stays available even before the backend has issued
+                    // a join URL — the invite code alone is enough to join.
+                    ShareLink(
+                        item: team.inviteURL?.absoluteString ?? team.inviteCode,
+                        subject: Text("انضم لمجموعة \(team.name)"),
+                        message: Text(team.inviteURL == nil
+                                      ? "انضم لمجموعتنا في تمرين برمز الدعوة: \(team.inviteCode)"
+                                      : "هذا رابط الانضمام لمجموعتنا في تمرين")
+                    ) {
+                        Label(team.inviteURL == nil ? "شارك رمز الدعوة" : "شارك رابط الانضمام",
+                              systemImage: "square.and.arrow.up")
+                            .font(TamrinFont.font(size: 16, weight: .bold))
+                            .foregroundStyle(TamrinTheme.ink)
+                            .frame(maxWidth: .infinity)
+                            .frame(minHeight: TamrinControlMetrics.actionHeight)
+                            .background(TamrinTheme.lime, in: .capsule)
+                    }
+                    .buttonStyle(SpringCardPressStyle())
 
-                        Spacer()
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("رمز الدعوة")
+                                .font(TamrinFont.font(size: 11, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.5))
+                            Text(team.inviteCode)
+                                .font(TamrinFont.font(size: 20, weight: .bold))
+                                .foregroundStyle(.white)
+                                .kerning(2)
+                        }
+
+                        Spacer(minLength: 8)
 
                         Button {
                             // Copy the full join link (same as the share button), not just the code.
@@ -501,27 +470,52 @@ struct TeamDetailView: View {
                             Label(didCopyCode ? "نُسخ" : "نسخ", systemImage: didCopyCode ? "checkmark" : "doc.on.doc")
                                 .font(TamrinFont.font(size: 13, weight: .medium))
                                 .foregroundStyle(didCopyCode ? TamrinTheme.lime : .white)
-                                .padding(.horizontal, 13)
-                                .frame(height: 34)
-                                .background(.white.opacity(0.12), in: .capsule)
+                                .padding(.horizontal, 14)
+                                .frame(height: 36)
+                                .background(.white.opacity(0.13), in: .capsule)
                                 .frame(minHeight: TamrinControlMetrics.touchTarget)
                                 .contentShape(.rect)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("نسخ رابط الانضمام")
                     }
-                    .padding(14)
-                    .background(.white.opacity(0.07), in: .rect(cornerRadius: 16, style: .continuous))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(.white.opacity(0.07), in: .rect(cornerRadius: 18, style: .continuous))
+                }
+            }
+        }
+    }
 
-                    if let url = team.inviteURL {
-                        ShareLink(item: url) {
-                            Label("مشاركة رابط الانضمام", systemImage: "square.and.arrow.up")
-                                .font(TamrinFont.headline)
-                                .foregroundStyle(TamrinTheme.ink)
-                                .frame(maxWidth: .infinity)
-                                .frame(minHeight: TamrinControlMetrics.actionHeight)
-                                .background(TamrinTheme.lime, in: .rect(cornerRadius: 18, style: .continuous))
+    private var paymentsCard: some View {
+        PlanGlassSection(title: "طرق الدفع") {
+            let methods = feed.methodsForCurrentTeam()
+
+            if methods.isEmpty {
+                Text("ما أضفت طرق دفع بعد.")
+                    .font(TamrinFont.subheadline)
+                    .foregroundStyle(.white.opacity(0.55))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(methods) { method in
+                        HStack(spacing: 12) {
+                            PaymentProviderLogo(provider: method.provider, size: 38)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(method.provider.displayName)
+                                    .font(TamrinFont.font(size: 15, weight: .medium))
+                                    .foregroundStyle(.white)
+                                Text(method.provider == .cash ? "الدفع في الملعب" : method.maskedSummary)
+                                    .font(TamrinFont.font(size: 12, weight: .regular))
+                                    .foregroundStyle(.white.opacity(0.5))
+                            }
+
+                            Spacer(minLength: 0)
                         }
-                        .buttonStyle(SpringCardPressStyle())
+                        .padding(.horizontal, 12)
+                        .frame(minHeight: 56)
+                        .background(.white.opacity(0.06), in: .rect(cornerRadius: 18, style: .continuous))
                     }
                 }
             }
@@ -533,39 +527,6 @@ struct TeamDetailView: View {
     }
 }
 
-private struct PlanPillTabBar: View {
-    @Binding var selection: PlanDetailTab
-    let onTap: (PlanDetailTab) -> Void
-
-    var body: some View {
-        HStack(spacing: 10) {
-            ForEach(PlanDetailTab.allCases) { tab in
-                pill(tab)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 9)
-    }
-
-    // Plain buttons + capsule backgrounds (the planSwitcher pattern) — glass
-    // buttons nested in a GlassEffectContainer were not receiving taps.
-    private func pill(_ tab: PlanDetailTab) -> some View {
-        let isSelected = selection == tab
-        return Button { onTap(tab) } label: {
-            Text(tab.title)
-                .font(TamrinFont.font(size: 15, weight: isSelected ? .bold : .medium))
-                .foregroundStyle(isSelected ? TamrinTheme.ink : .white.opacity(0.85))
-                .padding(.horizontal, 18)
-                .frame(height: 38)
-                .background(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(.white.opacity(0.14)), in: .capsule)
-                .frame(minHeight: TamrinControlMetrics.touchTarget)
-                .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-}
-
 private struct PlanInfoRow: View {
     let symbol: String
     let title: String
@@ -574,16 +535,16 @@ private struct PlanInfoRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: symbol)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(TamrinTheme.lime)
-                .frame(width: 36, height: 36)
+                .frame(width: 34, height: 34)
                 .background(.white.opacity(0.1), in: .circle)
 
             Text(title)
                 .font(TamrinFont.font(size: 15, weight: .medium))
                 .foregroundStyle(.white.opacity(0.75))
 
-            Spacer()
+            Spacer(minLength: 8)
 
             Text(value)
                 .font(TamrinFont.font(size: 15, weight: .bold))
@@ -591,25 +552,39 @@ private struct PlanInfoRow: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
-        .padding(.vertical, 9)
+        .padding(.horizontal, 12)
+        .frame(minHeight: 56)
+        .background(.white.opacity(0.06), in: .rect(cornerRadius: 18, style: .continuous))
     }
 }
 
 private struct PlanGlassSection<Content: View>: View {
     let title: String
+    var caption: String?
     @ViewBuilder var content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(TamrinFont.font(size: 16, weight: .bold))
-                .foregroundStyle(.white.opacity(0.85))
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(title)
+                    .font(TamrinFont.font(size: 17, weight: .bold))
+                    .foregroundStyle(.white)
+
+                Spacer(minLength: 8)
+
+                if let caption {
+                    Text(caption)
+                        .font(TamrinFont.font(size: 13, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.55))
+                        .lineLimit(1)
+                }
+            }
 
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(18)
-        .background(.white.opacity(0.08), in: .rect(cornerRadius: 26, style: .continuous))
+        .padding(16)
+        .background(.white.opacity(0.09), in: .rect(cornerRadius: 26, style: .continuous))
     }
 }
 
@@ -617,19 +592,23 @@ private struct PlanGlassStat: View {
     let symbol: String
     let value: String
     let title: String
+    /// The per-player share is the number the group asks about most, so it
+    /// carries a heavier surface and a larger figure — no colour fill, which
+    /// read as a loud slab against the rest of the card.
+    var emphasised = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             Image(systemName: symbol)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(TamrinTheme.lime)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white.opacity(emphasised ? 0.9 : 0.6))
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(value)
-                    .font(TamrinFont.font(size: 17, weight: .bold))
+                    .font(TamrinFont.font(size: emphasised ? 19 : 16, weight: .bold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                    .minimumScaleFactor(0.6)
                 Text(title)
                     .font(TamrinFont.font(size: 12, weight: .regular))
                     .foregroundStyle(.white.opacity(0.55))
@@ -637,9 +616,14 @@ private struct PlanGlassStat: View {
                     .minimumScaleFactor(0.8)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(.white.opacity(0.08), in: .rect(cornerRadius: 22, style: .continuous))
+        .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
+        .padding(14)
+        .background(
+            .white.opacity(emphasised ? 0.14 : 0.07),
+            in: .rect(cornerRadius: 20, style: .continuous)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title): \(value)")
     }
 }
 
@@ -651,7 +635,10 @@ private struct PlanMemberAvatar: View {
         Circle()
             .fill(tint)
             .frame(width: size, height: size)
-            .overlay(Text(String(name.prefix(1))).font(TamrinFont.font(size: size * 0.38, weight: .bold)).foregroundStyle(TamrinTheme.ink))
-            .shadow(color: .black.opacity(0.10), radius: 14, y: 6)
+            .overlay(
+                Text(String(name.prefix(1)))
+                    .font(TamrinFont.font(size: size * 0.38, weight: .bold))
+                    .foregroundStyle(TamrinTheme.ink)
+            )
     }
 }

@@ -37,6 +37,16 @@ struct EventRecord: Codable {
     let paymentMethodIds: [UUID]
     /// Computed by get_workspace_events: template linked AND not ended.
     let isRecurring: Bool?
+    /// Explicit organizer invitation state. Nil means the exercise is still a
+    /// draft visible only to its creator.
+    let publishedAt: Date?
+    /// A cancelled occurrence remains visible so members can read its reason.
+    let cancelledAt: Date?
+    let cancellationReasonCode: String?
+    let cancellationReasonText: String?
+    /// Current authenticated member's private response, computed by the list
+    /// RPC. Organizers do not receive other members' reasons here.
+    let myResponseStatus: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -59,6 +69,11 @@ struct EventRecord: Codable {
         case paymentMethodId = "payment_method_id"
         case paymentMethodIds = "payment_method_ids"
         case isRecurring = "is_recurring"
+        case publishedAt = "published_at"
+        case cancelledAt = "cancelled_at"
+        case cancellationReasonCode = "cancellation_reason_code"
+        case cancellationReasonText = "cancellation_reason_text"
+        case myResponseStatus = "my_response_status"
     }
 
     init(from decoder: Decoder) throws {
@@ -85,6 +100,11 @@ struct EventRecord: Codable {
             ?? paymentMethodId.map { [$0] }
             ?? []
         isRecurring = try container.decodeIfPresent(Bool.self, forKey: .isRecurring)
+        publishedAt = try container.decodeIfPresent(Date.self, forKey: .publishedAt)
+        cancelledAt = try container.decodeIfPresent(Date.self, forKey: .cancelledAt)
+        cancellationReasonCode = try container.decodeIfPresent(String.self, forKey: .cancellationReasonCode)
+        cancellationReasonText = try container.decodeIfPresent(String.self, forKey: .cancellationReasonText)
+        myResponseStatus = try container.decodeIfPresent(String.self, forKey: .myResponseStatus)
     }
 }
 
@@ -130,6 +150,37 @@ struct ParticipantRecord: Codable, Identifiable {
         case paidToNumber = "paid_to_number"
         case guestName = "guest_name"
         case addedBy = "added_by"
+    }
+}
+
+/// A member invitation response returned by `get_event_member_responses`.
+/// The RPC only exposes the full list to the event organizer; regular members
+/// receive their own row server-side.
+struct EventMemberResponseRecord: Codable, Identifiable {
+    let userId: UUID
+    let displayName: String
+    let avatarUrl: String?
+    let status: String
+    let reasonCode: String?
+    let reasonText: String?
+    let invitedBy: UUID?
+    let invitedAt: Date?
+    let respondedAt: Date?
+    let updatedAt: Date?
+
+    var id: UUID { userId }
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case displayName = "display_name"
+        case avatarUrl = "avatar_url"
+        case status
+        case reasonCode = "reason_code"
+        case reasonText = "reason_text"
+        case invitedBy = "invited_by"
+        case invitedAt = "invited_at"
+        case respondedAt = "responded_at"
+        case updatedAt = "updated_at"
     }
 }
 
@@ -372,11 +423,55 @@ final class EventService {
         eventLogger.info("API updateEvent succeeded (id: \(eventId))")
     }
 
+    /// Atomically updates one occurrence and, when requested, its active weekly
+    /// template. The database owns authorization, price calculation, and the
+    /// transaction so a partial series edit can never escape to the client.
+    func updateEventWithScope(
+        eventId: UUID,
+        scope: String,
+        name: String,
+        location: String,
+        startDate: Date,
+        endDate: Date?,
+        maxParticipants: Int?,
+        totalPrice: Int,
+        latitude: Double?,
+        longitude: Double?,
+        paymentMethodIds: [UUID]
+    ) async throws {
+        let iso = ISO8601DateFormatter()
+        let params: [String: AnyJSON] = [
+            "p_event_id": .string(eventId.uuidString),
+            "p_scope": .string(scope),
+            "p_name": .string(name),
+            "p_location": .string(location),
+            "p_start_date": .string(iso.string(from: startDate)),
+            "p_end_date": endDate.map { .string(iso.string(from: $0)) } ?? .null,
+            "p_max_participants": maxParticipants.map(AnyJSON.integer) ?? .null,
+            "p_total_price": .integer(totalPrice),
+            "p_latitude": latitude.map(AnyJSON.double) ?? .null,
+            "p_longitude": longitude.map(AnyJSON.double) ?? .null,
+            "p_payment_method_ids": .array(
+                paymentMethodIds.map { .string($0.uuidString) }
+            )
+        ]
+
+        do {
+            try await client
+                .rpc("update_event_with_scope", params: params)
+                .execute()
+        } catch {
+            throw Self.translatedPaymentSchemaError(error)
+        }
+        eventLogger.info("API updateEventWithScope succeeded (id: \(eventId), scope: \(scope))")
+    }
+
     private static func translatedPaymentSchemaError(_ error: Error) -> Error {
         let description = error.localizedDescription.lowercased()
         let postgrestCode = (error as? PostgrestError)?.code
         let isPaymentSchemaError = description.contains("payment_method")
             || description.contains("create_event")
+            || description.contains("update_event_with_scope")
         let isMissingSchemaEntry = postgrestCode == "PGRST202"
             || postgrestCode == "PGRST203"
             || postgrestCode == "PGRST204"
@@ -494,6 +589,23 @@ final class EventService {
         return records
     }
 
+    /// Fetches invitation responses for an event. The server limits organizers
+    /// to their own events and regular members to their own response.
+    func getEventMemberResponses(eventId: UUID) async throws -> [EventMemberResponseRecord] {
+        let params: [String: String] = ["p_event_id": eventId.uuidString]
+
+        let response = try await client
+            .rpc("get_event_member_responses", params: params)
+            .execute()
+
+        let records = try Self.makePostgresDecoder().decode(
+            [EventMemberResponseRecord].self,
+            from: response.data
+        )
+        eventLogger.info("API getEventMemberResponses succeeded (eventId: \(eventId), count: \(records.count))")
+        return records
+    }
+
     /// Check if the current user is enrolled in an event.
     func isCurrentUserEnrolled(eventId: UUID) async throws -> Bool {
         let session = try await client.auth.session
@@ -517,6 +629,52 @@ final class EventService {
             .execute()
 
         eventLogger.info("API leaveEvent succeeded (eventId: \(eventId))")
+    }
+
+    /// Publishes an organizer-owned event and invites all current workspace
+    /// members. The RPC is idempotent and owns notification deduplication.
+    func publishEvent(eventId: UUID) async throws {
+        let params: [String: String] = ["p_event_id": eventId.uuidString]
+        try await client
+            .rpc("publish_event", params: params)
+            .execute()
+        eventLogger.info("API publishEvent succeeded (eventId: \(eventId))")
+    }
+
+    /// Declines an invitation with an optional structured reason. This server
+    /// operation also releases any current registration or waitlist entry.
+    func declineEvent(
+        eventId: UUID,
+        reasonCode: String?,
+        reasonText: String?
+    ) async throws {
+        let params: [String: AnyJSON] = [
+            "p_event_id": .string(eventId.uuidString),
+            "p_reason_code": reasonCode.map(AnyJSON.string) ?? .null,
+            "p_reason_text": reasonText.map(AnyJSON.string) ?? .null
+        ]
+        try await client
+            .rpc("decline_event", params: params)
+            .execute()
+        eventLogger.info("API declineEvent succeeded (eventId: \(eventId))")
+    }
+
+    /// Cancels only this concrete occurrence, preserving its weekly template.
+    /// The event remains queryable and the RPC notifies workspace members.
+    func cancelEventOccurrence(
+        eventId: UUID,
+        reasonCode: String?,
+        reasonText: String?
+    ) async throws {
+        let params: [String: AnyJSON] = [
+            "p_event_id": .string(eventId.uuidString),
+            "p_reason_code": reasonCode.map(AnyJSON.string) ?? .null,
+            "p_reason_text": reasonText.map(AnyJSON.string) ?? .null
+        ]
+        try await client
+            .rpc("cancel_event_occurrence", params: params)
+            .execute()
+        eventLogger.info("API cancelEventOccurrence succeeded (eventId: \(eventId))")
     }
 
     /// Toggle registration lock for an event. Only the creator can call this.

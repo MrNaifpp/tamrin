@@ -82,10 +82,14 @@ end $$;
 do $$
 declare
   w json; w_id uuid; ev json; t_id uuid; tpl public.event_templates; cnt int;
+  v_payment_method_id uuid;
 begin
   perform pg_temp.set_auth('10000000-0000-0000-0000-000000000001');
   w := public.create_workspace('مساحة الإنشاء المتكرر');
   w_id := (w->>'id')::uuid;
+  insert into public.workspace_payment_methods (workspace_id, provider)
+  values (w_id, 'cash')
+  returning id into v_payment_method_id;
 
   -- weekly: template inserted + first event stamped, atomically
   ev := public.create_event(
@@ -98,7 +102,8 @@ begin
     p_total_price => 200,
     p_price_per_person => 20,
     p_max_participants => 10,
-    p_recurrence => 'weekly'
+    p_recurrence => 'weekly',
+    p_payment_method_id => v_payment_method_id
   );
   t_id := (ev->>'template_id')::uuid;
   if t_id is null then raise exception 'FAIL: weekly create_event did not stamp template_id'; end if;
@@ -218,13 +223,14 @@ begin
 end $$;
 
 -- ============================================================
--- Section 4: generator — creates one event, copies fields,
--- auto-joins creator, pushes members only, idempotent
+-- Section 4: generator — creates one organizer-only draft, copies fields,
+-- auto-joins creator, and waits for explicit send before inviting members
 -- ============================================================
 do $$
 declare
   w json; w_id uuid; ev json; t_id uuid; r json;
-  cnt int; g public.events; v_next timestamptz;
+  cnt int; g public.events; v_next timestamptz; arr json; flag boolean;
+  v_payment_method_id uuid;
 begin
   perform pg_temp.set_auth('10000000-0000-0000-0000-000000000001');
   w := public.create_workspace('مساحة التوليد');
@@ -233,21 +239,38 @@ begin
   r := public.join_workspace((select invite_code from public.workspaces where id = w_id));
   perform pg_temp.set_auth('10000000-0000-0000-0000-000000000001');
 
-  -- first event already played: next occurrence = start + 7d = now() + 2 days,
-  -- which is inside the 3-day lead window.
+  insert into public.workspace_payment_methods (workspace_id, provider)
+  values (w_id, 'cash')
+  returning id into v_payment_method_id;
+
+  -- A live weekly template whose next occurrence has entered the lead window.
   ev := public.create_event(
     p_creator_id => '10000000-0000-0000-0000-000000000001',
     p_workspace_id => w_id,
     p_name => 'تمرين الأربعاء',
     p_location => 'ملعب الحي',
-    p_start_date => now() - interval '5 days',
-    p_end_date => now() - interval '5 days' + interval '90 minutes',
+    p_start_date => now() + interval '1 day',
+    p_end_date => now() + interval '1 day' + interval '90 minutes',
     p_total_price => 200,
     p_price_per_person => 20,
     p_max_participants => 10,
-    p_recurrence => 'weekly'
+    p_recurrence => 'weekly',
+    p_payment_method_id => v_payment_method_id
   );
   t_id := (ev->>'template_id')::uuid;
+
+  -- Draft templates never generate or notify.
+  perform public.generate_recurring_events();
+  select count(*) into cnt from public.events
+  where template_id = t_id and id <> (ev->>'id')::uuid;
+  if cnt <> 0 then raise exception 'FAIL: draft template generated an event'; end if;
+
+  -- Sending the first occurrence activates the weekly template. Move the test
+  -- template's next date into the lead window, then exercise cron generation.
+  r := public.publish_event((ev->>'id')::uuid);
+  update public.event_templates
+  set next_occurrence_at = now() + interval '2 days'
+  where id = t_id;
   select next_occurrence_at into v_next from public.event_templates where id = t_id;
 
   -- run 1: exactly one new event
@@ -270,18 +293,47 @@ begin
   if g.end_date is null or abs(extract(epoch from (g.end_date - (g.start_date + interval '90 minutes')))) > 1 then
     raise exception 'FAIL: generated end_date != start + duration';
   end if;
+  if g.published_at is not null then
+    raise exception 'FAIL: generated occurrence was published automatically';
+  end if;
 
   -- creator auto-joined
   select count(*) into cnt from public.event_participants
     where event_id = g.id and user_id = '10000000-0000-0000-0000-000000000001';
   if cnt <> 1 then raise exception 'FAIL: creator not auto-joined'; end if;
 
-  -- one event_opened push, member only, never the creator
-  select count(*) into cnt from public.push_outbox where event_id = g.id and type = 'event_opened';
-  if cnt <> 1 then raise exception 'FAIL: expected 1 event_opened outbox row, got %', cnt; end if;
+  -- Cron never publishes or notifies. The owner sees the draft; a member does
+  -- not see it until the owner explicitly sends this occurrence.
+  select count(*) into cnt from public.push_outbox where event_id = g.id;
+  if cnt <> 0 then raise exception 'FAIL: generated draft enqueued % pushes', cnt; end if;
+
+  arr := public.get_workspace_events(w_id);
+  select bool_or((x->>'id')::uuid = g.id) into flag
+  from json_array_elements(arr) x;
+  if flag is distinct from true then raise exception 'FAIL: owner cannot see generated draft'; end if;
+
+  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000002');
+  arr := public.get_workspace_events(w_id);
+  select coalesce(bool_or((x->>'id')::uuid = g.id), false) into flag
+  from json_array_elements(arr) x;
+  if flag then raise exception 'FAIL: member saw generated draft before send'; end if;
+
+  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000001');
+  r := public.publish_event(g.id);
+  if (r->>'new_invite_count')::int <> 1
+     or (r->>'notification_count')::int <> 1 then
+    raise exception 'FAIL: sending generated occurrence %', r;
+  end if;
   select count(*) into cnt from public.push_outbox
-    where event_id = g.id and user_id = '10000000-0000-0000-0000-000000000001';
-  if cnt <> 0 then raise exception 'FAIL: creator received event_opened push'; end if;
+  where event_id = g.id and type = 'event_invited';
+  if cnt <> 1 then raise exception 'FAIL: sent occurrence invite pushes %', cnt; end if;
+
+  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000002');
+  arr := public.get_workspace_events(w_id);
+  select coalesce(bool_or((x->>'id')::uuid = g.id), false) into flag
+  from json_array_elements(arr) x;
+  if not flag then raise exception 'FAIL: member cannot see sent occurrence'; end if;
+  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000001');
 
   -- next_occurrence_at advanced exactly one interval
   perform 1 from public.event_templates where id = t_id
@@ -313,6 +365,8 @@ begin
     p_recurrence => 'weekly'
   );
   t_id := (ev->>'template_id')::uuid;
+
+  update public.event_templates set published_at = now() where id = t_id;
 
   -- skip consumption: flag set + inside window -> no event, flag reset, date advanced
   update public.event_templates set skip_next = true where id = t_id;
@@ -346,7 +400,7 @@ end $$;
 
 -- ============================================================
 -- Section 6: enable_recurrence — enable from settings, no-op when
--- already recurring, reactivation after end, creator-only
+-- already recurring, reactivation after end, workspace-owner-only
 -- ============================================================
 do $$
 declare
@@ -366,7 +420,7 @@ begin
   );
   e_id := (ev->>'id')::uuid;
 
-  -- non-creator cannot enable
+  -- a regular member cannot enable
   perform pg_temp.set_auth('10000000-0000-0000-0000-000000000002');
   r := public.join_workspace((select invite_code from public.workspaces where id = w_id));
   begin
@@ -376,7 +430,7 @@ begin
     if sqlerrm like 'FAIL:%' then raise; end if;
   end;
 
-  -- creator enables: template created + event stamped, fields derived
+  -- workspace owner enables: template created + event stamped, fields derived
   perform pg_temp.set_auth('10000000-0000-0000-0000-000000000001');
   r := public.enable_recurrence(e_id);
   t_id := (r->>'id')::uuid;
@@ -425,7 +479,56 @@ begin
 end $$;
 
 -- ============================================================
--- Section 7: cron job registered
+-- Section 7: an orphaned legacy template is ended without blocking healthy
+-- templates in the same generator transaction
+-- ============================================================
+do $$
+declare
+  w json; w_id uuid; v_orphan_template_id uuid; v_healthy_template_id uuid;
+  cnt int;
+begin
+  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000001');
+  w := public.create_workspace('مساحة قالب يتيم');
+  w_id := (w->>'id')::uuid;
+  insert into public.workspace_members (workspace_id, user_id)
+  values (w_id, '10000000-0000-0000-0000-000000000002');
+
+  insert into public.event_templates
+    (workspace_id, creator_id, name, recurrence, next_occurrence_at, published_at)
+  values
+    (w_id, '10000000-0000-0000-0000-000000000002',
+     'قالب منشئه غادر', 'weekly', now() + interval '1 day', now())
+  returning id into v_orphan_template_id;
+
+  insert into public.event_templates
+    (workspace_id, creator_id, name, recurrence, next_occurrence_at, published_at)
+  values
+    (w_id, '10000000-0000-0000-0000-000000000001',
+     'قالب سليم', 'weekly', now() + interval '1 day', now())
+  returning id into v_healthy_template_id;
+
+  delete from public.workspace_members
+  where workspace_id = w_id
+    and user_id = '10000000-0000-0000-0000-000000000002';
+
+  perform public.generate_recurring_events();
+
+  perform 1 from public.event_templates
+  where id = v_orphan_template_id and ended_at is not null;
+  if not found then raise exception 'FAIL: orphan template was not ended'; end if;
+  select count(*) into cnt from public.events
+  where template_id = v_orphan_template_id;
+  if cnt <> 0 then raise exception 'FAIL: orphan template generated an event'; end if;
+
+  select count(*) into cnt from public.events
+  where template_id = v_healthy_template_id and published_at is null;
+  if cnt <> 1 then
+    raise exception 'FAIL: orphan blocked healthy template, draft count %', cnt;
+  end if;
+end $$;
+
+-- ============================================================
+-- Section 8: cron job registered
 -- ============================================================
 do $$
 declare cnt int;

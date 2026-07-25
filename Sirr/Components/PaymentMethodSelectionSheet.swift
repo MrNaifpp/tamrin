@@ -10,14 +10,14 @@ struct PaymentMethodSelectionSheet: View {
     @State private var toast: PaymentSelectionToast?
 
     private let gridColumns = [
-        GridItem(.flexible(), spacing: 12),
-        GridItem(.flexible(), spacing: 12)
+        GridItem(.flexible(), spacing: 16),
+        GridItem(.flexible(), spacing: 16)
     ]
 
     private let providers: [PaymentProvider] = [
-        .stcBank,
-        .barq,
         .alRajhi,
+        .barq,
+        .stcBank,
         .snb,
         .alinma,
         .riyad
@@ -31,7 +31,7 @@ struct PaymentMethodSelectionSheet: View {
                     cashOption
                     electronicPaymentSection
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 16)
                 .padding(.top, 12)
                 .padding(.bottom, 40)
             }
@@ -153,7 +153,7 @@ struct PaymentMethodSelectionSheet: View {
             .padding(14)
             .frame(maxWidth: .infinity, minHeight: 82)
             .background(
-                isSelected ? AnyShapeStyle(TamrinTheme.lime.opacity(0.58)) : AnyShapeStyle(TamrinTheme.glass),
+                TamrinTheme.card,
                 in: .rect(cornerRadius: 24, style: .continuous)
             )
             .contentShape(.rect(cornerRadius: 24, style: .continuous))
@@ -175,7 +175,7 @@ struct PaymentMethodSelectionSheet: View {
                     .foregroundStyle(.secondary)
             }
 
-            LazyVGrid(columns: gridColumns, spacing: 12) {
+            LazyVGrid(columns: gridColumns, spacing: 16) {
                 ForEach(providers, id: \.self) { provider in
                     providerCard(provider)
                 }
@@ -191,39 +191,35 @@ struct PaymentMethodSelectionSheet: View {
             editorProvider = provider
             isEditorPresented = true
         } label: {
-            VStack(spacing: 14) {
-                PaymentProviderWordmark(provider: provider, maxWidth: 112, height: 54)
+            VStack(spacing: 10) {
+                PaymentProviderLogo(provider: provider, size: 60)
+                    .shadow(color: .black.opacity(0.075), radius: 6, y: 2)
                     .accessibilityHidden(true)
 
-                Text(provider.displayName)
-                    .font(TamrinFont.font(size: 16, weight: .medium))
+                Text(provider.selectionTitle)
+                    .font(TamrinFont.font(size: 16, weight: .bold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-
-                Text(isSelected ? "اضغط للتعديل" : "إضافة البيانات")
-                    .font(TamrinFont.caption)
-                    .foregroundStyle(isSelected ? provider.brandColor : .secondary)
+                    .minimumScaleFactor(0.84)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 18)
-            .frame(maxWidth: .infinity, minHeight: 166, alignment: .center)
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 122, alignment: .center)
             .background(
-                isSelected ? AnyShapeStyle(provider.brandSurfaceColor) : AnyShapeStyle(TamrinTheme.glass),
-                in: .rect(cornerRadius: 26, style: .continuous)
+                TamrinTheme.card,
+                in: .rect(cornerRadius: 24, style: .continuous)
             )
             .overlay(alignment: .topLeading) {
                 if isSelected {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(.white)
-                        .frame(width: 28, height: 28)
-                        .background(provider.brandColor, in: .circle)
-                        .padding(12)
+                        .frame(width: 24, height: 24)
+                        .background(TamrinTheme.ink, in: .circle)
+                        .padding(10)
                         .accessibilityHidden(true)
                 }
             }
-            .contentShape(.rect(cornerRadius: 26, style: .continuous))
+            .contentShape(.rect(cornerRadius: 24, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(provider.displayName)
@@ -277,6 +273,21 @@ struct PaymentMethodSelectionSheet: View {
             withAnimation(.easeOut(duration: 0.22)) {
                 toast = nil
             }
+        }
+    }
+}
+
+private extension PaymentProvider {
+    /// الاسم المختصر داخل شبكة الاختيار، مطابق لإيقاع المرجع البصري.
+    var selectionTitle: String {
+        switch self {
+        case .cash: "كاش"
+        case .stcBank: "stc bank"
+        case .barq: "برق"
+        case .alRajhi: "الراجحي"
+        case .snb: "الأهلي"
+        case .alinma: "الإنماء"
+        case .riyad: "الرياض"
         }
     }
 }
@@ -430,18 +441,15 @@ private struct PaymentMethodDetailsEditor: View {
             saveButton
 
             if existing != nil {
-                Button(role: .destructive) {
+                TamrinActionButton(
+                    title: "إزالة وسيلة الدفع",
+                    systemImage: "trash",
+                    role: .destructive,
+                    prominent: false
+                ) {
                     isRemoveConfirmationPresented = true
-                } label: {
-                    Label("إزالة وسيلة الدفع", systemImage: "trash")
-                        .font(TamrinFont.font(size: 16, weight: .medium))
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: TamrinControlMetrics.touchTarget)
-                        .background(Color.red.opacity(0.09), in: .rect(cornerRadius: 16, style: .continuous))
-                        .contentShape(.rect(cornerRadius: 16, style: .continuous))
                 }
-                .buttonStyle(.plain)
+                .tint(.red)
                 .accessibilityHint("يحذف هذه الوسيلة من خيارات هذا التمرين")
             }
         }
@@ -451,20 +459,13 @@ private struct PaymentMethodDetailsEditor: View {
     }
 
     private var saveButton: some View {
-        Button(existing == nil ? "إضافة وسيلة الدفع" : "حفظ التعديلات") {
+        TamrinActionButton(
+            title: existing == nil ? "إضافة وسيلة الدفع" : "حفظ التعديلات",
+            tint: provider.brandColor
+        ) {
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             onSave(currentDraft)
         }
-        .font(TamrinFont.font(size: 17, weight: .bold))
-        .foregroundStyle(.white)
-        .frame(maxWidth: .infinity)
-        .frame(height: TamrinControlMetrics.actionHeight)
-        .background(
-            isValid ? AnyShapeStyle(provider.brandColor) : AnyShapeStyle(Color.secondary.opacity(0.24)),
-            in: .rect(cornerRadius: 18, style: .continuous)
-        )
-        .contentShape(.rect(cornerRadius: 18, style: .continuous))
-        .buttonStyle(.plain)
         .disabled(!isValid)
         .accessibilityHint(isValid ? "يحفظ بيانات وسيلة الدفع" : "أكمل البيانات المطلوبة أولاً")
     }

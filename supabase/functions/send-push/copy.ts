@@ -29,6 +29,16 @@ export function copyFor(
         title: "انفتح التسجيل ⚽",
         body: `انفتح التسجيل لتمرين ${eventName} — احجز مكانك`,
       };
+    case "event_invited":
+      return {
+        title: "دعوة لتمرين ⚽",
+        body: `دعاك المشرف لحضور ${eventName} — افتح التطبيق لتأكيد حضورك.`,
+      };
+    case "event_cancelled":
+      return {
+        title: "تم تخطي تمرين هذا الأسبوع",
+        body: `أُلغي ${eventName}. افتح التمرين لمعرفة السبب والتفاصيل.`,
+      };
     default:
       return null;
   }

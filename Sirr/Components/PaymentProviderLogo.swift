@@ -14,7 +14,7 @@ struct PaymentProviderLogo: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+            RoundedRectangle(cornerRadius: size * 0.25, style: .continuous)
                 .fill(provider.isCash ? provider.brandColor : provider.logoSurfaceColor)
 
             if let assetName = provider.logoAssetName {

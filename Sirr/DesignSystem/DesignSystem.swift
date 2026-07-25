@@ -79,23 +79,28 @@ extension View {
 }
 
 enum TamrinTheme {
+    /// Surfaces are intentionally neutral. Any warm (beige / olive) cast makes
+    /// the photographic artwork behind Home read as muddy brown, so greys here
+    /// stay on the achromatic axis and colour comes only from `lime`.
     static let page = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.055, green: 0.06, blue: 0.052, alpha: 1)
-            : UIColor(red: 0.955, green: 0.958, blue: 0.945, alpha: 1)
+            ? UIColor(white: 0.058, alpha: 1)
+            : UIColor(white: 0.953, alpha: 1)
     })
     static let card = Color(uiColor: .systemBackground)
     static let secondary = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
             ? UIColor(white: 0.16, alpha: 1)
-            : UIColor(red: 0.92, green: 0.925, blue: 0.90, alpha: 1)
+            : UIColor(white: 0.917, alpha: 1)
     })
     static let glass = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
             ? UIColor(white: 0.13, alpha: 0.94)
             : UIColor(white: 1, alpha: 0.74)
     })
-    static let ink = Color(red: 0.075, green: 0.08, blue: 0.07)
+    /// Fixed near-black: used both as a filled surface (with white content on
+    /// top) and as the text colour over `lime` / white, so it must not invert.
+    static let ink = Color(white: 0.078)
     static let lime = Color(red: 0.76, green: 0.92, blue: 0.39)
     /// اللون الأخضر المستخدم كلَكْنة في ملف Figma (العناوين والحالات الإيجابية).
     static let brandGreen = Color(red: 0.34, green: 0.73, blue: 0.47)
@@ -136,8 +141,8 @@ struct TamrinPhotoBackdrop: View {
                     LinearGradient(
                         colors: [
                             Color.black.opacity(dimming * 0.45),
-                            Color(red: 0.33, green: 0.15, blue: 0.24).opacity(dimming),
-                            Color(red: 0.16, green: 0.23, blue: 0.16).opacity(dimming + 0.18)
+                            Color.black.opacity(dimming),
+                            Color.black.opacity(dimming + 0.18)
                         ],
                         startPoint: .top,
                         endPoint: .bottom
@@ -146,6 +151,229 @@ struct TamrinPhotoBackdrop: View {
         }
         .ignoresSafeArea()
         .accessibilityHidden(true)
+    }
+}
+
+// MARK: - Sheet sizing
+
+/// Sizes a sheet to whatever its content actually needs, instead of a guessed
+/// fraction. The content is measured once laid out and that height becomes the
+/// sheet's detent, so short sheets stop short and never scroll; only content
+/// taller than `maxFraction` of the screen falls back to scrolling.
+///
+/// Apply this to the sheet's root view — it replaces `presentationDetents`.
+/// Published by `sheetContentHeight()` when the natural height lives on an
+/// inner subtree — a `ScrollView` fills whatever it is offered, so measuring
+/// the sheet's root would always report "full screen".
+private struct SheetContentHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+extension View {
+    /// Marks the subtree whose height should size the enclosing `fittedSheet`.
+    /// Put it on the stack *inside* a `ScrollView`, not on the scroll view.
+    func sheetContentHeight() -> some View {
+        background {
+            GeometryReader { proxy in
+                Color.clear.preference(key: SheetContentHeightKey.self, value: proxy.size.height)
+            }
+        }
+    }
+}
+
+private struct FittedSheetDetent: ViewModifier {
+    var minHeight: CGFloat
+    var maxFraction: CGFloat
+    var allowsExpansion: Bool
+    var includesNavigationBar: Bool
+    var background: AnyShapeStyle
+    /// Slack added to the measured height. Use it where a step's content can
+    /// change while the sheet is open and it should breathe rather than clip.
+    var extraHeight: CGFloat
+
+    @State private var measuredRoot: CGFloat = 0
+    @State private var measuredContent: CGFloat = 0
+
+    /// The system's inline navigation-bar height, asked of UIKit instead of
+    /// hardcoded, so a sheet wrapped in a `NavigationStack` can still be sized
+    /// to its content.
+    private static let navigationBarHeight: CGFloat = UINavigationBar()
+        .sizeThatFits(CGSize(width: 400, height: CGFloat.greatestFiniteMagnitude))
+        .height
+
+    private var contentHeight: CGFloat {
+        let measured = measuredContent > 0 ? measuredContent : measuredRoot
+        return measured + (includesNavigationBar ? Self.navigationBarHeight : 0)
+    }
+
+    private var scene: UIWindowScene? {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first
+    }
+
+    private var availableHeight: CGFloat {
+        (scene?.screen.bounds.height ?? 852) * maxFraction
+    }
+
+    /// A detent's height spans the whole sheet, but the content is laid out
+    /// inside the bottom safe area — so that strip has to be added on, or the
+    /// sheet ends up with a dead band under the last control.
+    private var bottomInset: CGFloat {
+        scene?.keyWindow?.safeAreaInsets.bottom ?? 0
+    }
+
+    private var resolvedHeight: CGFloat {
+        min(max(contentHeight + bottomInset + extraHeight, minHeight), availableHeight)
+    }
+
+    private var detents: Set<PresentationDetent> {
+        allowsExpansion && resolvedHeight < availableHeight
+            ? [.height(resolvedHeight), .large]
+            : [.height(resolvedHeight)]
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: .infinity)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { newHeight in
+                // Ignore sub-point churn so the detent can't oscillate against
+                // the layout it is itself driving.
+                guard abs(newHeight - measuredRoot) > 0.5 else { return }
+                measuredRoot = newHeight
+            }
+            .onPreferenceChange(SheetContentHeightKey.self) { newHeight in
+                guard abs(newHeight - measuredContent) > 0.5 else { return }
+                measuredContent = newHeight
+            }
+            .frame(maxHeight: .infinity, alignment: .top)
+            // Covers the safe-area strip too, which a `.background` on the
+            // content itself cannot reach.
+            .presentationBackground(background)
+            .presentationDetents(detents)
+            .presentationDragIndicator(.visible)
+            .presentationContentInteraction(.scrolls)
+    }
+}
+
+extension View {
+    /// Makes a sheet exactly as tall as its content. See `FittedSheetDetent`.
+    /// - Parameters:
+    ///   - minHeight: floor for very short sheets, so the grabber has room.
+    ///   - maxFraction: ceiling as a share of the screen height.
+    ///   - allowsExpansion: also offers a full-height detent the user can drag to.
+    ///   - includesNavigationBar: pass `true` when the sheet's root is a
+    ///     `NavigationStack`, so the bar is counted in the detent.
+    func fittedSheet(
+        minHeight: CGFloat = 200,
+        maxFraction: CGFloat = 0.92,
+        allowsExpansion: Bool = false,
+        includesNavigationBar: Bool = false,
+        background: some ShapeStyle = TamrinTheme.page,
+        extraHeight: CGFloat = 0
+    ) -> some View {
+        modifier(FittedSheetDetent(
+            minHeight: minHeight,
+            maxFraction: maxFraction,
+            allowsExpansion: allowsExpansion,
+            includesNavigationBar: includesNavigationBar,
+            background: AnyShapeStyle(background),
+            extraHeight: extraHeight
+        ))
+    }
+}
+
+// MARK: - Native controls
+
+/// The app's action buttons are the stock iOS 26 ones — `.glassProminent` for a
+/// primary action, `.glass` for a secondary — so they inherit the system's own
+/// Liquid Glass rendering, press animation, tint handling and accessibility
+/// behaviour instead of a hand-drawn capsule that only imitates them.
+extension View {
+    /// Primary action: filled Liquid Glass, tinted with the app accent.
+    func tamrinPrimaryAction(tint: Color = .accentColor) -> some View {
+        buttonStyle(.glassProminent)
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
+            .tint(tint)
+            .font(TamrinFont.headline)
+    }
+
+    /// Secondary action: clear Liquid Glass, no fill.
+    func tamrinSecondaryAction() -> some View {
+        buttonStyle(.glass)
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
+            .font(TamrinFont.headline)
+    }
+
+    /// Full-width variant for the bottom of a form or sheet.
+    func tamrinWideAction() -> some View {
+        frame(maxWidth: .infinity)
+    }
+}
+
+/// The app's standard full-width action. A plain `Button` under one of the
+/// system's iOS 26 styles — the press animation, glass rendering, disabled
+/// treatment and destructive tint all come from the platform.
+struct TamrinActionButton: View {
+    let title: String
+    var systemImage: String?
+    var role: ButtonRole?
+    var isLoading = false
+    var prominent = true
+    var tint: Color = .accentColor
+    let action: () -> Void
+
+    var body: some View {
+        Button(role: role) {
+            action()
+        } label: {
+            label
+                .font(TamrinFont.headline)
+                .frame(maxWidth: .infinity)
+        }
+        .modifier(NativeActionStyle(prominent: prominent, tint: tint))
+        .disabled(isLoading)
+        .animation(.smooth(duration: 0.25), value: isLoading)
+    }
+
+    @ViewBuilder
+    private var label: some View {
+        if isLoading {
+            ProgressView().controlSize(.small)
+        } else if let systemImage {
+            Label(title, systemImage: systemImage)
+        } else {
+            Text(title)
+        }
+    }
+}
+
+/// Applies whichever stock style the button asked for. Split out because
+/// `buttonStyle` returns different opaque types on each branch.
+private struct NativeActionStyle: ViewModifier {
+    let prominent: Bool
+    let tint: Color
+
+    func body(content: Content) -> some View {
+        if prominent {
+            content
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.capsule)
+                .controlSize(.large)
+                .tint(tint)
+        } else {
+            content
+                .buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
+                .controlSize(.large)
+        }
     }
 }
 
@@ -239,33 +467,6 @@ struct BrandMark: View {
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
-    }
-}
-
-struct PrimaryActionStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(TamrinFont.headline)
-            .frame(maxWidth: .infinity)
-            .frame(minHeight: TamrinControlMetrics.actionHeight)
-            .foregroundStyle(.white)
-            .background(TamrinTheme.ink.opacity(isEnabled ? (configuration.isPressed ? 0.75 : 1) : 0.22), in: .capsule)
-            .shadow(color: isEnabled ? .black.opacity(0.14) : .clear, radius: 18, y: 9)
-            .scaleEffect(configuration.isPressed ? 0.985 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
-    }
-}
-
-struct SecondaryActionStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(TamrinFont.headline)
-            .frame(maxWidth: .infinity)
-            .frame(minHeight: TamrinControlMetrics.actionHeight)
-            .foregroundStyle(.primary)
-            .background(TamrinTheme.secondary, in: .capsule)
-            .opacity(configuration.isPressed ? 0.7 : 1)
     }
 }
 

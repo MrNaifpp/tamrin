@@ -371,8 +371,7 @@ private struct IdentityStepPage: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .bottom) {
-            Button("متابعة", action: advance)
-                .buttonStyle(PrimaryActionStyle())
+            TamrinActionButton(title: "متابعة", action: advance)
                 .disabled(draft.teamName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .padding(.horizontal, 22)
                 .padding(.bottom, 10)
@@ -443,8 +442,7 @@ private struct TemplatesListPage: View {
             .padding(.horizontal, 22)
         }
         .safeAreaInset(edge: .bottom) {
-            Button("متابعة", action: advance)
-                .buttonStyle(PrimaryActionStyle())
+            TamrinActionButton(title: "متابعة", action: advance)
                 .disabled(draft.plans.isEmpty)
                 .padding(.horizontal, 22)
                 .padding(.bottom, 10)
@@ -634,8 +632,7 @@ private struct TemplateComposerPage: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .bottom) {
-            Button("احفظ التمرين", action: save)
-                .buttonStyle(PrimaryActionStyle())
+            TamrinActionButton(title: "احفظ التمرين", action: save)
                 .disabled(!plan.isComplete)
                 .padding(.horizontal, 22)
                 .padding(.bottom, 10)
@@ -708,101 +705,114 @@ private struct ComposerTile: View {
 
 // MARK: - Composer sheets
 
-private struct SheetGrabberTitle: View {
-    let title: String
-    let subtitle: String
-
-    var body: some View {
-        VStack(spacing: 5) {
-            Text(title).font(TamrinFont.title2)
-            Text(subtitle).font(TamrinFont.subheadline).foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .multilineTextAlignment(.center)
-    }
-}
-
 private struct ScheduleSheet: View {
     @Binding var plan: PlanDraft
     @Environment(\.dismiss) private var dismiss
     private let days = [(7, "س"), (1, "ح"), (2, "ن"), (3, "ث"), (4, "ر"), (5, "خ"), (6, "ج")]
 
-    var body: some View {
-        VStack(spacing: 22) {
-            SheetGrabberTitle(title: "متى تتمرنون؟", subtitle: "حدد نوع الموعد ووقته")
-
-            HStack(spacing: 8) {
-                scheduleKindButton(.recurring, title: "متكرر", symbol: "repeat")
-                scheduleKindButton(.oneOff, title: "مرة واحدة", symbol: "calendar.badge.clock")
-            }
-
-            if plan.scheduleKind == .recurring {
-                VStack(spacing: 14) {
-                HStack(spacing: 4) {
-                    ForEach(days, id: \.0) { day, letter in
-                        Button {
-                            if plan.weekdays.contains(day) { plan.weekdays.remove(day) } else { plan.weekdays.insert(day) }
-                            UISelectionFeedbackGenerator().selectionChanged()
-                        } label: {
-                            Text(letter)
-                                .font(TamrinFont.font(size: 17, weight: .bold))
-                                .foregroundStyle(plan.weekdays.contains(day) ? .white : .primary)
-                                .frame(maxWidth: .infinity)
-                                .frame(minHeight: TamrinControlMetrics.touchTarget)
-                                .background(plan.weekdays.contains(day) ? AnyShapeStyle(TamrinTheme.ink) : AnyShapeStyle(TamrinTheme.secondary), in: .circle)
-                                .scaleEffect(plan.weekdays.contains(day) ? 1.06 : 1)
-                                .animation(.spring(response: 0.28, dampingFraction: 0.7), value: plan.weekdays.contains(day))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(weekdayNames[day] ?? "")
-                        .accessibilityAddTraits(plan.weekdays.contains(day) ? .isSelected : [])
-                    }
-                }
-
-                Text(plan.weekdays.isEmpty ? "اختر يومًا واحدًا على الأقل" : "كل \(plan.daysSummary)")
-                    .font(TamrinFont.font(size: 13, weight: .medium))
-                    .foregroundStyle(plan.weekdays.isEmpty ? .tertiary : .secondary)
-                    .contentTransition(.opacity)
-                    .animation(.easeOut(duration: 0.18), value: plan.daysSummary)
-                }
-            } else {
-                DatePicker("تاريخ التمرين", selection: $plan.oneOffDate, in: Date.now..., displayedComponents: .date)
-                    .datePickerStyle(.compact)
-                    .padding(.horizontal, 18)
-                    .frame(height: 58)
-                    .background(TamrinTheme.secondary, in: .capsule)
-            }
-
-            HStack(spacing: 12) {
-                TimeTile(title: "يبدأ", selection: $plan.startTime)
-                TimeTile(title: "ينتهي", selection: $plan.endTime)
-            }
-
-            Button("تم") { dismiss() }
-                .buttonStyle(PrimaryActionStyle())
-                .disabled(plan.scheduleKind == .recurring && plan.weekdays.isEmpty)
-        }
-        .padding(22)
-        .padding(.top, 12)
-        .frame(maxHeight: .infinity, alignment: .top)
-        .environment(\.layoutDirection, .rightToLeft)
-        .presentationDetents([.height(540)])
-        .presentationDragIndicator(.visible)
+    private var canConfirm: Bool {
+        plan.scheduleKind == .oneOff || !plan.weekdays.isEmpty
     }
 
-    private func scheduleKindButton(_ kind: FeedScheduleKind, title: String, symbol: String) -> some View {
-        Button {
-            plan.scheduleKind = kind
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                // A two-way choice is a segmented picker on iOS, not a pair of
+                // hand-filled capsules.
+                Picker("نوع الموعد", selection: $plan.scheduleKind.animation(.smooth(duration: 0.3))) {
+                    Text("متكرر").tag(FeedScheduleKind.recurring)
+                    Text("مرة واحدة").tag(FeedScheduleKind.oneOff)
+                }
+                .pickerStyle(.segmented)
+
+                if plan.scheduleKind == .recurring {
+                    VStack(spacing: 12) {
+                        HStack(spacing: 5) {
+                            ForEach(days, id: \.0) { day, letter in
+                                weekdayToggle(day: day, letter: letter)
+                            }
+                        }
+
+                        Text(plan.weekdays.isEmpty ? "اختر يومًا واحدًا على الأقل" : "كل \(plan.daysSummary)")
+                            .font(TamrinFont.footnote)
+                            .foregroundStyle(plan.weekdays.isEmpty ? .tertiary : .secondary)
+                            .contentTransition(.numericText())
+                    }
+                    .transition(.blurReplace)
+                } else {
+                    DatePicker("تاريخ التمرين", selection: $plan.oneOffDate, in: Date.now..., displayedComponents: .date)
+                        .datePickerStyle(.compact)
+                        .padding(.horizontal, 16)
+                        .frame(height: 54)
+                        .background(TamrinTheme.secondary, in: .rect(cornerRadius: 16, style: .continuous))
+                        .transition(.blurReplace)
+                }
+
+                HStack(spacing: 12) {
+                    TimeTile(title: "يبدأ", selection: $plan.startTime)
+                    TimeTile(title: "ينتهي", selection: $plan.endTime)
+                }
+            }
+            .padding(.horizontal, 22)
+            .padding(.top, 14)
+            .padding(.bottom, 18)
+            // Measured before the expanding frame below, so the sheet's
+            // detent follows the content rather than the NavigationStack.
+            .sheetContentHeight()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .animation(.smooth(duration: 0.3), value: plan.scheduleKind)
+            .animation(.smooth(duration: 0.25), value: plan.weekdays)
+            .navigationTitle("متى تتمرنون؟")
+            .navigationSubtitle("حدد نوع الموعد ووقته")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("تم") { dismiss() }
+                        .fontWeight(.semibold)
+                        .disabled(!canConfirm)
+                }
+            }
+        }
+        .environment(\.layoutDirection, .rightToLeft)
+        .fittedSheet(includesNavigationBar: true)
+    }
+
+    /// A day is on/off, so it is a native bordered button that swaps to the
+    /// prominent style when selected — the fill, press feedback and tint all
+    /// come from the system.
+    private func weekdayToggle(day: Int, letter: String) -> some View {
+        let isOn = plan.weekdays.contains(day)
+        return Button {
+            if isOn { plan.weekdays.remove(day) } else { plan.weekdays.insert(day) }
             UISelectionFeedbackGenerator().selectionChanged()
         } label: {
-            Label(title, systemImage: symbol)
-                .font(TamrinFont.font(size: 15, weight: .bold))
-                .foregroundStyle(plan.scheduleKind == kind ? .white : .primary)
+            Text(letter)
+                .font(TamrinFont.font(size: 16, weight: .bold))
                 .frame(maxWidth: .infinity)
-                .frame(minHeight: TamrinControlMetrics.actionHeight)
-                .background(plan.scheduleKind == kind ? TamrinTheme.ink : TamrinTheme.secondary, in: .capsule)
+                .frame(height: 30)
         }
-        .buttonStyle(.plain)
+        .modifier(WeekdayToggleStyle(isOn: isOn))
+        .accessibilityLabel(weekdayNames[day] ?? "")
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+}
+
+/// Selected days use the prominent glass style, unselected the plain one.
+private struct WeekdayToggleStyle: ViewModifier {
+    let isOn: Bool
+
+    func body(content: Content) -> some View {
+        if isOn {
+            content
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.circle)
+                .controlSize(.regular)
+        } else {
+            content
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .controlSize(.regular)
+        }
     }
 }
 
@@ -827,68 +837,100 @@ private struct CapacitySheet: View {
     private let quickPicks = [6, 10, 12, 16, 22]
 
     var body: some View {
-        VStack(spacing: 26) {
-            SheetGrabberTitle(title: "كم لاعب يكفيكم؟", subtitle: "حدد سعة كل موعد")
-
-            HStack(spacing: 26) {
-                CapacityRoundButton(symbol: "minus", enabled: plan.capacity > 2) {
-                    plan.capacity -= 1
-                }
-                Text(plan.capacity.arabicDigits)
-                    .font(TamrinFont.font(size: 84, weight: .bold))
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-                    .animation(.spring(response: 0.26, dampingFraction: 0.8), value: plan.capacity)
-                    .frame(minWidth: 128)
-                CapacityRoundButton(symbol: "plus", enabled: plan.capacity < 50) {
-                    plan.capacity += 1
-                }
-            }
-
-            HStack(spacing: 8) {
-                ForEach(quickPicks, id: \.self) { value in
-                    Button {
-                        plan.capacity = value
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    } label: {
-                        Text(value.arabicDigits)
-                            .font(TamrinFont.font(size: 15, weight: .medium))
-                            .monospacedDigit()
-                            .foregroundStyle(plan.capacity == value ? .white : .primary)
-                            .frame(maxWidth: .infinity)
-                            .frame(minHeight: TamrinControlMetrics.touchTarget)
-                            .background(plan.capacity == value ? AnyShapeStyle(TamrinTheme.ink) : AnyShapeStyle(TamrinTheme.secondary), in: .capsule)
+        NavigationStack {
+            VStack(spacing: 22) {
+                HStack(spacing: 24) {
+                    CapacityStepButton(symbol: "minus", enabled: plan.capacity > 2) {
+                        plan.capacity -= 1
                     }
-                    .buttonStyle(.plain)
+                    Text(plan.capacity.arabicDigits)
+                        .font(TamrinFont.font(size: 76, weight: .bold))
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                        .frame(minWidth: 120)
+                    CapacityStepButton(symbol: "plus", enabled: plan.capacity < 50) {
+                        plan.capacity += 1
+                    }
+                }
+                .animation(.bouncy(duration: 0.35), value: plan.capacity)
+
+                HStack(spacing: 8) {
+                    ForEach(quickPicks, id: \.self) { value in
+                        Button {
+                            plan.capacity = value
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        } label: {
+                            Text(value.arabicDigits)
+                                .font(TamrinFont.font(size: 15, weight: .medium))
+                                .monospacedDigit()
+                                .frame(maxWidth: .infinity)
+                        }
+                        .modifier(SelectableCapsuleStyle(isOn: plan.capacity == value))
+                        .accessibilityAddTraits(plan.capacity == value ? .isSelected : [])
+                    }
+                }
+
+                // Two mutually exclusive policies — a segmented picker, with the
+                // explanation below it rather than duplicated into two cards.
+                VStack(spacing: 8) {
+                    Picker("سياسة الاكتمال", selection: $plan.capacityPolicy.animation(.smooth(duration: 0.25))) {
+                        Text("قائمة انتظار").tag(FeedCapacityPolicy.waitlist)
+                        Text("يقفل عند الاكتمال").tag(FeedCapacityPolicy.closed)
+                    }
+                    .pickerStyle(.segmented)
+
+                    Text(plan.capacityPolicy == .waitlist
+                         ? "ينضم من قائمة الانتظار تلقائيًا عند تحرر مكان."
+                         : "يتوقف التسجيل نهائيًا عند اكتمال العدد.")
+                        .font(TamrinFont.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentTransition(.numericText())
                 }
             }
-
-            HStack(spacing: 10) {
-                CapacityPolicyCard(
-                    title: "قائمة انتظار",
-                    subtitle: "ينضم من الانتظار تلقائيًا",
-                    selected: plan.capacityPolicy == .waitlist
-                ) { plan.capacityPolicy = .waitlist }
-                CapacityPolicyCard(
-                    title: "يقفل عند الاكتمال",
-                    subtitle: "لا تسجيل بعد اكتمال العدد",
-                    selected: plan.capacityPolicy == .closed
-                ) { plan.capacityPolicy = .closed }
+            .padding(.horizontal, 22)
+            .padding(.top, 16)
+            .padding(.bottom, 18)
+            // Measured before the expanding frame below, so the sheet's
+            // detent follows the content rather than the NavigationStack.
+            .sheetContentHeight()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .navigationTitle("كم لاعب يكفيكم؟")
+            .navigationSubtitle("حدد سعة كل موعد")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("تم") { dismiss() }.fontWeight(.semibold)
+                }
             }
-
-            Button("تم") { dismiss() }
-                .buttonStyle(PrimaryActionStyle())
         }
-        .padding(22)
-        .padding(.top, 12)
-        .frame(maxHeight: .infinity, alignment: .top)
         .environment(\.layoutDirection, .rightToLeft)
-        .presentationDetents([.height(520)])
-        .presentationDragIndicator(.visible)
+        .fittedSheet(includesNavigationBar: true)
     }
 }
 
-private struct CapacityRoundButton: View {
+/// Selected capsule uses the prominent system style, unselected the plain one.
+private struct SelectableCapsuleStyle: ViewModifier {
+    let isOn: Bool
+
+    func body(content: Content) -> some View {
+        if isOn {
+            content
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.capsule)
+                .controlSize(.regular)
+        } else {
+            content
+                .buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
+                .controlSize(.regular)
+        }
+    }
+}
+
+/// Stepper affordance on the system's glass circle button, so the press
+/// animation and disabled state are the platform's.
+private struct CapacityStepButton: View {
     let symbol: String
     let enabled: Bool
     let action: () -> Void
@@ -900,46 +942,12 @@ private struct CapacityRoundButton: View {
         } label: {
             Image(systemName: symbol)
                 .font(.system(size: TamrinControlMetrics.symbolSize, weight: .bold))
-                .foregroundStyle(TamrinTheme.ink)
-                .frame(width: TamrinControlMetrics.roundButton, height: TamrinControlMetrics.roundButton)
-                .background(TamrinTheme.glass, in: .circle)
-                .shadow(color: .black.opacity(0.06), radius: 12, y: 5)
+                .frame(width: 34, height: 34)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
         .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.35)
-    }
-}
-
-private struct CapacityPolicyCard: View {
-    let title: String
-    let subtitle: String
-    let selected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button {
-            action()
-            UISelectionFeedbackGenerator().selectionChanged()
-        } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(title).font(TamrinFont.font(size: 15, weight: .bold))
-                    Spacer()
-                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(selected ? TamrinTheme.ink : .secondary.opacity(0.5))
-                }
-                Text(subtitle)
-                    .font(TamrinFont.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.leading)
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, minHeight: 88, alignment: .topLeading)
-            .background(selected ? AnyShapeStyle(TamrinTheme.secondary) : AnyShapeStyle(TamrinTheme.glass), in: .rect(cornerRadius: 20))
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
     }
 }
 
@@ -948,138 +956,149 @@ private struct PublishingReminderSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(spacing: 26) {
-            SheetGrabberTitle(title: "متى نجهّزه للإرسال؟", subtitle: "بنذكّرك أنت بس، والأعضاء ما يشوفونه إلا بعد الإرسال")
-
-            HStack(spacing: 24) {
-                reminderButton("minus", enabled: plan.publishLeadDays > 1) { plan.publishLeadDays -= 1 }
-                VStack(spacing: 1) {
-                    Text(plan.publishLeadDays.arabicDigits)
-                        .font(TamrinFont.font(size: 72, weight: .bold)).monospacedDigit()
-                        .contentTransition(.numericText())
-                    Text(plan.publishLeadDays == 1 ? "يوم قبله" : "أيام قبله")
-                        .font(TamrinFont.font(size: 14, weight: .medium)).foregroundStyle(.secondary)
+        NavigationStack {
+            VStack(spacing: 22) {
+                HStack(spacing: 24) {
+                    CapacityStepButton(symbol: "minus", enabled: plan.publishLeadDays > 1) {
+                        plan.publishLeadDays -= 1
+                    }
+                    VStack(spacing: 1) {
+                        Text(plan.publishLeadDays.arabicDigits)
+                            .font(TamrinFont.font(size: 66, weight: .bold)).monospacedDigit()
+                            .contentTransition(.numericText())
+                        Text(plan.publishLeadDays == 1 ? "يوم قبله" : "أيام قبله")
+                            .font(TamrinFont.subheadline).foregroundStyle(.secondary)
+                            .contentTransition(.numericText())
+                    }
+                    .frame(minWidth: 126)
+                    CapacityStepButton(symbol: "plus", enabled: plan.publishLeadDays < 14) {
+                        plan.publishLeadDays += 1
+                    }
                 }
-                .frame(minWidth: 130)
-                reminderButton("plus", enabled: plan.publishLeadDays < 14) { plan.publishLeadDays += 1 }
-            }
+                .animation(.bouncy(duration: 0.35), value: plan.publishLeadDays)
 
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("وقت التذكير").font(TamrinFont.font(size: 15, weight: .bold))
-                    Text("الافتراضي ١٢ الظهر").font(TamrinFont.caption).foregroundStyle(.secondary)
+                LabeledContent("وقت التذكير") {
+                    DatePicker("وقت التذكير", selection: $plan.publishTime, displayedComponents: .hourAndMinute)
+                        .labelsHidden()
                 }
-                Spacer()
-                DatePicker("وقت التذكير", selection: $plan.publishTime, displayedComponents: .hourAndMinute).labelsHidden()
+                .font(TamrinFont.headline)
+                .padding(.horizontal, 16)
+                .frame(height: 60)
+                .background(TamrinTheme.secondary, in: .rect(cornerRadius: 16, style: .continuous))
             }
-            .padding(.horizontal, 18).frame(height: 68)
-            .background(TamrinTheme.secondary, in: .capsule)
-
-            Button("تم") { dismiss() }.buttonStyle(PrimaryActionStyle())
+            .padding(.horizontal, 22)
+            .padding(.top, 16)
+            .padding(.bottom, 18)
+            // Measured before the expanding frame below, so the sheet's
+            // detent follows the content rather than the NavigationStack.
+            .sheetContentHeight()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .navigationTitle("متى نجهّزه للإرسال؟")
+            .navigationSubtitle("بنذكّرك أنت بس، والأعضاء ما يشوفونه إلا بعد الإرسال")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("تم") { dismiss() }.fontWeight(.semibold)
+                }
+            }
         }
-        .padding(22).padding(.top, 12)
-        .frame(maxHeight: .infinity, alignment: .top)
         .environment(\.layoutDirection, .rightToLeft)
-        .presentationDetents([.height(470)])
-        .presentationDragIndicator(.visible)
-    }
-
-    private func reminderButton(_ symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {
-        Button { action(); UIImpactFeedbackGenerator(style: .light).impactOccurred() } label: {
-            Image(systemName: symbol)
-                .font(.system(size: TamrinControlMetrics.symbolSize, weight: .bold))
-                .frame(width: TamrinControlMetrics.roundButton, height: TamrinControlMetrics.roundButton)
-                .background(TamrinTheme.secondary, in: .circle)
-        }
-        .buttonStyle(.plain).disabled(!enabled).opacity(enabled ? 1 : 0.3)
+        .fittedSheet(includesNavigationBar: true)
     }
 }
 
+/// Venue search. A `NavigationStack` with the system search field and a plain
+/// `List` of results — the same shape Maps uses — plus `ContentUnavailableView`
+/// for the empty state. Full height is deliberate here: the keyboard is up and
+/// the result list grows, which is exactly when iOS uses a full-height sheet.
 private struct LocationSheet: View {
     @Binding var plan: PlanDraft
     @Bindable var search: LocationSearchService
     @Environment(\.dismiss) private var dismiss
-    @FocusState private var focused: Bool
+    @State private var query = ""
+
+    private var trimmedQuery: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                SheetGrabberTitle(title: "وين تلعبون؟", subtitle: "ابحث بالاسم أو الحي وسيظهر العنوان للجميع")
-
-                HStack(spacing: 12) {
-                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                    TextField("مثلًا: ملعب الحي", text: $plan.locationName)
-                        .focused($focused)
-                        .submitLabel(.search)
-                        .onSubmit { Task { await search.search(plan.locationName) } }
-                    if !plan.locationName.isEmpty {
-                        Button {
-                            plan.locationName = ""
-                            search.results = []
-                        } label: {
-                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .padding(.horizontal, 16)
-                .frame(height: 56)
-                .background(TamrinTheme.glass, in: .capsule)
-
+        NavigationStack {
+            List {
                 if search.results.isEmpty {
-                    VStack(spacing: 14) {
-                        Image(systemName: "sportscourt")
-                            .font(.system(size: 44, weight: .light))
-                            .foregroundStyle(.secondary)
-                        Text("اكتب اسم الملعب ثم اضغط بحث")
-                            .font(TamrinFont.headline)
-                        Text("أو اكتب الاسم مباشرة إن كان مكانًا خاصًا.")
-                            .font(TamrinFont.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 60)
-
-                    if !plan.locationName.trimmingCharacters(in: .whitespaces).isEmpty {
-                        Button("اعتمد «\(plan.locationName)»") { dismiss() }
-                            .buttonStyle(SecondaryActionStyle())
+                    Section {
+                        ContentUnavailableView {
+                            Label("ابحث عن الملعب", systemImage: "sportscourt")
+                        } description: {
+                            Text("اكتب اسم الملعب أو الحي ثم اضغط بحث، أو اعتمد الاسم كما كتبته إن كان مكانًا خاصًا.")
+                        } actions: {
+                            if !trimmedQuery.isEmpty {
+                                Button("اعتمد «\(trimmedQuery)»") {
+                                    plan.locationName = trimmedQuery
+                                    dismiss()
+                                }
+                                .buttonStyle(.glassProminent)
+                                .buttonBorderShape(.capsule)
+                                .controlSize(.large)
+                            }
+                        }
+                        .listRowBackground(Color.clear)
                     }
                 } else {
-                    VStack(spacing: 0) {
-                        ForEach(search.results) { result in
-                            Button {
-                                plan.locationName = result.title
-                                plan.locationAddress = result.subtitle
-                                plan.latitude = result.latitude
-                                plan.longitude = result.longitude
-                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                dismiss()
+                    ForEach(search.results) { result in
+                        Button {
+                            plan.locationName = result.title
+                            plan.locationAddress = result.subtitle
+                            plan.latitude = result.latitude
+                            plan.longitude = result.longitude
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            dismiss()
+                        } label: {
+                            LabeledContent {
+                                Image(systemName: "chevron.left")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.tertiary)
                             } label: {
-                                HStack(spacing: 14) {
-                                    IconOrb(symbol: "mappin", tint: TamrinTheme.ink, size: 42)
-                                    VStack(alignment: .leading, spacing: 4) {
+                                Label {
+                                    VStack(alignment: .leading, spacing: 3) {
                                         Text(result.title).font(TamrinFont.headline)
-                                        Text(result.subtitle).font(TamrinFont.caption).foregroundStyle(.secondary).lineLimit(2)
+                                        Text(result.subtitle)
+                                            .font(TamrinFont.caption)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(2)
                                     }
-                                    Spacer()
-                                    Image(systemName: "chevron.left").font(.caption.bold()).foregroundStyle(.tertiary)
+                                } icon: {
+                                    Image(systemName: "mappin.circle.fill")
+                                        .foregroundStyle(.tint)
                                 }
-                                .foregroundStyle(.primary)
-                                .padding(14)
-                                .contentShape(.rect)
                             }
-                            .buttonStyle(.plain)
                         }
+                        .buttonStyle(.plain)
                     }
-                    .background(TamrinTheme.glass, in: .rect(cornerRadius: 24))
+                    .transition(.blurReplace)
                 }
             }
-            .padding(22)
-            .padding(.top, 12)
+            .listStyle(.plain)
+            .animation(.smooth(duration: 0.3), value: search.results.map(\.id))
+            .searchable(text: $query, prompt: "مثلًا: ملعب الحي")
+            .onSubmit(of: .search) {
+                Task { await search.search(trimmedQuery) }
+            }
+            .onChange(of: query) { _, newValue in
+                if newValue.isEmpty { search.results = [] }
+            }
+            .navigationTitle("وين تلعبون؟")
+            .navigationSubtitle("سيظهر العنوان لكل الأعضاء")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("إلغاء", role: .cancel) { dismiss() }
+                }
+            }
         }
         .environment(\.layoutDirection, .rightToLeft)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-        .onAppear { focused = true }
+        .onAppear { query = plan.locationName }
     }
 }
 
@@ -1090,12 +1109,8 @@ private struct VenueCostSheet: View {
     private let quickAmounts: [Double] = [300, 400, 480, 600]
 
     var body: some View {
-        VStack(spacing: 22) {
-            SheetGrabberTitle(
-                title: "كم قيمة الملعب؟",
-                subtitle: "أدخل إجمالي الإيجار ونحسب القطة تلقائيًا"
-            )
-
+        NavigationStack {
+            VStack(spacing: 20) {
             HStack(alignment: .lastTextBaseline, spacing: 10) {
                 TextField(
                     "0",
@@ -1122,25 +1137,22 @@ private struct VenueCostSheet: View {
                     } label: {
                         Text(amount.cleanAmount)
                             .font(TamrinFont.font(size: 15, weight: .medium))
-                            .foregroundStyle(plan.totalVenueCost == amount ? .white : .primary)
                             .frame(maxWidth: .infinity)
-                            .frame(minHeight: TamrinControlMetrics.touchTarget)
-                            .background(
-                                plan.totalVenueCost == amount
-                                    ? AnyShapeStyle(TamrinTheme.ink)
-                                    : AnyShapeStyle(TamrinTheme.secondary),
-                                in: .capsule
-                            )
                     }
-                    .buttonStyle(.plain)
+                    .modifier(SelectableCapsuleStyle(isOn: plan.totalVenueCost == amount))
+                    .accessibilityAddTraits(plan.totalVenueCost == amount ? .isSelected : [])
                 }
             }
 
             HStack(spacing: 14) {
-                IconOrb(symbol: "person.2.fill", tint: TamrinTheme.ink, size: 46)
+                Image(systemName: "person.2.fill")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.tint)
+                    .frame(width: 44, height: 44)
+                    .background(.tint.opacity(0.14), in: .circle)
                 VStack(alignment: .leading, spacing: 3) {
                     Text("قطة اللاعب الواحد")
-                        .font(TamrinFont.font(size: 13, weight: .medium))
+                        .font(TamrinFont.caption)
                         .foregroundStyle(.secondary)
                     Text("\(plan.pricePerPerson.cleanAmount) ر.س")
                         .font(TamrinFont.title2)
@@ -1151,18 +1163,30 @@ private struct VenueCostSheet: View {
                     .font(TamrinFont.caption)
                     .foregroundStyle(.secondary)
             }
-            .padding(16)
-            .background(TamrinTheme.glass, in: .rect(cornerRadius: 22, style: .continuous))
-
-            Button("اعتماد القيمة") { dismiss() }
-                .buttonStyle(PrimaryActionStyle())
-                .disabled(plan.totalVenueCost <= 0)
+            .padding(14)
+            .background(TamrinTheme.secondary, in: .rect(cornerRadius: 20, style: .continuous))
+            .animation(.smooth(duration: 0.3), value: plan.pricePerPerson)
+            }
+            .padding(.horizontal, 22)
+            .padding(.top, 16)
+            .padding(.bottom, 18)
+            // Measured before the expanding frame below, so the sheet's
+            // detent follows the content rather than the NavigationStack.
+            .sheetContentHeight()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .navigationTitle("كم قيمة الملعب؟")
+            .navigationSubtitle("أدخل إجمالي الإيجار ونحسب القطة تلقائيًا")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("اعتماد") { dismiss() }
+                        .fontWeight(.semibold)
+                        .disabled(plan.totalVenueCost <= 0)
+                }
+            }
         }
-        .padding(22)
-        .padding(.top, 12)
         .environment(\.layoutDirection, .rightToLeft)
-        .presentationDetents([.height(480)])
-        .presentationDragIndicator(.visible)
+        .fittedSheet(includesNavigationBar: true)
         .onAppear { amountFocused = plan.totalVenueCost == 0 }
     }
 }
@@ -1274,18 +1298,7 @@ private struct MembersStepPage: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .bottom) {
-            Button(action: create) {
-                Group {
-                    if isCreating {
-                        ProgressView()
-                    } else {
-                        Text("أنشئ المجموعة")
-                    }
-                }
-                .frame(maxWidth: .infinity)
-            }
-                .buttonStyle(PrimaryActionStyle())
-                .disabled(isCreating)
+            TamrinActionButton(title: "أنشئ المجموعة", isLoading: isCreating, action: create)
                 .padding(.horizontal, 22)
                 .padding(.bottom, 10)
         }
@@ -1376,12 +1389,13 @@ private struct CreationSuccessPage: View {
                         message: Text("هذا رابط الانضمام لمجموعتنا في تمرين")
                     ) {
                         Label("شارك رابط الدعوة", systemImage: "square.and.arrow.up")
+                            .font(TamrinFont.headline)
+                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(PrimaryActionStyle())
+                    .tamrinPrimaryAction()
                 }
 
-                Button("ادخل إلى المجموعة", action: done)
-                    .buttonStyle(SecondaryActionStyle())
+                TamrinActionButton(title: "ادخل إلى المجموعة", prominent: false, action: done)
             }
         }
         .padding(22)
@@ -1425,6 +1439,7 @@ struct AddSessionSheet: View {
     @State private var plan: PlanDraft
     @State private var saving = false
     @State private var failureMessage: String?
+    @State private var showSaveScope = false
 
     init(feed: HomeStore, isPresented: Binding<Bool>,
          editingEventID: UUID? = nil, editingTemplateID: UUID? = nil,
@@ -1445,21 +1460,10 @@ struct AddSessionSheet: View {
                     initialSheet: nil,
                     save: {
                         guard !saving else { return }
-                        saving = true
-                        Task {
-                            do {
-                                if let eventID = editingEventID {
-                                    try await feed.updateSession(plan, eventID: eventID, templateID: editingTemplateID)
-                                } else {
-                                    try await feed.addSession(plan)
-                                }
-                                UINotificationFeedbackGenerator().notificationOccurred(.success)
-                                isPresented = false
-                            } catch {
-                                saving = false
-                                failureMessage = error.localizedDescription
-                                UINotificationFeedbackGenerator().notificationOccurred(.error)
-                            }
+                        if editingEventID != nil, editingTemplateID != nil {
+                            showSaveScope = true
+                        } else {
+                            save(scope: .occurrenceOnly)
                         }
                     },
                     cancel: { isPresented = false }
@@ -1484,6 +1488,21 @@ struct AddSessionSheet: View {
         }
         .environment(\.layoutDirection, .rightToLeft)
         .interactiveDismissDisabled(saving)
+        .confirmationDialog(
+            "أين تريد حفظ التعديل؟",
+            isPresented: $showSaveScope,
+            titleVisibility: .visible
+        ) {
+            Button("حفظ في القالب والتمارين القادمة") {
+                save(scope: .seriesTemplate)
+            }
+            Button("حفظ لهذا التمرين فقط") {
+                save(scope: .occurrenceOnly)
+            }
+            Button("تراجع", role: .cancel) {}
+        } message: {
+            Text("يمكنك تعديل هذا الموعد وحده، أو اعتماد التغييرات في القالب الذي تُنشأ منه التمارين القادمة.")
+        }
         .alert("تعذر حفظ التمرين", isPresented: Binding(
             get: { failureMessage != nil },
             set: { if !$0 { failureMessage = nil } }
@@ -1492,6 +1511,31 @@ struct AddSessionSheet: View {
         } message: {
             Text(failureMessage ?? "")
                 .font(TamrinFont.body)
+        }
+    }
+
+    private func save(scope: EventEditScope) {
+        guard !saving else { return }
+        saving = true
+        Task {
+            do {
+                if let eventID = editingEventID {
+                    try await feed.updateSession(
+                        plan,
+                        eventID: eventID,
+                        templateID: editingTemplateID,
+                        scope: scope
+                    )
+                } else {
+                    try await feed.addSession(plan)
+                }
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                isPresented = false
+            } catch {
+                saving = false
+                failureMessage = error.localizedDescription
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+            }
         }
     }
 }

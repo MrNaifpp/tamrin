@@ -84,55 +84,85 @@ struct JoinTeamView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                AuroraBackdrop(intensity: 0.72)
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("انضم إلى مجموعة").font(TamrinFont.largeTitle)
-                        Text("ألصق رمز الدعوة الذي وصلك من مشرف المجموعة.").foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 18) {
+                Text("ألصق رمز الدعوة الذي وصلك من مشرف المجموعة.")
+                    .font(TamrinFont.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                TextField("رمز الانضمام", text: $code)
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
+                .font(TamrinFont.font(size: 22, weight: .bold))
+                .multilineTextAlignment(.center)
+                .kerning(3)
+                .padding(.vertical, 16)
+                .frame(maxWidth: .infinity)
+                .background(TamrinTheme.secondary, in: .rect(cornerRadius: 20, style: .continuous))
+                .onChange(of: code) { _, _ in invalid = false }
+
+            if let preview {
+                HStack(spacing: 14) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 15, style: .continuous).fill(TamrinTheme.ink)
+                        Image(systemName: "figure.soccer").foregroundStyle(.white)
                     }
-                    TextField("رمز الانضمام", text: $code)
-                        .textInputAutocapitalization(.characters).autocorrectionDisabled()
-                        .font(TamrinFont.font(size: 22, weight: .medium)).multilineTextAlignment(.center)
-                        .padding(18).background(TamrinTheme.glass, in: .rect(cornerRadius: 20))
-                        .onChange(of: code) { _, _ in invalid = false }
-                    if let preview {
-                        VStack(alignment: .leading, spacing: 16) {
-                            SectionEyebrow(text: "معاينة المجموعة")
-                            HStack(spacing: 14) {
-                                ZStack {
-                                    RoundedRectangle(cornerRadius: 15).fill(.black)
-                                    Image(systemName: "figure.soccer").foregroundStyle(.white)
-                                }
-                                .frame(width: 54, height: 54)
-                                VStack(alignment: .leading) {
-                                    Text(preview.name).font(TamrinFont.headline)
-                                    Text("\(preview.memberCount) عضو" + (preview.ownerName.map { " · \($0)" } ?? ""))
-                                        .font(TamrinFont.subheadline).foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                        .padding(20).background(TamrinTheme.glass, in: .rect(cornerRadius: 24))
-                        .transition(.scale.combined(with: .opacity))
+                    .frame(width: 48, height: 48)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(preview.name).font(TamrinFont.font(size: 16, weight: .bold))
+                        Text("\(preview.memberCount) عضو" + (preview.ownerName.map { " · \($0)" } ?? ""))
+                            .font(TamrinFont.font(size: 12, weight: .regular))
+                            .foregroundStyle(.secondary)
                     }
-                    if invalid { Label("الرمز غير صحيح. تأكد منه وحاول مرة ثانية.", systemImage: "exclamationmark.circle.fill").foregroundStyle(.red).font(TamrinFont.subheadline) }
-                    Button(preview?.isMember == true ? "أنت عضو بالفعل" : "الانضمام للمجموعة") {
-                        joining = true
-                        Task {
-                            let ok = await feed.join(code: normalized)
-                            joining = false
-                            if ok { isPresented = false } else { invalid = true }
-                        }
-                    }
-                    .buttonStyle(PrimaryActionStyle()).disabled(normalized.isEmpty || joining)
-                    }.padding(24)
+
+                    Spacer(minLength: 0)
+                }
+                .padding(14)
+                .background(TamrinTheme.card, in: .rect(cornerRadius: 22, style: .continuous))
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            if invalid {
+                Label("الرمز غير صحيح. تأكد منه وحاول مرة ثانية.", systemImage: "exclamationmark.circle.fill")
+                    .foregroundStyle(.red)
+                    .font(TamrinFont.font(size: 13, weight: .medium))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            TamrinActionButton(
+                title: preview?.isMember == true ? "أنت عضو بالفعل" : "الانضمام للمجموعة",
+                isLoading: joining
+            ) {
+                joining = true
+                Task {
+                    let ok = await feed.join(code: normalized)
+                    joining = false
+                    if ok { isPresented = false } else { invalid = true }
                 }
             }
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button { isPresented = false } label: { Image(systemName: "xmark") } } }
-            .animation(.snappy, value: preview != nil)
-            .task(id: normalized) { preview = await feed.invitePreview(code: normalized) }
+            .disabled(normalized.isEmpty || joining)
+            .padding(.top, 2)
+            }
+            .padding(.horizontal, 22)
+            .padding(.top, 14)
+            .padding(.bottom, 18)
+            // Measured before the expanding frame below, so the sheet's
+            // detent follows the content rather than the NavigationStack.
+            .sheetContentHeight()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .navigationTitle("انضم إلى مجموعة")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("إلغاء", role: .cancel) { isPresented = false }
+                }
+            }
         }
-        .presentationDragIndicator(.visible)
+        .environment(\.layoutDirection, .rightToLeft)
+        .animation(.smooth(duration: 0.3), value: preview != nil)
+        .animation(.smooth(duration: 0.3), value: invalid)
+        .task(id: normalized) { preview = await feed.invitePreview(code: normalized) }
+        .fittedSheet(includesNavigationBar: true)
     }
 }

@@ -292,6 +292,12 @@ begin
     if sqlerrm like 'FAIL:%' then raise; end if;
   end;
 
+  -- New create_event rows are drafts. Publishing makes the event visible and
+  -- invites current members before the normal registration/payment path.
+  perform pg_temp.set_auth('00000000-0000-0000-0000-000000000001');
+  r := public.publish_event(e_id);
+  if r->>'status' <> 'published' then raise exception 'FAIL: publish_event'; end if;
+
   -- member path still works end-to-end (join workspace → pay → confirm)
   perform pg_temp.set_auth('00000000-0000-0000-0000-000000000002');
   r := public.join_workspace((select invite_code from public.workspaces where id = w_id));

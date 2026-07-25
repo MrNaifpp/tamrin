@@ -19,6 +19,21 @@ enum FeedTeamRole { case admin, member }
 enum FeedCapacityPolicy { case waitlist, closed }
 enum FeedScheduleKind { case recurring, oneOff }
 
+/// Scope selected by an organizer when saving edits to a recurring exercise.
+/// An occurrence-only edit leaves the weekly template untouched, while a
+/// series edit refreshes the template used to generate future occurrences.
+enum EventEditScope {
+    case occurrenceOnly
+    case seriesTemplate
+
+    var rpcValue: String {
+        switch self {
+        case .occurrenceOnly: "occurrence_only"
+        case .seriesTemplate: "series_template"
+        }
+    }
+}
+
 // MARK: - Create-team drafts (mutable UI state for the CreateTeamFlow wizard)
 
 struct TeamDraft {
@@ -99,6 +114,22 @@ enum FeedRegStatus {
     case waitlisted
 }
 
+enum FeedMemberResponse: String {
+    case invited
+    case declined
+}
+
+enum MemberEventParticipation {
+    case available
+    case full
+    case registered
+    case paymentPending
+    case waitlisted
+    case declined
+    case cancelled
+    case unavailable
+}
+
 struct FeedMember: Identifiable {
     let id: UUID
     let name: String
@@ -117,16 +148,29 @@ struct FeedOccurrence: Identifiable {
     let locationName: String
     let capacity: Int
     let price: Double        // 0 == free
-    let isCancelled: Bool
+    var isCancelled: Bool
     let artIndex: Int        // cycles ExerciseArt1..3
     /// Weekly-series flags (rolling model: one upcoming occurrence at a time).
     var isRecurring: Bool = false
     var templateId: UUID? = nil
     var paymentMethodIds: [UUID] = []
+    /// Nil means the organizer has not sent this exercise to the group yet.
+    /// Existing rows are backfilled by the invitation migration so they keep
+    /// their previous visibility.
+    var publishedAt: Date? = nil
+    var cancelledAt: Date? = nil
+    var cancellationReasonCode: String? = nil
+    var cancellationReasonText: String? = nil
+    var memberResponse: FeedMemberResponse? = nil
 
     /// Compatibility convenience for surfaces that only need a representative
     /// method (the participant flow always uses `paymentMethodIds`).
     var paymentMethodId: UUID? { paymentMethodIds.first }
+    var isPublished: Bool { publishedAt != nil }
+    var hasCancellationReason: Bool {
+        cancellationReasonText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            || cancellationReasonCode != nil
+    }
 }
 
 // MARK: - HomeStore (real backend-backed store)
@@ -161,9 +205,36 @@ final class HomeStore {
     /// Mapped roster + my status per event id (source for the detail page).
     private var rosterCache: [UUID: [FeedMember]] = [:]
     private var myEventStatus: [UUID: FeedRegStatus] = [:]
+    private var rosterLoadFailedEventIDs: Set<UUID> = []
+    private var memberResponseByEvent: [UUID: FeedMemberResponse] = [:]
+    /// Organizer-only invitation responses, fetched for the cards currently
+    /// visible on Home. Members never request or retain this list.
+    private var memberResponseRecordsByEvent: [UUID: [EventMemberResponseRecord]] = [:]
+    /// Original records are retained so editing a card opens that exact event,
+    /// rather than the first synthesized plan in the workspace.
+    private var eventRecordsByID: [UUID: EventRecord] = [:]
 
     /// Preview/testing stores skip all network calls.
     private let isPreview: Bool
+
+    /// The member journey fixture is compiled only into Debug builds. These
+    /// checks stay available in Release as constant-false helpers, keeping all
+    /// backend guards easy to audit at each mutation boundary.
+    private func isDebugMemberFixtureTeam(_ teamID: UUID) -> Bool {
+        #if DEBUG
+        return teamID == HomeDebugMemberFixture.teamID
+        #else
+        return false
+        #endif
+    }
+
+    private func isDebugMemberFixtureEvent(_ eventID: UUID) -> Bool {
+        #if DEBUG
+        return eventID == HomeDebugMemberFixture.eventID
+        #else
+        return false
+        #endif
+    }
 
     // MARK: Derived (same surface the views used on the mock)
     var currentTeam: FeedTeam? { teams.first { $0.id == selectedTeamID } }
@@ -193,11 +264,60 @@ final class HomeStore {
         guard let status = myEventStatus[occurrence.id] else { return nil }
         return FeedMember(id: currentUserID ?? occurrence.id, name: profileName.isEmpty ? "أنا" : profileName, status: status)
     }
+    func declinedResponses(for occurrence: FeedOccurrence) -> [EventMemberResponseRecord] {
+        guard isCurrentTeamOwner else { return [] }
+        return (memberResponseRecordsByEvent[occurrence.id] ?? []).filter {
+            $0.status == FeedMemberResponse.declined.rawValue
+        }
+    }
+
+    func participationState(for occurrence: FeedOccurrence) -> MemberEventParticipation {
+        if occurrence.isCancelled { return .cancelled }
+        if rosterLoadFailedEventIDs.contains(occurrence.id), myEventStatus[occurrence.id] == nil {
+            return .unavailable
+        }
+        switch myEventStatus[occurrence.id] {
+        case .registered: return .registered
+        case .paymentPending: return .paymentPending
+        case .waitlisted: return .waitlisted
+        case nil:
+            if memberResponseByEvent[occurrence.id] == .declined || occurrence.memberResponse == .declined {
+                return .declined
+            }
+            let isFull = occurrence.capacity > 0 && registeredCount(for: occurrence) >= occurrence.capacity
+            return isFull ? .full : .available
+        }
+    }
 
     // MARK: Init
     init() { isPreview = false }
     private init(previewSeed: Bool) { isPreview = true; seedPreview() }
     static var preview: HomeStore { HomeStore(previewSeed: true) }
+
+    #if DEBUG
+    /// Installs a realistic non-admin team beside live workspaces without ever
+    /// creating corresponding backend records. Existing local participation is
+    /// preserved across refreshes so register/decline/withdraw can be tested.
+    private func installDebugMemberFixtureIfNeeded() {
+        let teamID = HomeDebugMemberFixture.teamID
+        if !teams.contains(where: { $0.id == teamID }) {
+            teams.append(HomeDebugMemberFixture.team)
+        }
+        ownerByTeam[teamID] = HomeDebugMemberFixture.organizerID
+        membersByTeam[teamID] = HomeDebugMemberFixture.members(
+            currentUserID: currentUserID,
+            profileName: profileName
+        )
+
+        guard occurrencesByTeam[teamID] == nil else { return }
+        let occurrence = HomeDebugMemberFixture.occurrence()
+        occurrencesByTeam[teamID] = [occurrence]
+        plansByTeam[teamID] = [HomeDebugMemberFixture.plan(for: occurrence)]
+        paymentMethodsByTeam[teamID] = []
+        rosterCache[occurrence.id] = HomeDebugMemberFixture.roster()
+        memberResponseByEvent[occurrence.id] = .invited
+    }
+    #endif
 
     // MARK: Bootstrap / loads
     func bootstrap(initialWorkspaceID: UUID?) async {
@@ -222,7 +342,7 @@ final class HomeStore {
     /// Full refresh — workspace list + the selected team's events / members /
     /// rosters. Used by pull-to-refresh, foreground return, and after mutations.
     func refresh() async {
-        guard !isPreview else { return }
+        guard !isPreview, !isDebugMemberFixtureTeam(selectedTeamID) else { return }
         await loadWorkspaces(preferred: selectedTeamID)
     }
 
@@ -232,9 +352,12 @@ final class HomeStore {
             let records = try await WorkspaceService.shared.getMyWorkspaces()
             teams = records.map(mapTeam)
             ownerByTeam = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0.ownerId) })
-            if let pref = preferred, records.contains(where: { $0.id == pref }) {
+            #if DEBUG
+            installDebugMemberFixtureIfNeeded()
+            #endif
+            if let pref = preferred, teams.contains(where: { $0.id == pref }) {
                 selectedTeamID = pref
-            } else if let first = records.first {
+            } else if let first = teams.first {
                 selectedTeamID = first.id
                 onSelectWorkspace?(first.id)
             } else {
@@ -242,6 +365,20 @@ final class HomeStore {
             }
             if !teams.isEmpty { await loadSelectedTeamData() }
         } catch {
+            #if DEBUG
+            // The local member journey remains testable when the development
+            // backend is unavailable; no fixture operation depends on it.
+            installDebugMemberFixtureIfNeeded()
+            if let preferred,
+               teams.contains(where: { $0.id == preferred }) {
+                selectedTeamID = preferred
+            } else if teams.count == 1,
+                      let fixture = teams.first,
+                      isDebugMemberFixtureTeam(fixture.id) {
+                selectedTeamID = fixture.id
+                onSelectWorkspace?(fixture.id)
+            }
+            #endif
             errorMessage = error.localizedDescription
         }
     }
@@ -249,10 +386,11 @@ final class HomeStore {
     /// Loads the selected workspace's events, members, a synthesized plan, and
     /// participant rosters for the events shown on Home.
     func loadSelectedTeamData() async {
-        guard !isPreview else { return }
+        guard !isPreview, !isDebugMemberFixtureTeam(selectedTeamID) else { return }
         let id = selectedTeamID
+        let isOwner = currentUserID.map { ownerByTeam[id] == $0 } ?? false
 
-        if ownerByTeam[id] == currentUserID {
+        if isOwner {
             paymentMethodsByTeam[id] = (try? await ManualPaymentService.shared.getMyWorkspaceMethods(workspaceId: id)) ?? []
         } else {
             // Destination details are intentionally member-gated through the
@@ -261,7 +399,15 @@ final class HomeStore {
         }
 
         let events = (try? await EventService.shared.getWorkspaceEvents(workspaceId: id)) ?? []
+        for event in events { eventRecordsByID[event.id] = event }
         occurrencesByTeam[id] = events.map(mapOccurrence)
+        for event in events {
+            if let response = event.myResponseStatus.flatMap(FeedMemberResponse.init(rawValue:)) {
+                memberResponseByEvent[event.id] = response
+            } else {
+                memberResponseByEvent[event.id] = nil
+            }
+        }
         plansByTeam[id] = events.first.map { [synthesizePlan(from: $0)] } ?? []
 
         if let detail = try? await WorkspaceService.shared.getWorkspace(id: id) {
@@ -270,23 +416,73 @@ final class HomeStore {
 
         // Rosters for the visible cards (Home shows counts on each poster).
         let visible = Array(events.prefix(6))
-        await withTaskGroup(of: (UUID, [ParticipantRecord]).self) { group in
+        await withTaskGroup(of: (UUID, [ParticipantRecord]?).self) { group in
             for ev in visible {
                 group.addTask {
-                    (ev.id, (try? await EventService.shared.getEventParticipants(eventId: ev.id)) ?? [])
+                    do {
+                        return (ev.id, try await EventService.shared.getEventParticipants(eventId: ev.id))
+                    } catch {
+                        return (ev.id, nil)
+                    }
                 }
             }
-            for await (eventId, parts) in group { applyParticipants(parts, to: eventId) }
+            for await (eventId, parts) in group {
+                if let parts {
+                    applyParticipants(parts, to: eventId)
+                } else if rosterCache[eventId] == nil {
+                    rosterLoadFailedEventIDs.insert(eventId)
+                }
+            }
+        }
+
+        // Apology reasons are private organizer data. Clear any prior values
+        // first, then call the owner-only RPC solely for the visible cards.
+        for event in events { memberResponseRecordsByEvent[event.id] = nil }
+        if isOwner {
+            await withTaskGroup(of: (UUID, [EventMemberResponseRecord]).self) { group in
+                for event in visible {
+                    group.addTask {
+                        let responses = (try? await EventService.shared.getEventMemberResponses(eventId: event.id)) ?? []
+                        return (event.id, responses)
+                    }
+                }
+                for await (eventId, responses) in group {
+                    memberResponseRecordsByEvent[eventId] = responses
+                }
+            }
         }
     }
 
     func reloadRoster(_ eventId: UUID) async {
-        guard !isPreview else { return }
-        let parts = (try? await EventService.shared.getEventParticipants(eventId: eventId)) ?? []
-        applyParticipants(parts, to: eventId)
+        guard !isPreview, !isDebugMemberFixtureEvent(eventId) else { return }
+        do {
+            let parts = try await EventService.shared.getEventParticipants(eventId: eventId)
+            applyParticipants(parts, to: eventId)
+        } catch {
+            // A transient fetch failure must not turn a registered member into
+            // an apparently available one. Keep the last known roster/status.
+            if rosterCache[eventId] == nil {
+                rosterLoadFailedEventIDs.insert(eventId)
+            }
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Refreshes the organizer-only invitation responses for any event opened
+    /// in detail, including events reached by a deep link outside Home's first
+    /// six cards. Failures preserve the last known private response cache.
+    func reloadMemberResponses(_ eventId: UUID) async {
+        guard !isPreview, isCurrentTeamOwner else { return }
+        do {
+            memberResponseRecordsByEvent[eventId] = try await EventService.shared
+                .getEventMemberResponses(eventId: eventId)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func applyParticipants(_ parts: [ParticipantRecord], to eventId: UUID) {
+        rosterLoadFailedEventIDs.remove(eventId)
         rosterCache[eventId] = parts.map {
             FeedMember(id: $0.participantId,
                        name: $0.displayName ?? $0.guestName ?? "—",
@@ -312,19 +508,31 @@ final class HomeStore {
     /// Deletes (owner) or leaves (member) a workspace. Optimistically removes it
     /// locally; Home falls back to WelcomeView when none remain.
     func deleteTeam(_ id: UUID) {
+        let isLocalDebugFixture = isDebugMemberFixtureTeam(id)
         let isOwner = ownerByTeam[id] == currentUserID
         teams.removeAll { $0.id == id }
         occurrencesByTeam[id] = nil
         plansByTeam[id] = nil
         membersByTeam[id] = nil
         paymentMethodsByTeam[id] = nil
+        eventRecordsByID = eventRecordsByID.filter { $0.value.workspaceId != id }
+        #if DEBUG
+        if isLocalDebugFixture {
+            let eventID = HomeDebugMemberFixture.eventID
+            ownerByTeam[id] = nil
+            rosterCache[eventID] = nil
+            myEventStatus[eventID] = nil
+            memberResponseByEvent[eventID] = nil
+            memberResponseRecordsByEvent[eventID] = nil
+        }
+        #endif
         if selectedTeamID == id, let next = teams.first?.id {
             selectedTeamID = next
             onSelectWorkspace?(next)
         } else if teams.isEmpty {
             onSelectWorkspace?(nil)
         }
-        guard !isPreview else { return }
+        guard !isPreview, !isLocalDebugFixture else { return }
         Task {
             do {
                 if isOwner { try await WorkspaceService.shared.deleteWorkspace(id: id) }
@@ -397,7 +605,7 @@ final class HomeStore {
     /// Adds session(s) to the current workspace from one composed plan (same
     /// mapping as the wizard), then reloads the feed so they appear on Home.
     func addSession(_ plan: PlanDraft) async throws {
-        guard !isPreview else { return }
+        guard !isPreview, !isDebugMemberFixtureTeam(selectedTeamID) else { return }
         do {
             try await createEvents(from: [plan], startDate: Date(), in: selectedTeamID)
         } catch {
@@ -407,54 +615,31 @@ final class HomeStore {
         await loadSelectedTeamData()
     }
 
-    // MARK: Weekly series (rolling model — one upcoming occurrence at a time)
-
-    /// The live series template backing a recurring occurrence (next date,
-    /// skip flag). Nil for non-recurring events or on failure.
-    func loadTemplate(_ templateId: UUID) async -> EventTemplateRecord? {
-        guard !isPreview else { return nil }
-        return try? await EventService.shared.getEventTemplate(templateId: templateId)
-    }
-
-    /// Skips next week's auto-generated occurrence (owner action). Returns the
-    /// RPC outcome so the UI can explain the already-published case.
-    func skipNextWeek(templateId: UUID, eventId: UUID) async -> SkipNextResult? {
-        guard !isPreview else { return nil }
-        do {
-            let result = try await EventService.shared.skipNextOccurrence(templateId: templateId, fromEventId: eventId)
-            await loadSelectedTeamData()
-            return result
-        } catch {
-            errorMessage = error.localizedDescription
-            return nil
-        }
-    }
-
-    /// Ends the weekly series (owner action). Existing events stay untouched.
-    func endSeries(templateId: UUID) async {
-        guard !isPreview else { return }
-        do {
-            try await EventService.shared.endRecurrence(templateId: templateId)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-        await loadSelectedTeamData()
-    }
-
-    /// Applies a composed plan back onto an existing event (edit from team
-    /// details). One-off → its picked date; recurring → the next date matching
-    /// the first selected weekday. Creator-only via RLS — others' edits match
-    /// zero rows. For a recurring event the series template is re-created from
-    /// the updated event so future weeks follow the edit (the generator copies
-    /// from the template, and reactivation alone never re-snapshots).
-    func updateSession(_ plan: PlanDraft, eventID: UUID, templateID: UUID? = nil) async throws {
-        guard !isPreview else { return }
+    /// Applies a composed plan back onto an existing event. The server performs
+    /// the occurrence + optional series-template edit atomically and authorizes
+    /// the current workspace owner, so the client can never leave half an edit.
+    func updateSession(
+        _ plan: PlanDraft,
+        eventID: UUID,
+        templateID: UUID? = nil,
+        scope: EventEditScope = .occurrenceOnly
+    ) async throws {
+        guard !isPreview, !isDebugMemberFixtureEvent(eventID) else { return }
         let cal = Calendar(identifier: .gregorian)
         let start: Date
-        if plan.scheduleKind == .oneOff {
+        if scope == .occurrenceOnly,
+           templateID != nil,
+           let originalStart = eventRecordsByID[eventID]?.startDate {
+            // Editing one concrete occurrence changes its clock time without
+            // re-selecting a different calendar occurrence of the weekday.
+            start = combine(day: originalStart, time: plan.startTime, cal: cal)
+        } else if plan.scheduleKind == .oneOff {
             start = combine(day: plan.oneOffDate, time: plan.startTime, cal: cal)
         } else if let weekday = plan.weekdays.sorted().first {
-            start = nextWeekday(weekday, at: plan.startTime, onOrAfter: Date(), cal: cal)
+            let anchor = eventRecordsByID[eventID]
+                .map { cal.startOfDay(for: $0.startDate) }
+                ?? Date()
+            start = nextWeekday(weekday, at: plan.startTime, onOrAfter: anchor, cal: cal)
         } else {
             start = combine(day: Date(), time: plan.startTime, cal: cal)
         }
@@ -462,27 +647,19 @@ final class HomeStore {
         if end <= start { end = cal.date(byAdding: .hour, value: 1, to: start) ?? start }
         do {
             let paymentMethodIds = try await persistPaymentMethods(for: plan, workspaceId: selectedTeamID)
-            try await EventService.shared.updateEvent(
+            try await EventService.shared.updateEventWithScope(
                 eventId: eventID,
+                scope: scope.rpcValue,
                 name: plan.name.trimmingCharacters(in: .whitespacesAndNewlines),
                 location: plan.locationName,
                 startDate: start,
                 endDate: end,
                 maxParticipants: plan.capacity,
                 totalPrice: Int(plan.totalVenueCost.rounded()),
-                pricePerPerson: plan.pricePerPerson,
                 latitude: plan.latitude,
                 longitude: plan.longitude,
                 paymentMethodIds: paymentMethodIds
             )
-            // Recurring event: rebuild the series template from the updated
-            // row (end stale series → unlink → enable re-snapshots + anchors
-            // next occurrence at the new start + 7 days).
-            if let templateID {
-                try await EventService.shared.endRecurrence(templateId: templateID)
-                try await EventService.shared.clearTemplateLink(eventId: eventID)
-                _ = try await EventService.shared.enableRecurrence(eventId: eventID)
-            }
         } catch {
             errorMessage = error.localizedDescription
             await loadSelectedTeamData()
@@ -638,6 +815,82 @@ final class HomeStore {
         case failure(String)
     }
 
+    /// Sends this exact exercise to every current member of the workspace.
+    /// The server operation is idempotent, so a double tap never duplicates
+    /// invitations or push notifications.
+    func publish(_ occurrence: FeedOccurrence) async -> RegistrationOutcome {
+        guard isCurrentTeamOwner else { return .failure("هذا الإجراء متاح لمشرف المجموعة فقط.") }
+        if isPreview {
+            updateOccurrence(occurrence.id) { $0.publishedAt = .now }
+            return .success
+        }
+        do {
+            try await EventService.shared.publishEvent(eventId: occurrence.id)
+            await loadSelectedTeamData()
+            return .success
+        } catch {
+            return .failure(error.localizedDescription)
+        }
+    }
+
+    /// Cancels only the visible occurrence. A recurring template remains live
+    /// and can generate the following week's exercise as usual.
+    func skip(
+        _ occurrence: FeedOccurrence,
+        reasonCode: String?,
+        reasonText: String?
+    ) async -> RegistrationOutcome {
+        guard isCurrentTeamOwner else { return .failure("هذا الإجراء متاح لمشرف المجموعة فقط.") }
+        if isPreview {
+            updateOccurrence(occurrence.id) {
+                $0.cancelledAt = .now
+                $0.isCancelled = true
+                $0.cancellationReasonCode = reasonCode
+                $0.cancellationReasonText = reasonText
+            }
+            return .success
+        }
+        do {
+            try await EventService.shared.cancelEventOccurrence(
+                eventId: occurrence.id,
+                reasonCode: reasonCode,
+                reasonText: reasonText
+            )
+            await loadSelectedTeamData()
+            return .success
+        } catch {
+            return .failure(error.localizedDescription)
+        }
+    }
+
+    /// Records an optional apology reason and frees any seat/payment request
+    /// held by the current member in one server-side transaction.
+    func decline(
+        _ occurrence: FeedOccurrence,
+        reasonCode: String?,
+        reasonText: String?
+    ) async -> RegistrationOutcome {
+        if isPreview || isDebugMemberFixtureEvent(occurrence.id) {
+            removeMe(from: occurrence)
+            memberResponseByEvent[occurrence.id] = .declined
+            updateOccurrence(occurrence.id) { $0.memberResponse = .declined }
+            return .success
+        }
+        do {
+            try await EventService.shared.declineEvent(
+                eventId: occurrence.id,
+                reasonCode: reasonCode,
+                reasonText: reasonText
+            )
+            memberResponseByEvent[occurrence.id] = .declined
+            await loadSelectedTeamData()
+            return .success
+        } catch {
+            await reloadRoster(occurrence.id)
+            return .failure(error.localizedDescription)
+        }
+    }
+
     func confirmPayment(for member: FeedMember, in occurrence: FeedOccurrence) async -> RegistrationOutcome {
         guard let creatorId = currentUserID,
               let joinerId = member.userId,
@@ -679,7 +932,12 @@ final class HomeStore {
     }
 
     func paymentDestination(for occurrence: FeedOccurrence) async throws -> PaymentDestination {
-        try await ManualPaymentService.shared.getEventDestination(eventId: occurrence.id)
+        #if DEBUG
+        if isDebugMemberFixtureEvent(occurrence.id) {
+            return HomeDebugMemberFixture.destination(for: occurrence)
+        }
+        #endif
+        return try await ManualPaymentService.shared.getEventDestination(eventId: occurrence.id)
     }
 
     /// Records the transfer after the player has reviewed the selected method.
@@ -695,6 +953,19 @@ final class HomeStore {
             appendGuests(cleanGuests, to: occurrence.id)
             return .success
         }
+        #if DEBUG
+        if isDebugMemberFixtureEvent(occurrence.id) {
+            guard expectedDestination.eventId == occurrence.id,
+                  expectedDestination.selectedMethod != nil else {
+                return .failure("اختر وسيلة الدفع أولًا.")
+            }
+            appendMe(to: occurrence, as: .paymentPending)
+            appendGuests(cleanGuests, to: occurrence.id)
+            memberResponseByEvent[occurrence.id] = nil
+            updateOccurrence(occurrence.id) { $0.memberResponse = nil }
+            return .success
+        }
+        #endif
         guard currentUserID != nil else { return .failure("يجب تسجيل الدخول أولاً.") }
         do {
             let result = try await ManualPaymentService.shared.submitPayment(
@@ -705,6 +976,8 @@ final class HomeStore {
             await reloadRoster(occurrence.id)
             switch result {
             case .submitted, .alreadyJoined:
+                memberResponseByEvent[occurrence.id] = nil
+                updateOccurrence(occurrence.id) { $0.memberResponse = nil }
                 return .success
             case .seatsFull:
                 return .failure("اكتملت المقاعد لهذا التمرين.")
@@ -726,7 +999,9 @@ final class HomeStore {
     func withdraw(from occurrence: FeedOccurrence) {
         let status = myEventStatus[occurrence.id]
         removeMe(from: occurrence)
-        guard !isPreview, let uid = currentUserID else { return }
+        guard !isPreview,
+              !isDebugMemberFixtureEvent(occurrence.id),
+              let uid = currentUserID else { return }
         Task {
             do {
                 switch status {
@@ -744,12 +1019,20 @@ final class HomeStore {
         }
     }
 
-    private func appendMe(to occurrence: FeedOccurrence) {
+    private func appendMe(to occurrence: FeedOccurrence, as explicitStatus: FeedRegStatus? = nil) {
         guard myEventStatus[occurrence.id] == nil else { return }
         var list = rosterCache[occurrence.id] ?? []
         let registered = list.filter { $0.status == .registered }.count
-        let status: FeedRegStatus = (occurrence.capacity > 0 && registered >= occurrence.capacity) ? .waitlisted : .registered
-        list.append(FeedMember(id: currentUserID ?? UUID(), name: profileName.isEmpty ? "أنا" : profileName, status: status))
+        let status: FeedRegStatus = explicitStatus
+            ?? ((occurrence.capacity > 0 && registered >= occurrence.capacity) ? .waitlisted : .registered)
+        list.append(
+            FeedMember(
+                id: currentUserID ?? UUID(),
+                name: profileName.isEmpty ? "أنا" : profileName,
+                status: status,
+                userId: currentUserID
+            )
+        )
         rosterCache[occurrence.id] = list
         myEventStatus[occurrence.id] = status
     }
@@ -764,9 +1047,87 @@ final class HomeStore {
     private func removeMe(from occurrence: FeedOccurrence) {
         myEventStatus[occurrence.id] = nil
         if var list = rosterCache[occurrence.id] {
-            if let idx = list.firstIndex(where: { $0.name == profileName }) { list.remove(at: idx) }
+            let myDisplayName = profileName.isEmpty ? "أنا" : profileName
+            if let idx = list.firstIndex(where: {
+                ($0.userId != nil && $0.userId == currentUserID) || $0.name == myDisplayName
+            }) {
+                list.remove(at: idx)
+            }
             rosterCache[occurrence.id] = list
         }
+    }
+
+    private func updateOccurrence(_ eventID: UUID, mutate: (inout FeedOccurrence) -> Void) {
+        for teamID in occurrencesByTeam.keys {
+            guard let index = occurrencesByTeam[teamID]?.firstIndex(where: { $0.id == eventID }) else { continue }
+            mutate(&occurrencesByTeam[teamID]![index])
+            return
+        }
+    }
+
+    /// Builds the editor draft for the exact Home card the organizer selected.
+    func editDraft(for occurrence: FeedOccurrence) -> PlanDraft? {
+        guard let event = eventRecordsByID[occurrence.id] else { return nil }
+        let calendar = Calendar(identifier: .gregorian)
+        var draft = PlanDraft()
+        draft.name = event.name
+        draft.weekdays = [calendar.component(.weekday, from: event.startDate)]
+        draft.startTime = event.startDate
+        draft.endTime = event.endDate
+            ?? calendar.date(byAdding: .hour, value: 1, to: event.startDate)
+            ?? event.startDate
+        draft.locationName = event.location
+        draft.latitude = event.latitude ?? draft.latitude
+        draft.longitude = event.longitude ?? draft.longitude
+        draft.capacity = event.maxParticipants ?? draft.capacity
+        draft.totalVenueCost = Double(event.totalPrice ?? 0)
+        draft.scheduleKind = (event.isRecurring ?? false) ? .recurring : .oneOff
+        draft.oneOffDate = event.startDate
+        let methodIDs = event.paymentMethodIds.isEmpty
+            ? event.paymentMethodId.map { [$0] } ?? []
+            : event.paymentMethodIds
+        draft.paymentMethods = methodIDs.compactMap { id in
+            paymentMethodsByTeam[event.workspaceId ?? selectedTeamID]?.first { $0.id == id }
+        }.map(PaymentMethodDraft.init(record:))
+        return draft
+    }
+
+    /// Resolves a notification deep link into the live Home occurrence,
+    /// switching workspaces first when the invitation belongs elsewhere.
+    func occurrenceForDeepLink(eventID: UUID) async throws -> FeedOccurrence? {
+        if let cached = occurrences.first(where: { $0.id == eventID }) { return cached }
+        #if DEBUG
+        if isDebugMemberFixtureEvent(eventID),
+           let fixtureOccurrence = occurrencesByTeam[HomeDebugMemberFixture.teamID]?
+            .first(where: { $0.id == eventID }) {
+            selectedTeamID = HomeDebugMemberFixture.teamID
+            onSelectWorkspace?(HomeDebugMemberFixture.teamID)
+            return fixtureOccurrence
+        }
+        #endif
+        guard !isPreview else { return nil }
+
+        let event = try await EventService.shared.getEventById(eventID)
+        guard let workspaceID = event.workspaceId else { return nil }
+
+        // Revalidate membership so a newly joined workspace can be selected,
+        // while a public event link never borrows the role of another group.
+        let workspaceRecords = try await WorkspaceService.shared.getMyWorkspaces()
+        guard workspaceRecords.contains(where: { $0.id == workspaceID }) else {
+            return nil
+        }
+        teams = workspaceRecords.map(mapTeam)
+        ownerByTeam = Dictionary(uniqueKeysWithValues: workspaceRecords.map { ($0.id, $0.ownerId) })
+        selectedTeamID = workspaceID
+        onSelectWorkspace?(workspaceID)
+
+        await loadSelectedTeamData()
+        eventRecordsByID[event.id] = event
+
+        // Upcoming events resolve from the refreshed feed. A cancelled or just
+        // ended occurrence can fall outside that query but still has a valid
+        // notification destination, so map the resolved record directly.
+        return occurrences.first(where: { $0.id == eventID }) ?? mapOccurrence(event)
     }
 
     // MARK: Profile
@@ -807,9 +1168,14 @@ final class HomeStore {
         return FeedOccurrence(id: ev.id, title: ev.name, startAt: ev.startDate,
                               locationName: ev.location, capacity: ev.maxParticipants ?? 0,
                               price: ev.pricePerPerson ?? Double(ev.totalPrice ?? 0),
-                              isCancelled: false, artIndex: Self.stableIndex(ev.id),
+                              isCancelled: ev.cancelledAt != nil, artIndex: Self.stableIndex(ev.id),
                               isRecurring: ev.isRecurring ?? false, templateId: ev.templateId,
-                              paymentMethodIds: methodIDs)
+                              paymentMethodIds: methodIDs,
+                              publishedAt: ev.publishedAt,
+                              cancelledAt: ev.cancelledAt,
+                              cancellationReasonCode: ev.cancellationReasonCode,
+                              cancellationReasonText: ev.cancellationReasonText,
+                              memberResponse: ev.myResponseStatus.flatMap(FeedMemberResponse.init(rawValue:)))
     }
 
     /// Gap: there is no per-workspace template list, so the team-detail "session"
@@ -844,6 +1210,7 @@ final class HomeStore {
     // MARK: Preview seed (no network) — used by #Previews and HomeStore.preview
     private func seedPreview() {
         profileName = "نايف"
+        currentUserID = UUID()
         let cal = Calendar(identifier: .gregorian)
         let now = Date()
         func at(_ days: Int, _ hour: Int) -> Date {
@@ -855,6 +1222,8 @@ final class HomeStore {
         let teamB = FeedTeam(id: UUID(), name: "نادي الفجر", symbol: "figure.cooldown", avatarData: nil, memberCount: 8, inviteCode: "FJR-1193")
         teams = [teamA, teamB]
         selectedTeamID = teamA.id
+        ownerByTeam[teamA.id] = currentUserID
+        ownerByTeam[teamB.id] = currentUserID
 
         let a1 = FeedOccurrence(id: UUID(), title: "كورة الثلاثاء", startAt: at(2, 20),
                                 locationName: "ملعب النخيل", capacity: 14, price: 25, isCancelled: false, artIndex: 0)

@@ -6,28 +6,23 @@ struct EventDetailView: View {
     @Bindable var feed: HomeStore
     let occurrence: FeedOccurrence
     var artName: String = "ExerciseArt1"
+    var initiallyShowsRegistration = false
     @Environment(\.dismiss) private var dismiss
     @State private var showWithdrawConfirm = false
     @State private var showRegisterFlow = false
     @State private var showPaymentReview = false
-    @State private var template: EventTemplateRecord?
-    @State private var showSkipConfirm = false
-    @State private var showSkipAlreadyOpen = false
-    @State private var showEndConfirm = false
     @State private var paymentActionInFlight: UUID?
     @State private var memberAwaitingRejection: FeedMember?
     @State private var paymentActionError: String?
-
-    /// The live weekly-series template (nil once the series is ended).
-    private var liveTemplate: EventTemplateRecord? {
-        guard let template, template.endedAt == nil else { return nil }
-        return template
-    }
+    @State private var handledInitialRegistration = false
 
     private var roster: [FeedMember] { feed.roster(for: occurrence) }
     private var myRegistration: FeedMember? { feed.myRegistration(for: occurrence) }
     private var confirmedCount: Int { feed.registeredCount(for: occurrence) }
     private var waitingCount: Int { feed.waitlistCount(for: occurrence) }
+    private var declinedResponses: [EventMemberResponseRecord] {
+        feed.declinedResponses(for: occurrence)
+    }
 
     var body: some View {
         ZStack {
@@ -66,11 +61,17 @@ struct EventDetailView: View {
                         .padding(.top, 264)
                         .padding(.bottom, 6)
 
-                    if !occurrence.isCancelled { participationCTA }
+                    if occurrence.isCancelled {
+                        cancellationPanel
+                    } else if !feed.isCurrentTeamOwner {
+                        participationCTA
+                    }
 
                     progressPanel
 
-                    if liveTemplate != nil { seriesPanel }
+                    if feed.isCurrentTeamOwner, !declinedResponses.isEmpty {
+                        declinedResponsesPanel
+                    }
 
                     Text("القائمة")
                         .font(TamrinFont.font(size: 15, weight: .medium))
@@ -103,7 +104,21 @@ struct EventDetailView: View {
         .environment(\.layoutDirection, .rightToLeft)
         .colorScheme(.dark)
         .sheet(isPresented: $showWithdrawConfirm) {
-            RegistrationCancellationSheet(feed: feed, occurrence: occurrence)
+            MemberDeclineSheet { reasonCode, reasonText in
+                let outcome = await feed.decline(
+                    occurrence,
+                    reasonCode: reasonCode,
+                    reasonText: reasonText
+                )
+                if case .failure(let message) = outcome {
+                    throw NSError(
+                        domain: "EventDetailView.Decline",
+                        code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: message]
+                    )
+                }
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            }
         }
         .sheet(isPresented: $showRegisterFlow) {
             RegistrationFlowSheet(feed: feed, occurrence: occurrence, artName: artName)
@@ -117,26 +132,18 @@ struct EventDetailView: View {
             )
         }
         .task {
-            if occurrence.isRecurring, let tid = occurrence.templateId {
-                template = await feed.loadTemplate(tid)
+            await feed.reloadRoster(occurrence.id)
+            await feed.reloadMemberResponses(occurrence.id)
+            guard initiallyShowsRegistration,
+                  !handledInitialRegistration,
+                  !feed.isCurrentTeamOwner,
+                  !occurrence.isCancelled else { return }
+            handledInitialRegistration = true
+            let state = feed.participationState(for: occurrence)
+            if state == .available || state == .declined {
+                await Task.yield()
+                showRegisterFlow = true
             }
-        }
-        .alert("تخطَّ الأسبوع القادم؟", isPresented: $showSkipConfirm) {
-            Button("تخطَّ", role: .destructive) { skipNextWeek() }
-            Button("تراجع", role: .cancel) {}
-        } message: {
-            Text("لن يُنشأ تمرين الأسبوع القادم، وتستمر السلسلة بعده كالمعتاد.")
-        }
-        .alert("التمرين القادم منشور بالفعل", isPresented: $showSkipAlreadyOpen) {
-            Button("حسنًا", role: .cancel) {}
-        } message: {
-            Text("تمرين الأسبوع القادم منشور. إذا أردت إلغاءه، افتح صفحته واحذفه.")
-        }
-        .alert("إنهاء التكرار؟", isPresented: $showEndConfirm) {
-            Button("إنهاء", role: .destructive) { endSeries() }
-            Button("تراجع", role: .cancel) {}
-        } message: {
-            Text("بيوقف إنشاء التمارين القادمة تلقائيًا، والتمارين المنشورة تبقى كما هي.")
         }
         .alert("رفض طلب الدفع؟", isPresented: Binding(
             get: { memberAwaitingRejection != nil },
@@ -163,27 +170,10 @@ struct EventDetailView: View {
         }
     }
 
-    private func skipNextWeek() {
-        guard let tid = occurrence.templateId else { return }
-        Task {
-            let result = await feed.skipNextWeek(templateId: tid, eventId: occurrence.id)
-            if case .alreadyOpen = result { showSkipAlreadyOpen = true }
-            template = await feed.loadTemplate(tid)
-        }
-    }
-
-    private func endSeries() {
-        guard let tid = occurrence.templateId else { return }
-        Task {
-            await feed.endSeries(templateId: tid)
-            template = await feed.loadTemplate(tid)   // endedAt set → panel hides
-        }
-    }
-
     private var heroTitle: some View {
         VStack(spacing: 7) {
             if occurrence.isCancelled {
-                Text("تم إلغاء الموعد")
+                Text("تم تخطي هذا الموعد")
                     .font(TamrinFont.font(size: 13, weight: .bold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 13).padding(.vertical, 6)
@@ -204,8 +194,61 @@ struct EventDetailView: View {
     }
 
     @ViewBuilder
+    private var cancellationPanel: some View {
+        if let reason = cancellationReasonDisplay {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("سبب التخطي", systemImage: "info.circle.fill")
+                    .font(TamrinFont.font(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                Text(reason)
+                    .font(TamrinFont.font(size: 14, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.76))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(.white.opacity(0.12), in: .rect(cornerRadius: 18, style: .continuous))
+        } else {
+            Text("تم تخطي تمرين هذا الأسبوع، وتستمر المواعيد القادمة كالمعتاد.")
+                .font(TamrinFont.font(size: 14, weight: .medium))
+                .foregroundStyle(.white.opacity(0.76))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .background(.white.opacity(0.12), in: .rect(cornerRadius: 18, style: .continuous))
+        }
+    }
+
+    private var cancellationReasonDisplay: String? {
+        let custom = occurrence.cancellationReasonText?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let custom, !custom.isEmpty { return custom }
+        switch occurrence.cancellationReasonCode {
+        case "weather": return "ظرف الطقس"
+        case "match_or_event_conflict": return "تعارض مع مباراة أو حدث مهم"
+        case "low_attendance": return "قلة العدد"
+        case "occasion": return "وجود مناسبة"
+        case "other": return "سبب آخر"
+        default: return nil
+        }
+    }
+
+    @ViewBuilder
     private var participationCTA: some View {
-        if let mine = myRegistration {
+        if feed.participationState(for: occurrence) == .unavailable {
+            Button {
+                Task { await feed.reloadRoster(occurrence.id) }
+            } label: {
+                Label("تعذر التحقق من تسجيلك — حاول مجددًا", systemImage: "arrow.clockwise")
+                    .font(TamrinFont.font(size: 15, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: TamrinControlMetrics.glassActionHeight)
+                    .contentShape(.capsule)
+            }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.capsule)
+            .controlSize(.regular)
+        } else if let mine = myRegistration {
             if mine.status == .paymentPending {
                 VStack(spacing: 10) {
                     HStack(spacing: 10) {
@@ -269,7 +312,7 @@ struct EventDetailView: View {
                 .accessibilityHint("يفتح تأكيد الاعتذار عن التمرين")
             }
         } else {
-            let full = confirmedCount >= occurrence.capacity
+            let full = occurrence.capacity > 0 && confirmedCount >= occurrence.capacity
             Button {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 showRegisterFlow = true
@@ -314,62 +357,50 @@ struct EventDetailView: View {
         .background(.white.opacity(0.12), in: .rect(cornerRadius: 18, style: .continuous))
     }
 
-    /// Weekly-series card: next auto-generated occurrence + owner controls
-    /// (skip next week / end recurrence). Mirrors the old EventHeroDetailView
-    /// series section, restyled for the designer detail page.
-    @ViewBuilder
-    private var seriesPanel: some View {
-        if let tpl = liveTemplate {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 8) {
-                    Image(systemName: "repeat")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(TamrinTheme.lime)
-                    Text("سلسلة متكررة")
-                        .font(TamrinFont.font(size: 15, weight: .bold))
-                        .foregroundStyle(.white)
-                    Spacer()
-                    Text("أسبوعيًا")
-                        .font(TamrinFont.font(size: 12, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.9))
-                        .padding(.horizontal, 10).padding(.vertical, 4)
-                        .background(.white.opacity(0.14), in: .capsule)
-                }
+    private var declinedResponsesPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("المعتذرون")
+                .font(TamrinFont.font(size: 15, weight: .bold))
+                .foregroundStyle(.white)
 
-                if tpl.skipNext {
-                    Label("سيتم تخطّي الأسبوع القادم", systemImage: "forward.end.fill")
-                        .font(TamrinFont.font(size: 13, weight: .medium))
-                        .foregroundStyle(.orange)
-                } else {
-                    Text("التمرين القادم: يوم \(tpl.nextOccurrenceAt.arabicDay)، الساعة \(tpl.nextOccurrenceAt.arabicTime)")
-                        .font(TamrinFont.font(size: 13, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.85))
-                }
+            VStack(alignment: .leading, spacing: 14) {
+                ForEach(declinedResponses) { response in
+                    HStack(alignment: .top, spacing: 12) {
+                        MemberAvatar(name: response.displayName, size: 32)
 
-                Text("يُنشأ تمرين الأسبوع القادم تلقائيًا قبل موعده بـ٣ أيام.")
-                    .font(TamrinFont.font(size: 11, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.5))
-
-                if feed.isCurrentTeamOwner {
-                    HStack(spacing: 10) {
-                        if !tpl.skipNext {
-                            Button("تخطَّ الأسبوع القادم") { showSkipConfirm = true }
-                                .font(TamrinFont.font(size: 13, weight: .bold))
-                                .buttonStyle(.glass)
-                                .buttonBorderShape(.capsule)
-                                .controlSize(.regular)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(response.displayName)
+                                .font(TamrinFont.font(size: 14, weight: .medium))
+                                .foregroundStyle(.white)
+                            Text(declineReasonDisplay(for: response))
+                                .font(TamrinFont.font(size: 13, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.66))
+                                .fixedSize(horizontal: false, vertical: true)
                         }
-                        Button("إنهاء التكرار", role: .destructive) { showEndConfirm = true }
-                            .font(TamrinFont.font(size: 13, weight: .bold))
-                            .buttonStyle(.glass)
-                            .buttonBorderShape(.capsule)
-                            .controlSize(.regular)
-                            .tint(.red)
+
+                        Spacer(minLength: 0)
                     }
+                    .accessibilityElement(children: .combine)
                 }
             }
-            .padding(16)
-            .background(.white.opacity(0.12), in: .rect(cornerRadius: 18, style: .continuous))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(.white.opacity(0.12), in: .rect(cornerRadius: 18, style: .continuous))
+    }
+
+    private func declineReasonDisplay(for response: EventMemberResponseRecord) -> String {
+        let customReason = response.reasonText?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let customReason, !customReason.isEmpty { return customReason }
+
+        switch response.reasonCode {
+        case "traveling": return "مسافر"
+        case "tired": return "تعبان"
+        case "injured": return "مصاب"
+        case "commitment": return "لدي ارتباط"
+        case "other": return "أخرى"
+        default: return "لم يُذكر سبب"
         }
     }
 
@@ -507,7 +538,11 @@ private struct MemberAvatar: View {
 /// Player registration and manual-payment flow. Payment is intentionally
 /// submitted only after the player reviews the destination and confirms from
 /// the detail step.
-private struct RegistrationFlowSheet: View {
+struct RegistrationFlowSheet: View {
+    /// Lifted off pure black so the sheet reads as a raised surface over the
+    /// event artwork instead of a hole punched in the screen.
+    static let surface = Color(white: 0.13)
+
     @Bindable var feed: HomeStore
     let occurrence: FeedOccurrence
     var artName: String = "ExerciseArt1"
@@ -569,19 +604,59 @@ private struct RegistrationFlowSheet: View {
         return max(0, destination?.pricePerPerson ?? occurrence.price) * Double(displayedGroupSize)
     }
 
-    var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
+    /// Title for the step currently on screen — shown by the navigation bar
+    /// rather than a hand-drawn header row.
+    private var stepTitle: String {
+        switch step {
+        case .selection: "سجّل في التمرين"
+        case .paymentMethod: reviewOnly ? "وسيلة الدفع" : "وسائل الدفع"
+        case .details: "تفاصيل الدفع"
+        case .success: "تم"
+        }
+    }
 
-            switch step {
-            case .selection:
-                selectionStep
-            case .paymentMethod:
-                paymentMethodStep
-            case .details:
-                detailsStep
-            case .success:
-                successStep
+    /// Where the bar's leading button goes back to, or nil when it should
+    /// close the sheet instead.
+    private var backStep: Step? {
+        switch step {
+        case .selection, .success: nil
+        case .paymentMethod: reviewOnly ? nil : .selection
+        case .details: .paymentMethod
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                // Every step lays out at its natural height, so the sheet can
+                // stop exactly there instead of at a guessed screen fraction.
+                Group {
+                    switch step {
+                    case .selection:
+                        selectionStep
+                    case .paymentMethod:
+                        paymentMethodStep
+                    case .details:
+                        detailsStep
+                    case .success:
+                        successStep
+                    }
+                }
+                .sheetContentHeight()
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .navigationTitle(stepTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    if let backStep {
+                        Button("رجوع", systemImage: "chevron.backward") {
+                            withAnimation(.smooth(duration: 0.3)) { step = backStep }
+                        }
+                    } else {
+                        Button("إغلاق", systemImage: "xmark") { dismiss() }
+                    }
+                }
             }
         }
         .animation(.snappy(duration: 0.3), value: step)
@@ -600,9 +675,11 @@ private struct RegistrationFlowSheet: View {
         }
         .environment(\.layoutDirection, .rightToLeft)
         .preferredColorScheme(.dark)
-        .presentationDetents([.fraction(0.56)])
-        .presentationDragIndicator(.visible)
-        .presentationContentInteraction(.scrolls)
+        .fittedSheet(
+            minHeight: 300,
+            includesNavigationBar: true,
+            background: RegistrationFlowSheet.surface
+        )
         .task {
             if reviewOnly, destination == nil {
                 await loadDestination()
@@ -621,9 +698,7 @@ private struct RegistrationFlowSheet: View {
 
     private var selectionStep: some View {
         VStack(spacing: 0) {
-            flowHeader(title: "سجّل في التمرين")
-
-            ScrollView(showsIndicators: false) {
+            Group {
                 VStack(spacing: 12) {
                     HStack(spacing: 12) {
                         Image(artName)
@@ -746,19 +821,17 @@ private struct RegistrationFlowSheet: View {
 
     private var paymentMethodStep: some View {
         VStack(spacing: 0) {
-            flowHeader(title: reviewOnly ? "وسيلة الدفع" : "وسائل الدفع", backAction: reviewOnly ? nil : { step = .selection })
-
             if isLoadingDestination {
-                Spacer()
                 VStack(spacing: 12) {
                     ProgressView().tint(.white)
                     Text("جاري تحميل وسائل الدفع")
                         .font(TamrinFont.font(size: 14, weight: .medium))
                         .foregroundStyle(.white.opacity(0.65))
                 }
-                Spacer()
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 64)
             } else if let destination {
-                ScrollView(showsIndicators: false) {
+                Group {
                     VStack(alignment: .leading, spacing: 14) {
                         Text(reviewOnly ? "راجع الوسيلة التي حوّلت إليها" : "اختر وسيلة الدفع المناسبة لك")
                             .font(TamrinFont.font(size: 14, weight: .medium))
@@ -793,21 +866,19 @@ private struct RegistrationFlowSheet: View {
                     .padding(.bottom, 20)
                 }
             } else {
-                Spacer()
                 Text("تعذر تحميل وسيلة الدفع")
                     .font(TamrinFont.font(size: 15, weight: .medium))
                     .foregroundStyle(.white.opacity(0.6))
-                Spacer()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 64)
             }
         }
     }
 
     private var detailsStep: some View {
         VStack(spacing: 0) {
-            flowHeader(title: "تفاصيل الدفع", backAction: { step = .paymentMethod })
-
             if let destination {
-                ScrollView(showsIndicators: false) {
+                Group {
                     VStack(spacing: 12) {
                         destinationLogo(destination, size: 66)
 
@@ -884,7 +955,7 @@ private struct RegistrationFlowSheet: View {
 
     private var successStep: some View {
         VStack(spacing: 14) {
-            Spacer()
+            Color.clear.frame(height: 26)
 
             ZStack {
                 Circle().fill(TamrinTheme.lime)
@@ -909,8 +980,6 @@ private struct RegistrationFlowSheet: View {
                 .foregroundStyle(.white.opacity(0.62))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 28)
-
-            Spacer()
 
             primaryButton(title: "تم", color: .white, foregroundColor: .black) {
                 dismiss()
@@ -1034,39 +1103,6 @@ private struct RegistrationFlowSheet: View {
         .background(.white.opacity(0.08), in: .rect(cornerRadius: 18, style: .continuous))
     }
 
-    private func flowHeader(title: String, backAction: (() -> Void)? = nil) -> some View {
-        Text(title)
-            .font(TamrinFont.font(size: 17, weight: .bold))
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .frame(height: 58)
-            .overlay(alignment: .leading) {
-                if let backAction {
-                    Button(action: backAction) {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 38, height: 38)
-                            .background(.white.opacity(0.1), in: .circle)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("رجوع")
-                }
-            }
-            .overlay(alignment: .trailing) {
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 38, height: 38)
-                        .background(.white.opacity(0.1), in: .circle)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("إغلاق")
-            }
-            .padding(.horizontal, 20)
-    }
-
     private func primaryButton(
         title: String,
         color: Color,
@@ -1075,28 +1111,10 @@ private struct RegistrationFlowSheet: View {
         isEnabled: Bool = true,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
-            Group {
-                if isLoading {
-                    ProgressView().tint(foregroundColor)
-                } else {
-                    Text(title)
-                        .font(TamrinFont.font(size: 16, weight: .bold))
-                        .foregroundStyle(foregroundColor)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: TamrinControlMetrics.actionHeight)
-            .background(
-                isEnabled ? color : color.opacity(0.32),
-                in: .rect(cornerRadius: 18, style: .continuous)
-            )
-            .contentShape(.rect(cornerRadius: 18, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .padding(.horizontal, 20)
-        .padding(.bottom, 12)
+        TamrinActionButton(title: title, isLoading: isLoading, tint: color, action: action)
+            .disabled(!isEnabled)
+            .padding(.horizontal, 20)
+            .padding(.top, 4)
     }
 
     private func availablePaymentMethodRow(
@@ -1251,84 +1269,6 @@ private struct RegistrationFlowSheet: View {
                 copiedMessage = nil
             }
         }
-    }
-}
-
-/// Withdraw confirmation (designer's RegistrationCancellationSheet) bound to the
-/// mock feed. Slide-to-confirm frees the seat via `feed.withdraw(from:)`.
-private struct RegistrationCancellationSheet: View {
-    @Bindable var feed: HomeStore
-    let occurrence: FeedOccurrence
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("متأكد إنك بتعتذر؟")
-                .font(TamrinFont.font(size: 26, weight: .bold))
-            Text("بنحرر مكانك لواحد من الربع. ما راح يتغير شيء إلا بعد ما تسحب للتأكيد.")
-                .font(TamrinFont.font(size: 14, weight: .regular))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Spacer(minLength: 8)
-
-            SlideToConfirmButton(title: "اسحب لتأكيد الاعتذار") {
-                feed.withdraw(from: occurrence)
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
-                dismiss()
-            }
-
-            Button("خلاص، بكمل") { dismiss() }
-                .font(TamrinFont.font(size: 15, weight: .medium))
-                .frame(maxWidth: .infinity).frame(height: 44)
-        }
-        .padding(22)
-        .presentationDetents([.height(310)])
-        .presentationDragIndicator(.visible)
-        .environment(\.layoutDirection, .rightToLeft)
-    }
-}
-
-private struct SlideToConfirmButton: View {
-    let title: String
-    let confirm: () -> Void
-    @State private var progress: CGFloat = 0
-
-    var body: some View {
-        GeometryReader { proxy in
-            let knob: CGFloat = 54
-            let travel = max(proxy.size.width - knob - 8, 1)
-
-            // `leading` is the physical right edge in the app's RTL environment.
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color.red.opacity(0.16))
-                Text(title)
-                    .font(TamrinFont.font(size: 14, weight: .bold))
-                    .foregroundStyle(.red.opacity(0.92 - Double(progress) * 0.65))
-                    .frame(maxWidth: .infinity)
-
-                Circle()
-                    .fill(.red)
-                    .frame(width: knob, height: knob)
-                    .overlay(Image(systemName: progress > 0.78 ? "checkmark" : "chevron.left.2").font(.system(size: 16, weight: .bold)).foregroundStyle(.white))
-                    .padding(4)
-                    .offset(x: travel * progress)
-                    .gesture(
-                        DragGesture(minimumDistance: 0)
-                            .onChanged { value in progress = min(max(-value.translation.width / travel, 0), 1) }
-                            .onEnded { _ in
-                                if progress > 0.82 { confirm() }
-                                else { withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) { progress = 0 } }
-                            }
-                    )
-            }
-            .contentShape(.capsule)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(title)
-            .accessibilityHint("اسحب من اليمين إلى اليسار")
-            .accessibilityAction { confirm() }
-        }
-        .frame(height: 62)
     }
 }
 
