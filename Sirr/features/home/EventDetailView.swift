@@ -667,7 +667,7 @@ struct RegistrationFlowSheet: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 16)
                     .frame(minHeight: 44)
-                    .background(.black.opacity(0.9), in: .capsule)
+                    .background(TamrinTheme.floatingChrome.opacity(0.92), in: .capsule)
                     .padding(.top, 8)
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .zIndex(10)

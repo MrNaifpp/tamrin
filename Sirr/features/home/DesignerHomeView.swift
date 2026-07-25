@@ -103,7 +103,7 @@ struct DesignerHomeView: View {
                     .foregroundStyle(.white)
                     .padding(.horizontal, 16)
                     .frame(minHeight: 44)
-                    .background(.black.opacity(0.88), in: .capsule)
+                    .background(TamrinTheme.floatingChrome.opacity(0.92), in: .capsule)
                     .padding(.top, 8)
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .zIndex(20)
@@ -670,7 +670,9 @@ struct HomeArtBackdrop: View {
             if hasArt {
                 Color(white: 0.145)
             } else {
-                Color(uiColor: colorScheme == .dark ? .systemBackground : .systemGroupedBackground)
+                colorScheme == .dark
+                    ? TamrinTheme.page
+                    : Color(uiColor: .systemGroupedBackground)
             }
             if hasArt {
                 GeometryReader { proxy in

@@ -82,12 +82,31 @@ enum TamrinTheme {
     /// Surfaces are intentionally neutral. Any warm (beige / olive) cast makes
     /// the photographic artwork behind Home read as muddy brown, so greys here
     /// stay on the achromatic axis and colour comes only from `lime`.
+    ///
+    /// **No surface is ever pure black in dark mode.** The deepest tone in the
+    /// app is `surfaceFloor`, ten steps (10/255) above black; every other
+    /// surface is a lighter step on the same neutral ramp. That keeps layered
+    /// surfaces — drawer, page, card, sheet — readable against one another
+    /// instead of collapsing into one flat void.
+    ///
+    /// The one exception is black inside a `mask`, where it is the alpha
+    /// channel rather than a colour and must stay pure.
+    static let surfaceFloor = Color(white: 10.0 / 255.0)
+
     static let page = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
             ? UIColor(white: 0.058, alpha: 1)
             : UIColor(white: 0.953, alpha: 1)
     })
-    static let card = Color(uiColor: .systemBackground)
+    /// A card raised above `page`. `systemBackground` would be pure black here.
+    static let card = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 0.13, alpha: 1)
+            : .systemBackground
+    })
+    /// Near-opaque chrome that floats over artwork (toasts, pills). Fixed dark
+    /// because its content is always white, but still off pure black.
+    static let floatingChrome = Color(white: 0.11)
     static let secondary = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
             ? UIColor(white: 0.16, alpha: 1)
@@ -461,7 +480,7 @@ struct BrandMark: View {
     var size: CGFloat = 72
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: size * 0.3, style: .continuous).fill(.black)
+            RoundedRectangle(cornerRadius: size * 0.3, style: .continuous).fill(TamrinTheme.ink)
             Image(systemName: "figure.strengthtraining.traditional")
                 .font(.system(size: size * 0.42, weight: .semibold)).foregroundStyle(.white)
         }

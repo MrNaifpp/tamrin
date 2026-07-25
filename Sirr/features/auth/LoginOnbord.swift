@@ -106,7 +106,7 @@ struct LoginOnbord: View {
                                 .frame(minHeight: TamrinControlMetrics.actionHeight)
                                 .background(
                                     RoundedRectangle(cornerRadius: 25, style: .continuous)
-                                        .fill(Color.black)
+                                        .fill(TamrinTheme.ink)
                                 )
                         }
                         .buttonStyle(.plain)

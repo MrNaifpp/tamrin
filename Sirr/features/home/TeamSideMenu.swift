@@ -35,7 +35,9 @@ struct TeamSideMenu: View {
             let pulledPastTop = max(-scrollOffset, 0)
 
             ZStack {
-                Color(uiColor: .systemBackground)
+                // The drawer is the deepest layer, so it takes the floor tone —
+                // `systemBackground` here would be pure black.
+                TamrinTheme.surfaceFloor
                     .ignoresSafeArea()
 
                 ZStack {
