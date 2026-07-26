@@ -3,8 +3,17 @@ import { copyFor } from "./copy.ts";
 import { makeApnsJwt, sendApns } from "./apns.ts";
 
 const SEND_PUSH_SECRET = Deno.env.get("SEND_PUSH_SECRET")!;
-const APNS_HOST = Deno.env.get("APNS_HOST") ?? "https://api.sandbox.push.apple.com";
 const APNS_TOPIC = Deno.env.get("APNS_BUNDLE_ID")!;
+
+// A device token is only valid on the APNs environment that issued it: Xcode
+// builds register against sandbox, TestFlight and App Store builds against
+// production. device_tokens doesn't record which one a row came from, so we
+// try the configured host first and fall back to its sibling when Apple
+// answers BadDeviceToken.
+const APNS_SANDBOX = "https://api.sandbox.push.apple.com";
+const APNS_PRODUCTION = "https://api.push.apple.com";
+const APNS_HOST = Deno.env.get("APNS_HOST") ?? APNS_SANDBOX;
+const APNS_FALLBACK_HOST = APNS_HOST === APNS_PRODUCTION ? APNS_SANDBOX : APNS_PRODUCTION;
 
 const admin = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -64,17 +73,33 @@ Deno.serve(async (req) => {
     nowSeconds: Math.floor(Date.now() / 1000),
   });
 
-  const results = await Promise.all(tokens.map((t) =>
-    sendApns({
-      host: APNS_HOST,
-      deviceToken: t.apns_token,
+  // 400 BadDeviceToken means the token belongs to the other environment, not
+  // that it is dead — the same token still delivers on the sibling host.
+  const isWrongEnvironment = (r: { status: number; text: string }) =>
+    r.status === 400 && r.text.includes("BadDeviceToken");
+
+  const deliver = async (deviceToken: string) => {
+    const payload = {
+      deviceToken,
       topic: APNS_TOPIC,
       jwt,
       title: copy.title,
       body: copy.body,
       data: { event_id: row.event_id },
-    })
-  ));
+    };
+    const first = await sendApns({ host: APNS_HOST, ...payload });
+    if (first.ok || !isWrongEnvironment(first)) return first;
+
+    const second = await sendApns({ host: APNS_FALLBACK_HOST, ...payload });
+    if (second.ok) return second;
+    // Both environments rejected it. Keep each answer so the outbox says why.
+    return {
+      ...second,
+      text: `${APNS_HOST} -> ${first.text}; ${APNS_FALLBACK_HOST} -> ${second.text}`,
+    };
+  };
+
+  const results = await Promise.all(tokens.map((t) => deliver(t.apns_token)));
 
   const anyOk = results.some((r) => r.ok);
   await admin.from("push_outbox").update({
