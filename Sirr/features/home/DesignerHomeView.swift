@@ -96,6 +96,14 @@ struct DesignerHomeView: View {
             guard booted else { return }
             Task { await openDeepLinkedEventIfNeeded(eventID) }
         }
+        .onReceive(appState.$currentWorkspaceId.compactMap { $0 }) { wsID in
+            // Joining from an invite link happens outside the store — ContentView's
+            // JoinWorkspaceView calls WorkspaceService directly — so the new
+            // workspace only reaches the feed through AppState. Reload so it shows
+            // up right away instead of on the next foreground.
+            guard booted, wsID != feed.selectedTeamID else { return }
+            Task { await feed.loadWorkspaces(preferred: wsID) }
+        }
         .overlay(alignment: .top) {
             if let actionToast {
                 Label(actionToast, systemImage: "checkmark.circle.fill")
