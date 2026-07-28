@@ -25,7 +25,28 @@ struct EventRecord: Codable {
     let registrationLocked: Bool?
     let totalPrice: Int?
     let pricePerPerson: Double?
+    let latitude: Double?
+    let longitude: Double?
     let createdAt: Date?
+    let workspaceId: UUID?
+    let templateId: UUID?
+    /// Organizer-selected reusable payment destination for this event.
+    let paymentMethodId: UUID?
+    /// All organizer-selected destinations, in the order shown to players.
+    /// The scalar field above remains as a compatibility alias for the first.
+    let paymentMethodIds: [UUID]
+    /// Computed by get_workspace_events: template linked AND not ended.
+    let isRecurring: Bool?
+    /// Explicit organizer invitation state. Nil means the exercise is still a
+    /// draft visible only to its creator.
+    let publishedAt: Date?
+    /// A cancelled occurrence remains visible so members can read its reason.
+    let cancelledAt: Date?
+    let cancellationReasonCode: String?
+    let cancellationReasonText: String?
+    /// Current authenticated member's private response, computed by the list
+    /// RPC. Organizers do not receive other members' reasons here.
+    let myResponseStatus: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -40,84 +61,214 @@ struct EventRecord: Codable {
         case registrationLocked = "registration_locked"
         case totalPrice = "total_price"
         case pricePerPerson = "price_per_person"
+        case latitude
+        case longitude
         case createdAt = "created_at"
+        case workspaceId = "workspace_id"
+        case templateId = "template_id"
+        case paymentMethodId = "payment_method_id"
+        case paymentMethodIds = "payment_method_ids"
+        case isRecurring = "is_recurring"
+        case publishedAt = "published_at"
+        case cancelledAt = "cancelled_at"
+        case cancellationReasonCode = "cancellation_reason_code"
+        case cancellationReasonText = "cancellation_reason_text"
+        case myResponseStatus = "my_response_status"
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        creatorId = try container.decode(UUID.self, forKey: .creatorId)
+        name = try container.decode(String.self, forKey: .name)
+        location = try container.decode(String.self, forKey: .location)
+        description = try container.decode(String.self, forKey: .description)
+        startDate = try container.decode(Date.self, forKey: .startDate)
+        endDate = try container.decodeIfPresent(Date.self, forKey: .endDate)
+        imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
+        maxParticipants = try container.decodeIfPresent(Int.self, forKey: .maxParticipants)
+        registrationLocked = try container.decodeIfPresent(Bool.self, forKey: .registrationLocked)
+        totalPrice = try container.decodeIfPresent(Int.self, forKey: .totalPrice)
+        pricePerPerson = try container.decodeIfPresent(Double.self, forKey: .pricePerPerson)
+        latitude = try container.decodeIfPresent(Double.self, forKey: .latitude)
+        longitude = try container.decodeIfPresent(Double.self, forKey: .longitude)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
+        workspaceId = try container.decodeIfPresent(UUID.self, forKey: .workspaceId)
+        templateId = try container.decodeIfPresent(UUID.self, forKey: .templateId)
+        paymentMethodId = try container.decodeIfPresent(UUID.self, forKey: .paymentMethodId)
+        paymentMethodIds = try container.decodeIfPresent([UUID].self, forKey: .paymentMethodIds)
+            ?? paymentMethodId.map { [$0] }
+            ?? []
+        isRecurring = try container.decodeIfPresent(Bool.self, forKey: .isRecurring)
+        publishedAt = try container.decodeIfPresent(Date.self, forKey: .publishedAt)
+        cancelledAt = try container.decodeIfPresent(Date.self, forKey: .cancelledAt)
+        cancellationReasonCode = try container.decodeIfPresent(String.self, forKey: .cancellationReasonCode)
+        cancellationReasonText = try container.decodeIfPresent(String.self, forKey: .cancellationReasonText)
+        myResponseStatus = try container.decodeIfPresent(String.self, forKey: .myResponseStatus)
+    }
+}
+
+/// A distinct location the current user has used before (name + coordinates), for quick re-selection.
+struct SavedLocation: Identifiable, Hashable {
+    let name: String
+    let latitude: Double
+    let longitude: Double
+    var id: String { "\(name)|\(latitude)|\(longitude)" }
 }
 
 
 /// Row from get_event_participants RPC.
 struct ParticipantRecord: Codable, Identifiable {
-    let userId: UUID
+    let participantId: UUID
+    let userId: UUID?
     let joinedAt: String?
     let displayName: String?
     let avatarUrl: String?
+    let paymentStatus: PaymentStatus?
+    let paidToNumber: String?
+    let guestName: String?
+    let addedBy: UUID?
+
+    var id: UUID { participantId }
+
+    /// True if this row is a guest (no account) added by a paying joiner.
+    var isGuest: Bool { userId == nil }
+
+    /// True if the row represents a confirmed seat.
+    var isConfirmed: Bool { (paymentStatus ?? .confirmed) == .confirmed }
+
+    /// True if the row is awaiting creator confirmation.
+    var isPending: Bool { paymentStatus == .pending }
+
+    enum CodingKeys: String, CodingKey {
+        case participantId = "participant_id"
+        case userId = "user_id"
+        case joinedAt = "joined_at"
+        case displayName = "display_name"
+        case avatarUrl = "avatar_url"
+        case paymentStatus = "payment_status"
+        case paidToNumber = "paid_to_number"
+        case guestName = "guest_name"
+        case addedBy = "added_by"
+    }
+}
+
+/// A member invitation response returned by `get_event_member_responses`.
+/// The RPC only exposes the full list to the event organizer; regular members
+/// receive their own row server-side.
+struct EventMemberResponseRecord: Codable, Identifiable {
+    let userId: UUID
+    let displayName: String
+    let avatarUrl: String?
+    let status: String
+    let reasonCode: String?
+    let reasonText: String?
+    let invitedBy: UUID?
+    let invitedAt: Date?
+    let respondedAt: Date?
+    let updatedAt: Date?
 
     var id: UUID { userId }
 
     enum CodingKeys: String, CodingKey {
         case userId = "user_id"
-        case joinedAt = "joined_at"
         case displayName = "display_name"
         case avatarUrl = "avatar_url"
+        case status
+        case reasonCode = "reason_code"
+        case reasonText = "reason_text"
+        case invitedBy = "invited_by"
+        case invitedAt = "invited_at"
+        case respondedAt = "responded_at"
+        case updatedAt = "updated_at"
     }
+}
+
+/// Row from public.event_templates (via get_event_template RPC).
+struct EventTemplateRecord: Codable {
+    let id: UUID
+    let workspaceId: UUID
+    let creatorId: UUID
+    let recurrence: String
+    let nextOccurrenceAt: Date
+    let skipNext: Bool
+    let endedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case workspaceId = "workspace_id"
+        case creatorId = "creator_id"
+        case recurrence
+        case nextOccurrenceAt = "next_occurrence_at"
+        case skipNext = "skip_next"
+        case endedAt = "ended_at"
+    }
+}
+
+/// Result of skip_next_occurrence: skipped now, or the next occurrence was
+/// already generated (the creator deletes that event instead).
+enum SkipNextResult {
+    case skipped(Date?)
+    case alreadyOpen(UUID?)
 }
 
 final class EventService {
     static let shared = EventService()
     private let client = SupabaseClientManager.shared.client
 
-    /// Fetch events where the current user is creator or participant. Ordered by start_date ascending.
-    func getEventsForCurrentUser() async throws -> [EventRecord] {
-        let session = try await client.auth.session
-        let userId = session.user.id
-
-        // Events created by user
-        let created: [EventRecord] = try await client
-            .from("events")
-            .select()
-            .eq("creator_id", value: userId)
-            .order("start_date", ascending: true)
-            .execute()
-            .value
-
-        // Event IDs where user is participant (not creator)
-        struct ParticipantRow: Decodable {
-            let eventId: UUID
-            enum CodingKeys: String, CodingKey { case eventId = "event_id" }
+    /// Decoder handling Postgres timestamp formats (same strategy the RPC
+    /// decoders in this file use inline).
+    private static func makePostgresDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let str = try container.decode(String.self)
+            if let d = ISO8601DateFormatter().date(from: str) { return d }
+            let pg = DateFormatter()
+            pg.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSZZZZZ"
+            pg.locale = Locale(identifier: "en_US_POSIX")
+            if let d = pg.date(from: str) { return d }
+            let pg2 = DateFormatter()
+            pg2.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZZZZZ"
+            pg2.locale = Locale(identifier: "en_US_POSIX")
+            if let d = pg2.date(from: str) { return d }
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unrecognized date: \(str)")
         }
-        let participantRows: [ParticipantRow] = try await client
-            .from("event_participants")
-            .select("event_id")
-            .eq("user_id", value: userId)
-            .execute()
-            .value
-        let participantEventIds = Set(participantRows.map(\.eventId))
-        let createdIds = Set(created.map(\.id))
-        let otherIds = participantEventIds.subtracting(createdIds)
+        return decoder
+    }
 
-        if otherIds.isEmpty {
-            eventLogger.info("API getEventsForCurrentUser succeeded (count: \(created.count))")
-            return created
+    /// Upcoming events of one workspace (member-gated server-side).
+    /// Ordered by start_date ascending.
+    func getWorkspaceEvents(workspaceId: UUID) async throws -> [EventRecord] {
+        let params: [String: String] = ["p_workspace_id": workspaceId.uuidString]
+        let response = try await client
+            .rpc("get_workspace_events", params: params)
+            .execute()
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let str = try container.decode(String.self)
+            if let d = ISO8601DateFormatter().date(from: str) { return d }
+            let pg = DateFormatter()
+            pg.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSZZZZZ"
+            pg.locale = Locale(identifier: "en_US_POSIX")
+            if let d = pg.date(from: str) { return d }
+            let pg2 = DateFormatter()
+            pg2.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZZZZZ"
+            pg2.locale = Locale(identifier: "en_US_POSIX")
+            if let d = pg2.date(from: str) { return d }
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unrecognized date: \(str)")
         }
-
-        // Events where user participates but did not create (fetch by ids)
-        let others: [EventRecord] = try await client
-            .from("events")
-            .select()
-            .in("id", values: Array(otherIds))
-            .order("start_date", ascending: true)
-            .execute()
-            .value
-
-        var combined = created + others
-        combined.sort { $0.startDate < $1.startDate }
-        eventLogger.info("API getEventsForCurrentUser succeeded (count: \(combined.count))")
-        return combined
+        let events = try decoder.decode([EventRecord].self, from: response.data)
+        eventLogger.info("API getWorkspaceEvents succeeded (count: \(events.count))")
+        return events
     }
 
     /// Create a new event and add the current user as first participant.
     /// Uses a server-side RPC (SECURITY DEFINER) to bypass RLS for inserts.
     func createEvent(
+        workspaceId: UUID,
         name: String,
         location: String,
         description: String,
@@ -126,7 +277,12 @@ final class EventService {
         imageUrl: String?,
         maxParticipants: Int?,
         totalPrice: Int = 0,
-        pricePerPerson: Double = 0
+        pricePerPerson: Double = 0,
+        latitude: Double? = nil,
+        longitude: Double? = nil,
+        recurrence: String = "none",
+        paymentMethodId: UUID? = nil,
+        paymentMethodIds: [UUID] = []
     ) async throws -> EventRecord {
         let session: Session
         do {
@@ -138,22 +294,40 @@ final class EventService {
         let userId = session.user.id
 
         let iso = ISO8601DateFormatter()
-        var params: [String: String] = [
-            "p_creator_id": userId.uuidString,
-            "p_name": name,
-            "p_location": location,
-            "p_description": description,
-            "p_start_date": iso.string(from: startDate)
+        let selectedPaymentMethodIds = paymentMethodIds.isEmpty
+            ? paymentMethodId.map { [$0] } ?? []
+            : paymentMethodIds
+        var params: [String: AnyJSON] = [
+            "p_creator_id": .string(userId.uuidString),
+            "p_workspace_id": .string(workspaceId.uuidString),
+            "p_name": .string(name),
+            "p_location": .string(location),
+            "p_description": .string(description),
+            "p_start_date": .string(iso.string(from: startDate)),
+            "p_total_price": .integer(totalPrice),
+            "p_price_per_person": .double(pricePerPerson),
+            "p_recurrence": .string(recurrence),
+            "p_payment_method_id": selectedPaymentMethodIds.first.map {
+                .string($0.uuidString)
+            } ?? .null,
+            "p_payment_method_ids": .array(
+                selectedPaymentMethodIds.map { .string($0.uuidString) }
+            )
         ]
-        if let endDate { params["p_end_date"] = iso.string(from: endDate) }
-        if let imageUrl { params["p_image_url"] = imageUrl }
-        if let maxParticipants { params["p_max_participants"] = "\(maxParticipants)" }
-        if totalPrice > 0 { params["p_total_price"] = "\(totalPrice)" }
-        if pricePerPerson > 0 { params["p_price_per_person"] = "\(pricePerPerson)" }
+        if let endDate { params["p_end_date"] = .string(iso.string(from: endDate)) }
+        if let imageUrl { params["p_image_url"] = .string(imageUrl) }
+        if let maxParticipants { params["p_max_participants"] = .integer(maxParticipants) }
+        if let latitude { params["p_latitude"] = .double(latitude) }
+        if let longitude { params["p_longitude"] = .double(longitude) }
 
-        let response = try await client
-            .rpc("create_event", params: params)
-            .execute()
+        let response: PostgrestResponse<Void>
+        do {
+            response = try await client
+                .rpc("create_event", params: params)
+                .execute()
+        } catch {
+            throw Self.translatedPaymentSchemaError(error)
+        }
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
@@ -174,6 +348,187 @@ final class EventService {
 
         eventLogger.info("API createEvent succeeded (id: \(event.id))")
         return event
+    }
+
+    /// Editable event fields, updated via the events table directly — the
+    /// baseline RLS policy ("Creators can update own events") gates it to the
+    /// creator, so no RPC is needed.
+    private struct UpdateEventPayload: Encodable {
+        let name: String
+        let location: String
+        let startDate: String
+        let endDate: String?
+        let maxParticipants: Int?
+        let totalPrice: Int
+        let pricePerPerson: Double
+        let latitude: Double?
+        let longitude: Double?
+        let paymentMethodId: UUID?
+        let paymentMethodIds: [UUID]
+
+        enum CodingKeys: String, CodingKey {
+            case name, location, latitude, longitude
+            case startDate = "start_date"
+            case endDate = "end_date"
+            case maxParticipants = "max_participants"
+            case totalPrice = "total_price"
+            case pricePerPerson = "price_per_person"
+            case paymentMethodId = "payment_method_id"
+            case paymentMethodIds = "payment_method_ids"
+        }
+    }
+
+    /// Update an existing event's editable fields (creator-only via RLS; a
+    /// non-creator's update simply matches zero rows).
+    func updateEvent(
+        eventId: UUID,
+        name: String,
+        location: String,
+        startDate: Date,
+        endDate: Date?,
+        maxParticipants: Int?,
+        totalPrice: Int,
+        pricePerPerson: Double,
+        latitude: Double?,
+        longitude: Double?,
+        paymentMethodId: UUID? = nil,
+        paymentMethodIds: [UUID] = []
+    ) async throws {
+        let iso = ISO8601DateFormatter()
+        let selectedPaymentMethodIds = paymentMethodIds.isEmpty
+            ? paymentMethodId.map { [$0] } ?? []
+            : paymentMethodIds
+        let payload = UpdateEventPayload(
+            name: name,
+            location: location,
+            startDate: iso.string(from: startDate),
+            endDate: endDate.map { iso.string(from: $0) },
+            maxParticipants: maxParticipants,
+            totalPrice: totalPrice,
+            pricePerPerson: pricePerPerson,
+            latitude: latitude,
+            longitude: longitude,
+            paymentMethodId: selectedPaymentMethodIds.first,
+            paymentMethodIds: selectedPaymentMethodIds
+        )
+        do {
+            try await client
+                .from("events")
+                .update(payload)
+                .eq("id", value: eventId.uuidString)
+                .execute()
+        } catch {
+            throw Self.translatedPaymentSchemaError(error)
+        }
+        eventLogger.info("API updateEvent succeeded (id: \(eventId))")
+    }
+
+    /// Atomically updates one occurrence and, when requested, its active weekly
+    /// template. The database owns authorization, price calculation, and the
+    /// transaction so a partial series edit can never escape to the client.
+    func updateEventWithScope(
+        eventId: UUID,
+        scope: String,
+        name: String,
+        location: String,
+        startDate: Date,
+        endDate: Date?,
+        maxParticipants: Int?,
+        totalPrice: Int,
+        latitude: Double?,
+        longitude: Double?,
+        paymentMethodIds: [UUID]
+    ) async throws {
+        let iso = ISO8601DateFormatter()
+        let params: [String: AnyJSON] = [
+            "p_event_id": .string(eventId.uuidString),
+            "p_scope": .string(scope),
+            "p_name": .string(name),
+            "p_location": .string(location),
+            "p_start_date": .string(iso.string(from: startDate)),
+            "p_end_date": endDate.map { .string(iso.string(from: $0)) } ?? .null,
+            "p_max_participants": maxParticipants.map(AnyJSON.integer) ?? .null,
+            "p_total_price": .integer(totalPrice),
+            "p_latitude": latitude.map(AnyJSON.double) ?? .null,
+            "p_longitude": longitude.map(AnyJSON.double) ?? .null,
+            "p_payment_method_ids": .array(
+                paymentMethodIds.map { .string($0.uuidString) }
+            )
+        ]
+
+        do {
+            try await client
+                .rpc("update_event_with_scope", params: params)
+                .execute()
+        } catch {
+            throw Self.translatedPaymentSchemaError(error)
+        }
+        eventLogger.info("API updateEventWithScope succeeded (id: \(eventId), scope: \(scope))")
+    }
+
+    private static func translatedPaymentSchemaError(_ error: Error) -> Error {
+        let description = error.localizedDescription.lowercased()
+        let postgrestCode = (error as? PostgrestError)?.code
+        let isPaymentSchemaError = description.contains("payment_method")
+            || description.contains("create_event")
+            || description.contains("update_event_with_scope")
+        let isMissingSchemaEntry = postgrestCode == "PGRST202"
+            || postgrestCode == "PGRST203"
+            || postgrestCode == "PGRST204"
+            || description.contains("schema cache")
+
+        if isPaymentSchemaError && isMissingSchemaEntry {
+            eventLogger.error(
+                "Payment schema unavailable while saving an event (code: \(postgrestCode ?? "unknown", privacy: .public))"
+            )
+            return ManualPaymentServiceError.featureUnavailable
+        }
+        return error
+    }
+
+    /// Detaches an event from its series template (creator-only via the same
+    /// RLS policy). Used before enable_recurrence to force a fresh template
+    /// snapshot from the updated event — reactivation alone never re-snapshots.
+    func clearTemplateLink(eventId: UUID) async throws {
+        try await client
+            .from("events")
+            .update(["template_id": AnyJSON.null])
+            .eq("id", value: eventId.uuidString)
+            .execute()
+        eventLogger.info("API clearTemplateLink succeeded (id: \(eventId))")
+    }
+
+    /// Distinct locations (name + coordinates) the current user has used in their own events.
+    /// Used to let creators quick-pick a previously-entered place. Only rows with coordinates are returned.
+    func getPreviousLocations() async throws -> [SavedLocation] {
+        let session = try await client.auth.session
+        let userId = session.user.id
+
+        struct LocationRow: Decodable {
+            let location: String
+            let latitude: Double?
+            let longitude: Double?
+        }
+        let rows: [LocationRow] = try await client
+            .from("events")
+            .select("location, latitude, longitude")
+            .eq("creator_id", value: userId)
+            .order("created_at", ascending: false)
+            .execute()
+            .value
+
+        var seen = Set<String>()
+        var result: [SavedLocation] = []
+        for row in rows {
+            let name = row.location.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty, let lat = row.latitude, let lon = row.longitude else { continue }
+            let key = name.lowercased()
+            if seen.contains(key) { continue }
+            seen.insert(key)
+            result.append(SavedLocation(name: name, latitude: lat, longitude: lon))
+        }
+        eventLogger.info("API getPreviousLocations succeeded (count: \(result.count))")
+        return result
     }
 
     /// Fetch a single event by ID. Uses SECURITY DEFINER RPC so anyone with the link can view.
@@ -234,12 +589,29 @@ final class EventService {
         return records
     }
 
+    /// Fetches invitation responses for an event. The server limits organizers
+    /// to their own events and regular members to their own response.
+    func getEventMemberResponses(eventId: UUID) async throws -> [EventMemberResponseRecord] {
+        let params: [String: String] = ["p_event_id": eventId.uuidString]
+
+        let response = try await client
+            .rpc("get_event_member_responses", params: params)
+            .execute()
+
+        let records = try Self.makePostgresDecoder().decode(
+            [EventMemberResponseRecord].self,
+            from: response.data
+        )
+        eventLogger.info("API getEventMemberResponses succeeded (eventId: \(eventId), count: \(records.count))")
+        return records
+    }
+
     /// Check if the current user is enrolled in an event.
     func isCurrentUserEnrolled(eventId: UUID) async throws -> Bool {
         let session = try await client.auth.session
         let userId = session.user.id
         let participants = try await getEventParticipants(eventId: eventId)
-        return participants.contains { $0.userId == userId }
+        return participants.contains { $0.userId == userId && !$0.isGuest }
     }
 
     /// Leave an event as the current user.
@@ -257,6 +629,52 @@ final class EventService {
             .execute()
 
         eventLogger.info("API leaveEvent succeeded (eventId: \(eventId))")
+    }
+
+    /// Publishes an organizer-owned event and invites all current workspace
+    /// members. The RPC is idempotent and owns notification deduplication.
+    func publishEvent(eventId: UUID) async throws {
+        let params: [String: String] = ["p_event_id": eventId.uuidString]
+        try await client
+            .rpc("publish_event", params: params)
+            .execute()
+        eventLogger.info("API publishEvent succeeded (eventId: \(eventId))")
+    }
+
+    /// Declines an invitation with an optional structured reason. This server
+    /// operation also releases any current registration or waitlist entry.
+    func declineEvent(
+        eventId: UUID,
+        reasonCode: String?,
+        reasonText: String?
+    ) async throws {
+        let params: [String: AnyJSON] = [
+            "p_event_id": .string(eventId.uuidString),
+            "p_reason_code": reasonCode.map(AnyJSON.string) ?? .null,
+            "p_reason_text": reasonText.map(AnyJSON.string) ?? .null
+        ]
+        try await client
+            .rpc("decline_event", params: params)
+            .execute()
+        eventLogger.info("API declineEvent succeeded (eventId: \(eventId))")
+    }
+
+    /// Cancels only this concrete occurrence, preserving its weekly template.
+    /// The event remains queryable and the RPC notifies workspace members.
+    func cancelEventOccurrence(
+        eventId: UUID,
+        reasonCode: String?,
+        reasonText: String?
+    ) async throws {
+        let params: [String: AnyJSON] = [
+            "p_event_id": .string(eventId.uuidString),
+            "p_reason_code": reasonCode.map(AnyJSON.string) ?? .null,
+            "p_reason_text": reasonText.map(AnyJSON.string) ?? .null
+        ]
+        try await client
+            .rpc("cancel_event_occurrence", params: params)
+            .execute()
+        eventLogger.info("API cancelEventOccurrence succeeded (eventId: \(eventId))")
     }
 
     /// Toggle registration lock for an event. Only the creator can call this.
@@ -280,5 +698,83 @@ final class EventService {
 
         eventLogger.info("API toggleRegistrationLock succeeded (eventId: \(eventId), locked: \(newValue))")
         return newValue
+    }
+
+    /// Delete an event. Only the creator can call this (enforced server-side).
+    /// Cascades remove event_participants & event_waitlist rows automatically.
+    func deleteEvent(eventId: UUID) async throws {
+        let session = try await client.auth.session
+        let userId = session.user.id
+
+        let params: [String: String] = [
+            "p_event_id": eventId.uuidString,
+            "p_user_id": userId.uuidString
+        ]
+
+        try await client
+            .rpc("delete_event", params: params)
+            .execute()
+
+        eventLogger.info("API deleteEvent succeeded (eventId: \(eventId))")
+    }
+
+    /// Recurrence template backing a series-linked event.
+    func getEventTemplate(templateId: UUID) async throws -> EventTemplateRecord {
+        let params: [String: String] = ["p_template_id": templateId.uuidString]
+        let response = try await client
+            .rpc("get_event_template", params: params)
+            .execute()
+        let template = try Self.makePostgresDecoder().decode(EventTemplateRecord.self, from: response.data)
+        eventLogger.info("API getEventTemplate succeeded (id: \(template.id))")
+        return template
+    }
+
+    /// Skip the series' next occurrence. `fromEventId` is the event whose page
+    /// hosted the button (the server excludes it when checking whether the
+    /// next occurrence is already open).
+    func skipNextOccurrence(templateId: UUID, fromEventId: UUID) async throws -> SkipNextResult {
+        struct SkipResponse: Decodable {
+            let status: String
+            let skippedDate: Date?
+            let eventId: UUID?
+            enum CodingKeys: String, CodingKey {
+                case status
+                case skippedDate = "skipped_date"
+                case eventId = "event_id"
+            }
+        }
+        let params: [String: String] = [
+            "p_template_id": templateId.uuidString,
+            "p_event_id": fromEventId.uuidString
+        ]
+        let response = try await client
+            .rpc("skip_next_occurrence", params: params)
+            .execute()
+        let result = try Self.makePostgresDecoder().decode(SkipResponse.self, from: response.data)
+        eventLogger.info("API skipNextOccurrence: \(result.status)")
+        return result.status == "already_open"
+            ? .alreadyOpen(result.eventId)
+            : .skipped(result.skippedDate)
+    }
+
+    /// Enable weekly recurrence on an existing event (from its settings sheet).
+    /// Creates the template or reactivates an ended one; returns it.
+    func enableRecurrence(eventId: UUID) async throws -> EventTemplateRecord {
+        let params: [String: String] = ["p_event_id": eventId.uuidString]
+        let response = try await client
+            .rpc("enable_recurrence", params: params)
+            .execute()
+        let template = try Self.makePostgresDecoder().decode(EventTemplateRecord.self, from: response.data)
+        eventLogger.info("API enableRecurrence succeeded (templateId: \(template.id))")
+        return template
+    }
+
+    /// End the series. Existing events are untouched.
+    func endRecurrence(templateId: UUID) async throws {
+        let params: [String: String] = ["p_template_id": templateId.uuidString]
+        try await client
+            .rpc("end_recurrence", params: params)
+            .execute()
+        eventLogger.info("API endRecurrence succeeded (templateId: \(templateId))")
     }
 }

@@ -13,29 +13,6 @@ import os
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Sirr", category: "Auth")
 
-// #region agent log
-private func _debugLog(_ message: String, location: String, hypothesisId: String, data: [String: Any] = [:]) {
-    var payload: [String: Any] = [
-        "timestamp": Int(Date().timeIntervalSince1970 * 1000),
-        "message": message,
-        "location": location,
-        "hypothesisId": hypothesisId
-    ]
-    if !data.isEmpty { payload["data"] = data }
-    guard let body = try? JSONSerialization.data(withJSONObject: payload),
-          let url = URL(string: "http://127.0.0.1:7243/ingest/bf54f446-5152-40ef-97c8-8f28ab5705d5") else { return }
-    var req = URLRequest(url: url)
-    req.httpMethod = "POST"
-    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    req.httpBody = body
-    URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
-}
-/// Call from views for debug instrumentation (e.g. LoginOTPView.onAppear).
-func agentLog(_ message: String, location: String, hypothesisId: String, data: [String: Any] = [:]) {
-    _debugLog(message, location: location, hypothesisId: hypothesisId, data: data)
-}
-// #endregion
-
 @MainActor
 class AuthViewModel: ObservableObject {
     @Published var isAuthenticated = false
@@ -91,9 +68,6 @@ class AuthViewModel: ObservableObject {
     }
 
     func requestOTP(email: String) async {
-        // #region agent log
-        _debugLog("requestOTP entered", location: "AuthViewModel.requestOTP", hypothesisId: "H1_H2_H4_H5", data: ["isAuthenticated": isAuthenticated])
-        // #endregion
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
@@ -119,9 +93,6 @@ class AuthViewModel: ObservableObject {
             let isNewUser = try await AuthService.shared.verifyOTP(email: email, token: token)
             isAuthenticated = true
             isNewUserAfterOTP = isNewUser
-            // #region agent log
-            _debugLog("verifyOTP succeeded", location: "AuthViewModel.verifyOTP", hypothesisId: "order", data: ["isNewUser": isNewUser])
-            // #endregion
             logger.info("Verify OTP succeeded (isNewUser: \(isNewUser))")
         } catch {
             logger.error("Verify OTP failed: \(error.localizedDescription)")
@@ -214,6 +185,36 @@ class AuthViewModel: ObservableObject {
         }
     }
 
+    /// Save the user's STC Pay number on their profile. Pass the raw input the user typed;
+    /// normalization happens here. Sets `errorMessage` on validation failure.
+    func saveSTCPayNumber(rawInput: String) async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        guard let canonical = STCPay.normalize(rawInput) else {
+            errorMessage = "رقم STC Pay غير صالح"
+            logger.error("Save STC Pay number failed: invalid input")
+            return
+        }
+        do {
+            try await AuthService.shared.updateSTCPayNumber(canonical)
+            // Reflect locally without a roundtrip.
+            if let profile = currentProfile {
+                currentProfile = UserRecord(
+                    userId: profile.userId,
+                    name: profile.name,
+                    position: profile.position,
+                    avatarUrl: profile.avatarUrl,
+                    stcPayNumber: canonical
+                )
+            }
+            logger.info("Save STC Pay number succeeded")
+        } catch {
+            logger.error("Save STC Pay number failed: \(error.localizedDescription)")
+            errorMessage = error.localizedDescription
+        }
+    }
+
     /// Update profile (name, position, optional new avatar). Reloads currentProfile on success.
     func updateProfile(name: String, position: String, imageData: Data?) async {
         isLoading = true
@@ -236,7 +237,8 @@ class AuthViewModel: ObservableObject {
                 userId: session.user.id,
                 name: name,
                 position: position,
-                avatarUrl: avatarUrl
+                avatarUrl: avatarUrl,
+                stcPayNumber: currentProfile?.stcPayNumber
             )
             logger.info("Update profile succeeded")
         } catch {

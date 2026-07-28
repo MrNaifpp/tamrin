@@ -45,15 +45,13 @@ struct LoginOnbord: View {
                         VStack(spacing: 6) {
                             Spacer(minLength: 0)
                             Text("تمريــن")
-                                .font(.subheadline)
+                                .font(TamrinFont.subheadline)
                                 .foregroundStyle(Color(white: 0.45))
                             Text("تجربــة مثاليـــة")
-                                .font(.title)
-                                .fontWeight(.bold)
+                                .font(TamrinFont.font(size: 28, weight: .bold))
                                 .foregroundStyle(.black)
                             Text("لإدارة التماريـن")
-                                .font(.title)
-                                .fontWeight(.bold)
+                                .font(TamrinFont.font(size: 28, weight: .bold))
                                 .foregroundStyle(.black)
                             HStack(spacing: 2) {
                                 Text("تبـدأ ")
@@ -61,8 +59,7 @@ struct LoginOnbord: View {
                                 Text("مـن هنـــا")
                                     .foregroundStyle(Color(red: 0.35, green: 0.72, blue: 0.45))
                             }
-                            .font(.title)
-                            .fontWeight(.bold)
+                            .font(TamrinFont.font(size: 28, weight: .bold))
                             .padding(.bottom, 24)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -92,7 +89,7 @@ struct LoginOnbord: View {
                     // Second area: dark charcoal background (rounded top)
                     VStack(spacing: 0) {
                         Text("أنشئ وسجِّل في التمارين بطريقة رائعة، وادفع أو اجمع القطة بسهولة.")
-                            .font(.body)
+                            .font(TamrinFont.body)
                             .foregroundStyle(Color(.black.opacity(0.5)))
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 28)
@@ -103,72 +100,45 @@ struct LoginOnbord: View {
                             onNavigateToLogin?()
                         } label: {
                             Text("سجل بالبريد الالكتروني")
-                                .font(.headline)
-                                .fontWeight(.semibold)
+                                .font(TamrinFont.font(size: 17, weight: .medium))
                                 .foregroundStyle(.white)
                                 .frame(maxWidth: .infinity)
-                                .frame(height: 54)
+                                .frame(minHeight: TamrinControlMetrics.actionHeight)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 27, style: .continuous)
-                                        .fill(Color.black)
+                                    RoundedRectangle(cornerRadius: 25, style: .continuous)
+                                        .fill(TamrinTheme.ink)
                                 )
                         }
                         .buttonStyle(.plain)
                         .padding(.horizontal, 24)
                         .padding(.bottom, 16)
 
-                        HStack(spacing: 16) {
-                           
-
-                            Button {} label: {
-                                Image(systemName: "g.circle.fill")
-                                    .font(.system(size: 26))
-                                    .foregroundStyle(Color(white: 0.55))
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: 54)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 27, style: .continuous)
-                                            .fill(Color(white: 0.95))
-                                    )
-                                    .overlay(alignment: .topTrailing) {
-                                        Text("قريباً")
-                                            .font(.system(size: 10, weight: .semibold))
-                                            .foregroundStyle(.white)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 3)
-                                            .background(
-                                                Capsule()
-                                                    .fill(Color(red: 0.35, green: 0.72, blue: 0.45))
-                                            )
-                                            .offset(x: 6, y: -6)
-                                    }
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(true)
-                            .opacity(0.8)
-                            Button {
-                                Task { await vm.signInWithApple() }
-                            } label: {
-                                Group {
-                                    if vm.isLoading {
-                                        ProgressView()
-                                            .progressViewStyle(CircularProgressViewStyle(tint: .black))
-                                    } else {
+                        Button {
+                            Task { await vm.signInWithApple() }
+                        } label: {
+                            Group {
+                                if vm.isLoading {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                                } else {
+                                    HStack(spacing: 8) {
                                         Image(systemName: "apple.logo")
-                                            .font(.system(size: 24, weight: .medium))
-                                            .foregroundStyle(.black)
+                                            .font(.system(size: 20, weight: .medium))
+                                        Text("المتابعة عبر Apple")
+                                            .font(TamrinFont.font(size: 17, weight: .medium))
                                     }
+                                    .foregroundStyle(.black)
                                 }
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 54)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 27, style: .continuous)
-                                        .fill(Color(white: 0.95))
-                                )
                             }
-                            .buttonStyle(.plain)
-                            .disabled(vm.isLoading)
+                            .frame(maxWidth: .infinity)
+                            .frame(minHeight: TamrinControlMetrics.actionHeight)
+                            .background(
+                                RoundedRectangle(cornerRadius: 25, style: .continuous)
+                                    .fill(Color(white: 0.95))
+                            )
                         }
+                        .buttonStyle(.plain)
+                        .disabled(vm.isLoading)
                         .padding(.horizontal, 24)
                         .padding(.bottom, 24)
                     }

@@ -19,8 +19,21 @@ struct EditProfileSheet: View {
     @State private var name: String = ""
     @State private var selectedItem: PhotosPickerItem?
     @State private var selectedImageData: Data?
+    @State private var stcPayInput: String = ""
+    @State private var stcPayError: String? = nil
 
     private let sheetBackground = Color(white: 0.18)
+
+    private var normalizedSTCPay: String? {
+        let trimmed = stcPayInput.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        return STCPay.normalize(trimmed)
+    }
+
+    private var isSTCPayInputValid: Bool {
+        let trimmed = stcPayInput.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty || STCPay.isValid(trimmed)
+    }
 
     var body: some View {
         NavigationStack {
@@ -32,10 +45,10 @@ struct EditProfileSheet: View {
                     VStack(spacing: 0) {
                         // Title and description
                         Text("عدل حسابك")
-                            .font(.system(size: 22, weight: .bold))
+                            .font(TamrinFont.font(size: 22, weight: .bold))
                             .foregroundStyle(.white)
                         Text("عرف بنفسك، هذا اسمك وصورتك اللي بيشوفونها الناس.")
-                            .font(.system(size: 14))
+                            .font(TamrinFont.font(size: 14, weight: .regular))
                             .foregroundStyle(Color(white: 0.75))
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 24)
@@ -102,7 +115,7 @@ struct EditProfileSheet: View {
 
                         // Name text field
                         TextField("", text: $name, prompt: Text("الاسم").foregroundColor(Color(white: 0.5)))
-                            .font(.system(size: 16))
+                            .font(TamrinFont.font(size: 16, weight: .regular))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 18)
                             .frame(height: 52)
@@ -113,22 +126,72 @@ struct EditProfileSheet: View {
                             .padding(.horizontal, 24)
                             .padding(.top, 24)
 
+                        // STC Pay number — used to receive payments from joiners on paid events.
+                        VStack(alignment: .trailing, spacing: 6) {
+                            TextField(
+                                "",
+                                text: $stcPayInput,
+                                prompt: Text("رقم STC Pay (مثل 05XXXXXXXX)").foregroundColor(Color(white: 0.5))
+                            )
+                            .keyboardType(.phonePad)
+                            .textContentType(.telephoneNumber)
+                            .font(TamrinFont.font(size: 16, weight: .regular))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 18)
+                            .frame(height: 52)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .fill(Color(white: 0.25))
+                            )
+                            if let err = stcPayError {
+                                Text(err)
+                                    .font(TamrinFont.caption)
+                                    .foregroundStyle(.red)
+                            } else {
+                                Text("هذا الرقم يستلم مدفوعات الفعاليات المدفوعة.")
+                                    .font(TamrinFont.caption)
+                                    .foregroundStyle(Color(white: 0.6))
+                            }
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.top, 16)
+
                         // Save button
                         Button {
                             Task {
+                                stcPayError = nil
+
+                                let trimmed = stcPayInput.trimmingCharacters(in: .whitespaces)
+                                if !trimmed.isEmpty && STCPay.normalize(trimmed) == nil {
+                                    stcPayError = "رقم STC Pay غير صالح"
+                                    return
+                                }
+
                                 await authVM.updateProfile(
                                     name: name.trimmingCharacters(in: .whitespaces),
                                     position: authVM.currentProfile?.position ?? "",
                                     imageData: selectedImageData
                                 )
-                                if authVM.errorMessage == nil {
-                                    isPresented = false
-                                    dismiss()
+                                guard authVM.errorMessage == nil else { return }
+
+                                // Persist STC Pay number if it changed.
+                                let newCanonical = trimmed.isEmpty ? nil : STCPay.normalize(trimmed)
+                                if newCanonical != authVM.currentProfile?.stcPayNumber {
+                                    do {
+                                        try await AuthService.shared.updateSTCPayNumber(newCanonical)
+                                        await authVM.loadCurrentProfile()
+                                    } catch {
+                                        stcPayError = "تعذر حفظ رقم STC Pay"
+                                        return
+                                    }
                                 }
+
+                                isPresented = false
+                                dismiss()
                             }
                         } label: {
                             Text("حفظ")
-                                .font(.system(size: 17, weight: .semibold))
+                                .font(TamrinFont.font(size: 17, weight: .medium))
                                 .foregroundStyle(.black)
                                 .frame(maxWidth: .infinity)
                                 .frame(height: 52)
@@ -163,6 +226,9 @@ struct EditProfileSheet: View {
                 Task {
                     await authVM.loadCurrentProfile()
                     name = authVM.currentProfile?.name ?? ""
+                    if let stc = authVM.currentProfile?.stcPayNumber {
+                        stcPayInput = STCPay.displayForm(stc)
+                    }
                 }
             }
         }

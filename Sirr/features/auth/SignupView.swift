@@ -68,13 +68,12 @@ struct SignupView: View {
                     onComplete?()
                 } label: {
                     Text("التالي - الصفحة الرئيسية")
-                        .font(.headline)
-                        .fontWeight(.semibold)
+                        .font(TamrinFont.font(size: 17, weight: .medium))
                         .foregroundStyle(.black)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 54)
+                        .frame(minHeight: TamrinControlMetrics.actionHeight)
                         .background(
-                            RoundedRectangle(cornerRadius: 27, style: .continuous)
+                            RoundedRectangle(cornerRadius: 25, style: .continuous)
                                 .fill(Color.white)
                         )
                 }
@@ -220,15 +219,14 @@ struct SignupView: View {
                                 .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         } else {
                             Text("التالي")
-                                .font(.headline)
-                                .fontWeight(.semibold)
+                                .font(TamrinFont.font(size: 17, weight: .medium))
                                 .foregroundStyle(.white)
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    .frame(height: 54)
+                    .frame(minHeight: TamrinControlMetrics.actionHeight)
                     .background(
-                        RoundedRectangle(cornerRadius: 27, style: .continuous)
+                        RoundedRectangle(cornerRadius: 25, style: .continuous)
                             .fill(isFormValid ? Color(red: 92/255, green: 92/255, blue: 92/255) : Color(white: 0.25))
                     )
                 }

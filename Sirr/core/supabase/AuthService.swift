@@ -11,18 +11,28 @@ import os
 
 private let authLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "Sirr", category: "AuthService")
 
-/// Row for the public.users table (user_id, name, position, optional avatar_url).
+/// Row for the public.users table (user_id, name, position, optional avatar_url, optional STC Pay number).
 struct UserRecord: Codable {
     let userId: UUID
     let name: String
     let position: String
     let avatarUrl: String?
+    let stcPayNumber: String?
+
+    init(userId: UUID, name: String, position: String, avatarUrl: String?, stcPayNumber: String? = nil) {
+        self.userId = userId
+        self.name = name
+        self.position = position
+        self.avatarUrl = avatarUrl
+        self.stcPayNumber = stcPayNumber
+    }
 
     enum CodingKeys: String, CodingKey {
         case userId = "user_id"
         case name
         case position = "postion"
         case avatarUrl = "avatar_url"
+        case stcPayNumber = "stc_pay_number"
     }
 }
 
@@ -36,6 +46,15 @@ private struct UpdateUserPayload: Encodable {
         case name
         case position = "postion"
         case avatarUrl = "avatar_url"
+    }
+}
+
+/// Payload for updating only the STC Pay number (normalized canonical form).
+private struct UpdateSTCPayPayload: Encodable {
+    let stcPayNumber: String?
+
+    enum CodingKeys: String, CodingKey {
+        case stcPayNumber = "stc_pay_number"
     }
 }
 
@@ -105,6 +124,26 @@ final class AuthService {
             return rows.first
         } catch {
             authLogger.error("API getCurrentUserProfile failed: \(error.localizedDescription)")
+            if let e = error as? URLError { authLogger.error("URLError: \(String(describing: e))") }
+            throw error
+        }
+    }
+
+    /// Update only the STC Pay number on the current user's row.
+    /// Pass nil to clear it. Caller is responsible for normalizing to canonical form.
+    func updateSTCPayNumber(_ canonical: String?) async throws {
+        let session = try await client.auth.session
+        let userId = session.user.id
+        let payload = UpdateSTCPayPayload(stcPayNumber: canonical)
+        do {
+            try await client
+                .from("users")
+                .update(payload)
+                .eq("user_id", value: userId)
+                .execute()
+            authLogger.info("API updateSTCPayNumber succeeded (cleared: \(canonical == nil))")
+        } catch {
+            authLogger.error("API updateSTCPayNumber failed: \(error.localizedDescription)")
             if let e = error as? URLError { authLogger.error("URLError: \(String(describing: e))") }
             throw error
         }

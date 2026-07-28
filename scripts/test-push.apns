@@ -1,0 +1,10 @@
+{
+  "aps": {
+    "alert": {
+      "title": "طلب انضمام جديد 🎉",
+      "body": "وصلك طلب دفع جديد. راجعه وأكّده 👍"
+    },
+    "sound": "default"
+  },
+  "event_id": "REPLACE-WITH-REAL-EVENT-UUID"
+}

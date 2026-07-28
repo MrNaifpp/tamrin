@@ -37,6 +37,8 @@ playground.xcworkspace
 # .swiftpm
 
 .build/
+build/
+DerivedData/
 
 # CocoaPods
 #
@@ -67,3 +69,7 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# Supabase Edge Function local secrets
+supabase/functions/.env
+.superpowers/

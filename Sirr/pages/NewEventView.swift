@@ -14,7 +14,13 @@ import UIKit
 
 struct NewEventView: View {
     @Environment(\.dismiss) var dismiss
-    
+
+    /// Workspace the new event is created in (current workspace on home).
+    var workspaceId: UUID? = nil
+
+    /// Called with the created event so the presenter can open its detail page.
+    var onCreated: ((EventData) -> Void)? = nil
+
     // Form state
     @State private var exerciseName: String = ""
     @State private var exerciseLocation: String = ""
@@ -26,6 +32,7 @@ struct NewEventView: View {
     @State private var numberOfPeople: Int = 0
     @State private var pricePerUnit: String = "00 إ"
     @State private var playerApprovalEnabled: Bool = false
+    @State private var repeatsWeekly: Bool = false
     @State private var showPriceDialog: Bool = false
     @State private var showPeopleDialog: Bool = false
     @State private var showStartDateDialog: Bool = false
@@ -37,33 +44,50 @@ struct NewEventView: View {
     @State private var tempPriceValue: String = ""
     @State private var tempPeopleValue: String = ""
     @State private var tempLocationValue: String = ""
+
+    // STC Pay guardrail state — shown when user tries to save a paid event without a profile number.
+    @State private var showSTCPayGuardrail: Bool = false
+    @State private var guardrailInput: String = ""
+    @State private var guardrailError: String? = nil
+    @State private var isSavingGuardrailNumber = false
+    @FocusState private var guardrailFieldFocused: Bool
     
-    // Map location selection state
+    // Map location selection state — tap the map to capture coordinates.
     @State private var selectedCoordinate: CLLocationCoordinate2D? = nil
     @State private var currentRegion: MKCoordinateRegion = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 24.7136, longitude: 46.6753), // Riyadh default
         span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
     )
-    @State private var searchResults: [MKMapItem] = []
-    @State private var searchText: String = ""
-    @State private var isSearching: Bool = false
     @State private var locationManager: CLLocationManager = CLLocationManager()
-    @State private var isGeocoding: Bool = false
+    // Previously-used locations (name + coords) for quick re-selection.
+    @State private var previousLocations: [SavedLocation] = []
 
     
     // Form validation
     var isFormValid: Bool {
-        !exerciseName.isEmpty &&
+        guard let start = startDate, let end = endDate else { return false }
+        return !exerciseName.isEmpty &&
         !exerciseLocation.isEmpty &&
+        selectedCoordinate != nil &&
         !description.isEmpty &&
         fieldValue > 0 &&
-        numberOfPeople > 0
+        numberOfPeople > 0 &&
+        end > start
     }
     
+    // Dismiss the keyboard so presenting/closing the date sheet doesn't restore focus to a text field.
+    private func dismissKeyboard() {
+        #if canImport(UIKit)
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        #endif
+    }
+
     // Date formatter helper
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ar_SA")
+        // Gregorian calendar, Arabic display (HIG: graphical picker + Gregorian per product decision).
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "ar")
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter
@@ -85,6 +109,8 @@ struct NewEventView: View {
             ScrollView {
                 Spacer()
                 imageSelectionSection
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
                 inputField
                     .padding(.horizontal,16).padding(.vertical,6)
                      Button {
@@ -127,9 +153,8 @@ struct NewEventView: View {
             }
 
             TextField("", text: $description)
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(.white)
                 .padding(.horizontal,16)
-                .environment(\.layoutDirection, .leftToRight)
 
 
                 
@@ -142,14 +167,14 @@ struct NewEventView: View {
                 customDateRangePicker
                     .padding(.horizontal, 16)
                     .padding(.vertical, 6)
-                
-                // Player approval toggle section
-                playerApprovalToggle
+
+                // Weekly recurrence toggle (F1)
+                recurrenceToggle
                     .padding(.horizontal, 16)
                     .padding(.vertical, 6)
-                
-                Divider()
-                    .background(Color.white.opacity(0.4))
+
+                // Player approval toggle section
+                playerApprovalToggle
                     .padding(.horizontal, 16)
                     .padding(.vertical, 6)
                 
@@ -164,6 +189,8 @@ struct NewEventView: View {
                 .padding(.vertical, 6)
             }
         }
+        .environment(\.layoutDirection, .rightToLeft)
+        .task { await loadPreviousLocations() }
         .sheet(isPresented: $showPriceDialog) {
             numberInputDialog(
                 title: "قيمة الملعب",
@@ -214,7 +241,11 @@ struct NewEventView: View {
             datePickerDialog(
                 title: "ينتهي",
                 subtitle: "تاريخ ووقت النهاية",
-                date: Binding(get: { endDate ?? Date() }, set: { endDate = $0 }),
+                // Default the end selection to 30 minutes after the start time.
+                date: Binding(
+                    get: { endDate ?? startDate?.addingTimeInterval(1800) ?? Date() },
+                    set: { endDate = $0 }
+                ),
                 isPresented: $showEndDateDialog
             )
         }
@@ -267,6 +298,111 @@ struct NewEventView: View {
         } message: {
             if let msg = createError { Text(msg) }
         }
+        .sheet(isPresented: $showSTCPayGuardrail) {
+            stcPayGuardrailSheet
+        }
+    }
+
+    /// Sheet shown when the user tries to save a paid event without a profile STC Pay number.
+    private var stcPayGuardrailSheet: some View {
+        ZStack {
+            Color(white: 0.10).ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                HStack {
+                    Spacer()
+                    Button {
+                        showSTCPayGuardrail = false
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 40, height: 40)
+                            .background(Color.white.opacity(0.12))
+                            .clipShape(Circle())
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+
+                Spacer().frame(height: 24)
+
+                Image(systemName: "creditcard.circle.fill")
+                    .font(.system(size: 56))
+                    .foregroundStyle(.white)
+
+                Text("أضف رقم STC Pay")
+                    .font(TamrinFont.font(size: 22, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.top, 16)
+
+                Text("لاستلام مدفوعات الفعاليات المدفوعة، أضف رقم STC Pay الخاص بك.")
+                    .font(TamrinFont.font(size: 14))
+                    .foregroundStyle(Color(white: 0.8))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 28)
+                    .padding(.top, 8)
+
+                TextField(
+                    "",
+                    text: $guardrailInput,
+                    prompt: Text("مثل 05XXXXXXXX").foregroundColor(Color(white: 0.5))
+                )
+                .keyboardType(.phonePad)
+                .textContentType(.telephoneNumber)
+                .focused($guardrailFieldFocused)
+                .multilineTextAlignment(.trailing)
+                .font(TamrinFont.font(size: 16))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 18)
+                .frame(height: 52)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color.white.opacity(0.12))
+                )
+                .padding(.horizontal, 24)
+                .padding(.top, 24)
+
+                if let err = guardrailError {
+                    Text(err)
+                        .font(TamrinFont.font(size: 12))
+                        .foregroundStyle(.red)
+                        .padding(.top, 8)
+                }
+
+                Spacer()
+
+                Button {
+                    Task { await saveSTCPayAndContinue() }
+                } label: {
+                    HStack {
+                        if isSavingGuardrailNumber { ProgressView().tint(.black) }
+                        Text("حفظ ومتابعة")
+                            .font(TamrinFont.font(size: 17, weight: .bold))
+                            .foregroundStyle(.black)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 54)
+                    .background(
+                        RoundedRectangle(cornerRadius: 28, style: .continuous)
+                            .fill(Color.white)
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(isSavingGuardrailNumber || guardrailInput.trimmingCharacters(in: .whitespaces).isEmpty)
+                .opacity(guardrailInput.trimmingCharacters(in: .whitespaces).isEmpty ? 0.5 : 1)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 32)
+            }
+        }
+        .environment(\.layoutDirection, .rightToLeft)
+        .presentationDetents([.medium, .large])
+        .onAppear {
+            // Focus the field once the sheet has settled so typing registers.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                guardrailFieldFocused = true
+            }
+        }
     }
 
     /// Asset name for DB (card1, card2, card3, card4). No upload; home page shows from assets.
@@ -283,9 +419,31 @@ struct NewEventView: View {
         isCreating = true
         createError = nil
         defer { isCreating = false }
+
+        // Guardrail: paid event requires the creator's STC Pay number on profile.
+        if fieldValue > 0 {
+            do {
+                let profile = try await AuthService.shared.getCurrentUserProfile()
+                let number = profile?.stcPayNumber?.trimmingCharacters(in: .whitespaces) ?? ""
+                if number.isEmpty {
+                    showSTCPayGuardrail = true
+                    return
+                }
+            } catch {
+                createError = "تعذر التحقق من رقم STC Pay الخاص بك"
+                return
+            }
+        }
+
+        guard let workspaceId else {
+            createError = "تعذر تحديد المجموعة الحالية. أعد فتح التطبيق وحاول مرة أخرى."
+            return
+        }
+
         do {
             let computedPricePerPerson: Double = (numberOfPeople > 0) ? Double(fieldValue) / Double(numberOfPeople) : 0
             let event = try await EventService.shared.createEvent(
+                workspaceId: workspaceId,
                 name: exerciseName,
                 location: exerciseLocation,
                 description: description,
@@ -294,13 +452,42 @@ struct NewEventView: View {
                 imageUrl: assetNameForSelectedImage(),
                 maxParticipants: numberOfPeople > 0 ? numberOfPeople : nil,
                 totalPrice: fieldValue,
-                pricePerPerson: computedPricePerPerson
+                pricePerPerson: computedPricePerPerson,
+                latitude: selectedCoordinate?.latitude,
+                longitude: selectedCoordinate?.longitude,
+                recurrence: repeatsWeekly ? "weekly" : "none"
             )
             print("[CreateEvent] Success — id: \(event.id), name: \(event.name)")
-            dismiss()
+            if let onCreated {
+                onCreated(EventData.from(record: event))
+            } else {
+                dismiss()
+            }
         } catch {
             print("[CreateEvent] Error — \(error.localizedDescription)")
             createError = error.localizedDescription
+        }
+    }
+
+    /// Save the STC Pay number from the guardrail sheet, then proceed with event creation.
+    private func saveSTCPayAndContinue() async {
+        guardrailError = nil
+        let trimmed = guardrailInput.trimmingCharacters(in: .whitespaces)
+        guard let canonical = STCPay.normalize(trimmed) else {
+            guardrailError = "رقم STC Pay غير صالح"
+            return
+        }
+        isSavingGuardrailNumber = true
+        defer { isSavingGuardrailNumber = false }
+        do {
+            try await AuthService.shared.updateSTCPayNumber(canonical)
+            await PushManager.shared.requestAuthorizationAndRegister()
+            showSTCPayGuardrail = false
+            guardrailInput = ""
+            // Re-attempt event creation now that the number is saved.
+            await submitCreateEvent()
+        } catch {
+            guardrailError = "تعذر حفظ الرقم. حاول مرة أخرى."
         }
     }
 
@@ -361,7 +548,7 @@ struct NewEventView: View {
                     TextField("", text: value, prompt: Text("0").foregroundColor(.white.opacity(0.5)))
                         .keyboardType(.numberPad)
                         .multilineTextAlignment(.center)
-                        .font(.system(size: 32, weight: .bold))
+                        .font(TamrinFont.font(size: 32, weight: .bold))
                         .foregroundStyle(.white)
                     // If first row/field selected (field is for الملعب price input)
                     if title.contains("قيمة الملعب") {
@@ -372,7 +559,7 @@ struct NewEventView: View {
                             .padding(.leading, 4)
                     }
                 }
-                    .font(.system(size: 32, weight: .bold))
+                    .font(TamrinFont.font(size: 32, weight: .bold))
                     .foregroundStyle(.white)
                     .keyboardType(.numberPad)
                     .multilineTextAlignment(.center)
@@ -432,7 +619,8 @@ struct NewEventView: View {
             // Background image area
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(Color.gray.opacity(0.3))
-                .frame(width: 322,height: 220)
+                .frame(maxWidth: .infinity)
+                .frame(height: 220)
                 .overlay(
                     Group {
                         if let imageResource = selectedImageResource {
@@ -486,11 +674,9 @@ struct NewEventView: View {
             }
 
             TextField("", text: $exerciseName)
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(.white)
                 .padding(.horizontal,16)
                 .padding(.trailing, 16)
-                .environment(\.layoutDirection, .rightToLeft)
-                .multilineTextAlignment(.trailing)
 
 
                 
@@ -534,6 +720,7 @@ struct NewEventView: View {
             VStack(spacing: 0) {
                 // Top section - Start date
                 Button {
+                    dismissKeyboard()
                     showStartDateDialog = true
                 } label: {
                     HStack {
@@ -556,14 +743,9 @@ struct NewEventView: View {
                 }
                 .buttonStyle(.plain)
                 
-                // Horizontal separator line
-                Rectangle()
-                    .fill(.white.opacity(0.1))
-                    .frame(height: 1)
-                    .padding(.horizontal, 36)
-                
                 // Bottom section - End date
                 Button {
+                    dismissKeyboard()
                     showEndDateDialog = true
                 } label: {
                     HStack {
@@ -585,8 +767,11 @@ struct NewEventView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                // End date can't be chosen before a start date exists.
+                .disabled(startDate == nil)
+                .opacity(startDate == nil ? 0.4 : 1)
             }
-            
+
             // Dashed vertical line connecting the circles (on the right side)
             HStack {
                
@@ -596,24 +781,17 @@ struct NewEventView: View {
                         .fill(.white.opacity(0.7))
                         .frame(width: 8, height: 8)
                     
-                    // Dashed line using Path
-                    Path { path in
-                        let dashLength: CGFloat = 4
-                        let dashGap: CGFloat = 4
-                        var y: CGFloat = 0
-                        let totalHeight: CGFloat = 40
-                        
-                        while y < totalHeight {
-                            path.move(to: CGPoint(x: 0, y: y))
-                            path.addLine(to: CGPoint(x: 0, y: min(y + dashLength, totalHeight)))
-                            y += dashLength + dashGap
+                    VStack(spacing: 4) {
+                        ForEach(0..<5, id: \.self) { _ in
+                            Capsule()
+                                .fill(.white.opacity(0.3))
+                                .frame(width: 1, height: 4)
                         }
                     }
-                    .stroke(.white.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                    .frame(width: 1, height: 40)
+                    .frame(width: 1, height: 40, alignment: .top)
                     
                     Circle()
-                        .stroke(.white.opacity(0.7), lineWidth: 2)
+                        .fill(.white.opacity(0.3))
                         .frame(width: 8, height: 8)
                 }
                 .padding(.leading, 20)
@@ -674,6 +852,44 @@ struct NewEventView: View {
         )
     }
     
+    // MARK: - Weekly Recurrence Toggle
+    private var recurrenceToggle: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: "repeat")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 30, height: 30)
+                    .background(Circle().fill(.white.opacity(0.14)))
+
+                Text("يتكرر أسبوعيًا")
+                    .font(.appBody)
+                    .foregroundStyle(.white)
+
+                Spacer()
+
+                Toggle("", isOn: $repeatsWeekly)
+                    .labelsHidden()
+                    .tint(.blue)
+            }
+
+            if repeatsWeekly {
+                Text("يُنشأ تمرين الأسبوع القادم تلقائيًا قبل موعده بـ٣ أيام، ويصل إشعار لجميع الأعضاء")
+                    .font(.appCaption)
+                    .foregroundStyle(.white.opacity(0.65))
+                    .padding(.horizontal, 4)
+                    .transition(.opacity)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 25, style: .continuous)
+                .fill(.white.opacity(0.1))
+        )
+        .animation(.easeInOut(duration: 0.2), value: repeatsWeekly)
+    }
+
     // MARK: - Price and People Section
     private var priceAndPeopleSection: some View {
         ZStack {
@@ -717,12 +933,6 @@ struct NewEventView: View {
                     .frame(height: 60)
                 }
                 .buttonStyle(.plain)
-                
-                // Horizontal separator line
-                Rectangle()
-                    .fill(.white.opacity(0.1))
-                    .frame(height: 1)
-                    .padding(.horizontal, 36)
                 
                 // Second row - Number of People
                 Button {
@@ -802,19 +1012,22 @@ struct NewEventView: View {
                 .padding(.top, 20)
                 .padding(.bottom, 24)
                 
-                // Date picker
+                // Date picker — graphical (HIG), Gregorian calendar, Arabic locale
                 DatePicker("", selection: date, displayedComponents: [.date, .hourAndMinute])
-                    .datePickerStyle(.wheel)
+                    .datePickerStyle(.graphical)
                     .labelsHidden()
                     .colorScheme(.dark)
                     .accentColor(.white)
+                    .environment(\.calendar, Calendar(identifier: .gregorian))
+                    .environment(\.locale, Locale(identifier: "ar"))
                     .environment(\.layoutDirection, .rightToLeft)
                     .padding(.horizontal, 20)
-                
-                Spacer()
-                
+
                 // Save button
                 Button {
+                    // Commit the displayed value even if the picker wasn't moved
+                    // (otherwise the default — e.g. start + 30 min — never gets written back).
+                    date.wrappedValue = date.wrappedValue
                     isPresented.wrappedValue = false
                 } label: {
                     Text("حفظ")
@@ -831,20 +1044,14 @@ struct NewEventView: View {
             .frame(maxWidth: 340)
             .padding(.horizontal, 20)
         }
-        .presentationDetents([.medium])
+        // Size the sheet to the content height instead of full screen.
+        .presentationDetents([.height(600)])
         .presentationDragIndicator(.visible)
     }
-    
+
     // MARK: - Image Selection Dialog
     private func imageSelectionDialog(isPresented: Binding<Bool>) -> some View {
         ZStack {
-            // Blurred background
-            Color.black.opacity(0.5)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    isPresented.wrappedValue = false
-                }
-            
             // Dialog container
             VStack(spacing: 0) {
                 // Header
@@ -896,10 +1103,6 @@ struct NewEventView: View {
                                 
                                 // Selection indicator
                                 if selectedImageResource == imageResource {
-                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .stroke(Color.blue, lineWidth: 3)
-                                        .frame(width: 140, height: 140)
-                                    
                                     VStack {
                                         Spacer()
                                         HStack {
@@ -922,14 +1125,12 @@ struct NewEventView: View {
                 Spacer()
             }
             .frame(maxWidth: 340)
-            .background(
-                RoundedRectangle(cornerRadius: 30, style: .continuous)
-                    .fill(.ultraThinMaterial)
-            )
             .padding(.horizontal, 20)
         }
         .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
+        // Single uniform sheet background instead of dim backdrop + material card.
+        .presentationBackground(Color(white: 0.12))
     }
     
     // MARK: - Location Input Dialog
@@ -950,12 +1151,18 @@ struct NewEventView: View {
             onDelete: onDelete,
             selectedCoordinate: $selectedCoordinate,
             currentRegion: $currentRegion,
-            searchResults: $searchResults,
-            searchText: $searchText,
-            isSearching: $isSearching,
             locationManager: $locationManager,
-            isGeocoding: $isGeocoding
+            previousLocations: previousLocations
         )
+    }
+
+    // Load the current user's previously-used locations for quick re-selection.
+    private func loadPreviousLocations() async {
+        do {
+            previousLocations = try await EventService.shared.getPreviousLocations()
+        } catch {
+            previousLocations = []
+        }
     }
 }
 
@@ -970,26 +1177,17 @@ struct LocationInputDialogView: View {
     
     @Binding var selectedCoordinate: CLLocationCoordinate2D?
     @Binding var currentRegion: MKCoordinateRegion
-    @Binding var searchResults: [MKMapItem]
-    @Binding var searchText: String
-    @Binding var isSearching: Bool
     @Binding var locationManager: CLLocationManager
-    @Binding var isGeocoding: Bool
-    
+    let previousLocations: [SavedLocation]
+
     @State private var locationDelegate: LocationManagerDelegate?
-    @State private var geocoder: CLGeocoder = CLGeocoder()
+
+    private var canSave: Bool {
+        !value.trimmingCharacters(in: .whitespaces).isEmpty && selectedCoordinate != nil
+    }
     
     var body: some View {
-        ZStack {
-            // Blurred background
-            Color.black.opacity(0.5)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    isPresented = false
-                }
-            
-            // Dialog container
-            VStack(spacing: 0) {
+        VStack(spacing: 0) {
                 // Header
                 HStack {
                     // Title
@@ -1020,99 +1218,55 @@ struct LocationInputDialogView: View {
                 .padding(.top, 20)
                 .padding(.bottom, 16)
                 
-                // Search bar
-                HStack(spacing: 12) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.white.opacity(0.7))
-                    
-                    TextField("ابحث عن موقع", text: $searchText)
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(.white)
-                        .onSubmit {
-                            performSearch()
-                        }
-                        .onChange(of: searchText) { oldValue, newValue in
-                            if !newValue.isEmpty {
-                                performSearch()
-                            } else {
-                                searchResults = []
-                            }
-                        }
-                    
-                    if !searchText.isEmpty {
-                        Button {
-                            searchText = ""
-                            searchResults = []
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.white.opacity(0.7))
-                        }
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color.black.opacity(0.5))
-                )
-                .padding(.horizontal, 20)
-                .padding(.bottom, 12)
-                
-                // Search results list
-                if !searchResults.isEmpty {
-                    ScrollView {
-                        VStack(spacing: 8) {
-                            ForEach(searchResults, id: \.self) { item in
+                // Place name (typed by the user)
+                TextField("", text: $value, prompt: Text("اسم المكان").foregroundColor(.white.opacity(0.5)))
+                    .font(.appBody)
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.trailing)
+                    .frame(height: 50)
+                    .padding(.horizontal, 16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color.black.opacity(0.5))
+                    )
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 12)
+
+                // Previously-used locations (quick pick)
+                if !previousLocations.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(previousLocations) { loc in
                                 Button {
-                                    selectSearchResult(item)
+                                    selectPreviousLocation(loc)
                                 } label: {
-                                    HStack {
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text(item.name ?? "")
-                                                .font(.appBodyMedium)
-                                                .foregroundStyle(.white)
-                                            
-                                            if let address = item.placemark.title {
-                                                Text(address)
-                                                    .font(.appBody)
-                                                    .foregroundStyle(.white.opacity(0.7))
-                                                    .lineLimit(1)
-                                            }
-                                        }
-                                        Spacer()
-                                        Image(systemName: "chevron.left")
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "clock.arrow.circlepath")
                                             .font(.system(size: 12))
-                                            .foregroundStyle(.white.opacity(0.5))
+                                        Text(loc.name)
+                                            .font(.appBody)
+                                            .lineLimit(1)
                                     }
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 12)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                            .fill(Color.white.opacity(0.1))
-                                    )
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                    .background(Capsule().fill(Color.white.opacity(0.12)))
                                 }
                                 .buttonStyle(.plain)
                             }
                         }
                         .padding(.horizontal, 20)
                     }
-                    .frame(maxHeight: 120)
                     .padding(.bottom, 12)
                 }
-                
-                // Map view
+
+                // Map — tap to drop a pin and capture coordinates
                 ZStack(alignment: .bottomTrailing) {
-                    MapLocationPickerView(
-                        region: $currentRegion,
-                        selectedCoordinate: $selectedCoordinate,
-                        onCoordinateChange: { coordinate in
-                            reverseGeocode(coordinate: coordinate)
-                        }
-                    )
-                    .frame(height: 300)
-                    .cornerRadius(16)
-                    .padding(.horizontal, 20)
-                    
+                    TappableMapView(coordinate: $selectedCoordinate, initialRegion: currentRegion)
+                        .frame(height: 320)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .padding(.horizontal, 20)
+
                     // Current location button
                     Button {
                         requestCurrentLocation()
@@ -1128,40 +1282,14 @@ struct LocationInputDialogView: View {
                     .padding(.trailing, 32)
                     .padding(.bottom, 16)
                 }
-                .padding(.bottom, 16)
-                
-                // Location input field (editable)
-                TextField("", text: $value, prompt: Text("أدخل الموقع").foregroundColor(.white.opacity(0.5)))
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.leading)
-                    .frame(height: 50)
-                    .padding(.horizontal, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color.black.opacity(0.5))
-                    )
-                    .padding(.horizontal, 20)
+                .padding(.bottom, 8)
+
+                // Hint
+                Text(selectedCoordinate == nil ? "اضغط على الخريطة لتحديد الموقع" : "تم تحديد الموقع على الخريطة")
+                    .font(.appBody)
+                    .foregroundStyle(.white.opacity(0.6))
                     .padding(.bottom, 16)
-                    .onChange(of: value) { oldValue, newValue in
-                        // Optional: Forward geocoding when user types
-                        if !newValue.isEmpty && newValue != oldValue {
-                            forwardGeocode(address: newValue)
-                        }
-                    }
-                
-                if isGeocoding {
-                    HStack {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(0.8)
-                        Text("جاري البحث...")
-                            .font(.appBody)
-                            .foregroundStyle(.white.opacity(0.7))
-                    }
-                    .padding(.bottom, 8)
-                }
-                
+
                 // Action buttons
                 HStack(spacing: 12) {
                     // Delete button (left)
@@ -1179,7 +1307,7 @@ struct LocationInputDialogView: View {
                             .clipShape(Capsule())
                     }
                     
-                    // Save button (right)
+                    // Save button (right) — needs a name AND a dropped pin
                     Button {
                         onSave()
                         isPresented = false
@@ -1189,29 +1317,32 @@ struct LocationInputDialogView: View {
                             .foregroundStyle(.black)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16)
-                            .background(Color.white.opacity(0.9))
+                            .background(Color.white.opacity(canSave ? 0.9 : 0.4))
                             .clipShape(Capsule())
                     }
+                    .disabled(!canSave)
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 32)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            
-            
-            .padding(.horizontal, 20)
-        }
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
-        .onAppear {
-            setupLocationManager()
-            // Initialize with existing value if available
-            if !value.isEmpty {
-                forwardGeocode(address: value)
-            }
-        }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+            .presentationBackground(Color(white: 0.12))
+            .onAppear { setupLocationManager() }
     }
-    
+
+    // Quick-pick a previously-used location: fill name + coordinates and recenter.
+    private func selectPreviousLocation(_ loc: SavedLocation) {
+        value = loc.name
+        let coord = CLLocationCoordinate2D(latitude: loc.latitude, longitude: loc.longitude)
+        selectedCoordinate = coord
+        currentRegion = MKCoordinateRegion(
+            center: coord,
+            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+        )
+    }
+
     // MARK: - Location Manager Setup
     private func setupLocationManager() {
         locationDelegate = LocationManagerDelegate()
@@ -1223,7 +1354,6 @@ struct LocationInputDialogView: View {
             )
             selectedCoordinate = coordinate
             currentRegion = newRegion
-            reverseGeocode(coordinate: coordinate)
         }
         
         locationDelegate?.onAuthorizationChange = { status in
@@ -1267,122 +1397,6 @@ struct LocationInputDialogView: View {
             break
         }
     }
-    
-    // MARK: - Search Functionality
-    private func performSearch() {
-        guard !searchText.isEmpty else {
-            searchResults = []
-            return
-        }
-        
-        isSearching = true
-        
-        let request = MKLocalSearch.Request()
-        request.naturalLanguageQuery = searchText
-        request.region = currentRegion
-        
-        let search = MKLocalSearch(request: request)
-        search.start { response, error in
-            DispatchQueue.main.async {
-                isSearching = false
-                if let error = error {
-                    print("Search error: \(error.localizedDescription)")
-                    searchResults = []
-                    return
-                }
-                
-                if let response = response {
-                    searchResults = Array(response.mapItems.prefix(5))
-                } else {
-                    searchResults = []
-                }
-            }
-        }
-    }
-    
-    // MARK: - Select Search Result
-    private func selectSearchResult(_ item: MKMapItem) {
-        let coordinate = item.placemark.coordinate
-        let newRegion = MKCoordinateRegion(
-            center: coordinate,
-            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-        )
-        selectedCoordinate = coordinate
-        currentRegion = newRegion
-        // Use name or formatted address
-        if let name = item.name, !name.isEmpty {
-            value = name
-        } else if let address = item.placemark.title, !address.isEmpty {
-            value = address
-        } else {
-            // Fallback to reverse geocoding
-            reverseGeocode(coordinate: coordinate)
-        }
-        searchText = ""
-        searchResults = []
-        if value.isEmpty {
-            reverseGeocode(coordinate: coordinate)
-        }
-    }
-    
-    // MARK: - Reverse Geocoding
-    private func reverseGeocode(coordinate: CLLocationCoordinate2D) {
-        isGeocoding = true
-        let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-        
-        geocoder.cancelGeocode()
-        geocoder.reverseGeocodeLocation(location) { placemarks, error in
-            DispatchQueue.main.async {
-                isGeocoding = false
-                if let error = error {
-                    print("Reverse geocoding error: \(error.localizedDescription)")
-                    return
-                }
-                
-                if let placemark = placemarks?.first {
-                    let addressComponents = [
-                        placemark.thoroughfare,
-                        placemark.subThoroughfare,
-                        placemark.locality,
-                        placemark.administrativeArea,
-                        placemark.country
-                    ].compactMap { $0 }
-                    
-                    value = addressComponents.joined(separator: " ")
-                }
-            }
-        }
-    }
-    
-    // MARK: - Forward Geocoding
-    private func forwardGeocode(address: String) {
-        guard !address.isEmpty else { return }
-        
-        isGeocoding = true
-        geocoder.cancelGeocode()
-        geocoder.geocodeAddressString(address) { placemarks, error in
-            DispatchQueue.main.async {
-                isGeocoding = false
-                if let error = error {
-                    print("Forward geocoding error: \(error.localizedDescription)")
-                    return
-                }
-                
-                if let placemark = placemarks?.first,
-                   let location = placemark.location {
-                    let coordinate = location.coordinate
-                    let newRegion = MKCoordinateRegion(
-                        center: coordinate,
-                        span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
-                    )
-                    selectedCoordinate = coordinate
-                    currentRegion = newRegion
-                }
-            }
-        }
-    }
-    
-   
     
     // MARK: - Helper Views
     private func inputField(icon: String?, placeholder: String, text: Binding<String>) -> some View {
@@ -1474,59 +1488,61 @@ class LocationManagerDelegate: NSObject, CLLocationManagerDelegate {
     }
 }
 
-// MARK: - Map Location Picker View
-struct MapLocationPickerView: View {
-    @Binding var region: MKCoordinateRegion
-    @Binding var selectedCoordinate: CLLocationCoordinate2D?
-    var onCoordinateChange: ((CLLocationCoordinate2D) -> Void)?
-    
-    @State private var mapPosition: MapCameraPosition
-    
-    init(region: Binding<MKCoordinateRegion>, selectedCoordinate: Binding<CLLocationCoordinate2D?>, onCoordinateChange: ((CLLocationCoordinate2D) -> Void)?) {
-        self._region = region
-        self._selectedCoordinate = selectedCoordinate
-        self.onCoordinateChange = onCoordinateChange
-        self._mapPosition = State(initialValue: .region(region.wrappedValue))
+// MARK: - Tappable Map (MKMapView wrapper)
+// Tap anywhere on the map to drop a single pin and capture its coordinates.
+struct TappableMapView: UIViewRepresentable {
+    @Binding var coordinate: CLLocationCoordinate2D?
+    let initialRegion: MKCoordinateRegion
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIView(context: Context) -> MKMapView {
+        let map = MKMapView()
+        map.setRegion(initialRegion, animated: false)
+        let tap = UITapGestureRecognizer(target: context.coordinator,
+                                         action: #selector(Coordinator.handleTap(_:)))
+        map.addGestureRecognizer(tap)
+        context.coordinator.mapView = map
+        if let coord = coordinate { context.coordinator.setPin(coord) }
+        return map
     }
-    
-    var body: some View {
-        Map(position: $mapPosition, interactionModes: .all) {
-            if let coordinate = selectedCoordinate {
-                Annotation("Selected Location", coordinate: coordinate) {
-                    Image(systemName: "mappin.circle.fill")
-                        .font(.system(size: 40))
-                        .foregroundColor(.red)
-                        .shadow(radius: 4)
-                        .background(Color.white.clipShape(Circle()))
-                }
+
+    func updateUIView(_ map: MKMapView, context: Context) {
+        context.coordinator.parent = self
+        if let coord = coordinate {
+            let current = map.annotations.compactMap { $0 as? MKPointAnnotation }.first
+            let changed = current == nil
+                || abs(current!.coordinate.latitude - coord.latitude) > 0.000001
+                || abs(current!.coordinate.longitude - coord.longitude) > 0.000001
+            if changed {
+                context.coordinator.setPin(coord)
+                map.setCenter(coord, animated: true)
             }
-        }
-        .onMapCameraChange { context in
-            let newCoordinate = context.region.center
-            selectedCoordinate = newCoordinate
-            region = context.region
-            onCoordinateChange?(newCoordinate)
-        }
-        .onAppear {
-            // Initialize map position
-            updateMapPosition()
-        }
-        .onChange(of: region.center.latitude) { _, _ in
-            updateMapPosition()
-        }
-        .onChange(of: region.center.longitude) { _, _ in
-            updateMapPosition()
+        } else if !map.annotations.isEmpty {
+            map.removeAnnotations(map.annotations)
         }
     }
-    
-    private func updateMapPosition() {
-        if let coordinate = selectedCoordinate {
-            mapPosition = .region(MKCoordinateRegion(
-                center: coordinate,
-                span: region.span
-            ))
-        } else {
-            mapPosition = .region(region)
+
+    final class Coordinator: NSObject {
+        var parent: TappableMapView
+        weak var mapView: MKMapView?
+
+        init(_ parent: TappableMapView) { self.parent = parent }
+
+        @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+            guard let map = mapView else { return }
+            let point = gesture.location(in: map)
+            let coord = map.convert(point, toCoordinateFrom: map)
+            parent.coordinate = coord
+            setPin(coord)
+        }
+
+        func setPin(_ coord: CLLocationCoordinate2D) {
+            guard let map = mapView else { return }
+            map.removeAnnotations(map.annotations)
+            let annotation = MKPointAnnotation()
+            annotation.coordinate = coord
+            map.addAnnotation(annotation)
         }
     }
 }

@@ -5,23 +5,41 @@ struct EventData: Identifiable, Hashable {
     let creatorId: UUID
     let name: String
     let date: String
+    /// Real start/end timestamps (the `date` string above is for display only).
+    let startDate: Date
+    let endDate: Date?
     /// When nil, UI uses a default placeholder image (e.g. card1).
     let imageUrl: String?
     let registrationLocked: Bool
     let totalPrice: Int
     let pricePerPerson: Double
     let maxParticipants: Int?
+    /// Free-text place name; empty when the creator didn't set one.
+    let location: String
+    let latitude: Double?
+    let longitude: Double?
+    /// Non-nil when this event belongs to a recurring series.
+    let templateId: UUID?
+    /// True when the linked series is live (template exists and not ended).
+    let isRecurring: Bool
 
-    init(id: UUID, creatorId: UUID = UUID(), name: String, date: String, imageUrl: String? = nil, registrationLocked: Bool = false, totalPrice: Int = 0, pricePerPerson: Double = 0, maxParticipants: Int? = nil) {
+    init(id: UUID, creatorId: UUID = UUID(), name: String, date: String, startDate: Date = Date(), endDate: Date? = nil, imageUrl: String? = nil, registrationLocked: Bool = false, totalPrice: Int = 0, pricePerPerson: Double = 0, maxParticipants: Int? = nil, location: String = "", latitude: Double? = nil, longitude: Double? = nil, templateId: UUID? = nil, isRecurring: Bool = false) {
         self.id = id
         self.creatorId = creatorId
         self.name = name
         self.date = date
+        self.startDate = startDate
+        self.endDate = endDate
         self.imageUrl = imageUrl
         self.registrationLocked = registrationLocked
         self.totalPrice = totalPrice
         self.pricePerPerson = pricePerPerson
         self.maxParticipants = maxParticipants
+        self.location = location
+        self.latitude = latitude
+        self.longitude = longitude
+        self.templateId = templateId
+        self.isRecurring = isRecurring
     }
 }
 
@@ -34,17 +52,26 @@ extension EventData {
             creatorId: record.creatorId,
             name: record.name,
             date: EventData.formatEventDate(record.startDate, endDate: record.endDate),
+            startDate: record.startDate,
+            endDate: record.endDate,
             imageUrl: record.imageUrl,
             registrationLocked: record.registrationLocked ?? false,
             totalPrice: record.totalPrice ?? 0,
             pricePerPerson: record.pricePerPerson ?? 0,
-            maxParticipants: record.maxParticipants
+            maxParticipants: record.maxParticipants,
+            location: record.location,
+            latitude: record.latitude,
+            longitude: record.longitude,
+            templateId: record.templateId,
+            isRecurring: record.isRecurring ?? false
         )
     }
 
     private static let eventDateFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "ar_SA")
+        // Gregorian calendar, Arabic display (not Hijri).
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "ar")
         f.dateStyle = .medium
         f.timeStyle = .short
         return f

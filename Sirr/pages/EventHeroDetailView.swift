@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import MapKit
 internal import Auth
 import Supabase
 
@@ -13,26 +14,137 @@ struct EventHeroDetailView: View {
     let event: EventData
     var onClose: () -> Void
     var onEnroll: () -> Void
+    var onDeleted: () -> Void
+    /// Called after the series is enabled/ended so the feed can refresh its badge.
+    var onSeriesChanged: (() -> Void)?
 
     @State private var isEnrolled = false
     @State private var isLeavingEvent = false
     @State private var showEnrollmentSheet = false
+    @State private var showSettingsSheet = false
     @State private var isRegistrationLocked: Bool
     @State private var isTogglingLock = false
     @State private var currentUserId: UUID?
     @State private var participants: [ParticipantRecord] = []
     @State private var participantsLoading = false
+    @State private var stcPaySheetNumber: String?
+    @State private var stcPaySheetGroupSize: Int = 1
+    @State private var showWaitlistSheet = false
+    @State private var hasPendingPayment = false
+    @State private var isCancellingPending = false
+    @State private var actionInFlight: UUID? = nil
+    @State private var ownerActionError: String? = nil
+    // Recurring series (F1): loaded when the event is template-linked.
+    @State private var seriesTemplate: EventTemplateRecord?
+    @State private var showSkipConfirm = false
+    @State private var showSkipAlreadyOpen = false
+    @State private var isSeriesActionInFlight = false
+    @State private var seriesActionError: String?
+    @Environment(\.openURL) private var openURL
 
-    init(event: EventData, onClose: @escaping () -> Void, onEnroll: @escaping () -> Void) {
+    init(event: EventData, onClose: @escaping () -> Void, onEnroll: @escaping () -> Void, onDeleted: @escaping () -> Void, onSeriesChanged: (() -> Void)? = nil) {
         self.event = event
         self.onClose = onClose
         self.onEnroll = onEnroll
+        self.onDeleted = onDeleted
+        self.onSeriesChanged = onSeriesChanged
         self._isRegistrationLocked = State(initialValue: event.registrationLocked)
     }
 
     private var isOwner: Bool {
         guard let uid = currentUserId else { return false }
         return event.creatorId == uid
+    }
+
+    /// Creator-only card for a recurring series (سلسلة متكررة): next date +
+    /// skip action. Enabling/ending the series lives in the settings sheet.
+    @ViewBuilder
+    private var seriesSection: some View {
+        if isOwner, let template = seriesTemplate, template.endedAt == nil {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 10) {
+                    Image(systemName: "repeat")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background(Circle().fill(.white.opacity(0.18)))
+
+                    Text("سلسلة متكررة")
+                        .font(.appBodySemibold)
+                        .foregroundStyle(.white)
+
+                    Spacer()
+
+                    Text("أسبوعيًا")
+                        .font(.appCaption)
+                        .foregroundStyle(.white.opacity(0.9))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(.white.opacity(0.16)))
+                }
+
+                if template.skipNext {
+                    HStack(spacing: 8) {
+                        Image(systemName: "forward.end.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("سيتم تخطّي الأسبوع القادم")
+                            .font(.appCaption)
+                    }
+                    .foregroundStyle(.yellow)
+                    .frame(maxWidth: .infinity, minHeight: 40)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color.yellow.opacity(0.15))
+                    )
+                } else {
+                    HStack(spacing: 8) {
+                        Image(systemName: "calendar")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.7))
+                        Text("التمرين القادم")
+                            .font(.appCaption)
+                            .foregroundStyle(.white.opacity(0.7))
+                        Spacer()
+                        Text(EventData.formatEventDate(template.nextOccurrenceAt, endDate: nil))
+                            .font(.appCaption)
+                            .foregroundStyle(.white)
+                    }
+
+                    Button {
+                        showSkipConfirm = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            if isSeriesActionInFlight {
+                                ProgressView().tint(.white)
+                            } else {
+                                Image(systemName: "forward.end.fill")
+                                    .font(.system(size: 12, weight: .semibold))
+                                Text("تخطَّ الأسبوع القادم")
+                                    .font(.appCaption)
+                            }
+                        }
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, minHeight: 42)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(.white.opacity(0.14))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isSeriesActionInFlight)
+                }
+
+                if let err = seriesActionError {
+                    Text(err)
+                        .font(.appCaption)
+                        .foregroundStyle(.red)
+                }
+            }
+            .padding()
+            .background(Color.white.opacity(0.2))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .shadow(color: .black.opacity(0.25), radius: 12, y: 6)
+        }
     }
     
     private var eventHeroBackgroundImage: some View {
@@ -82,9 +194,34 @@ struct EventHeroDetailView: View {
                             .multilineTextAlignment(.center)
                         
                         Text(event.date)
-                            .font(.appBodySemibold)
+                            .font(.appFont(size: 18, weight: .bold))
                             .foregroundStyle(.white.opacity(0.9))
                             .multilineTextAlignment(.center)
+
+                        if !event.location.isEmpty {
+                            Button {
+                                openInMaps()
+                            } label: {
+                                HStack(spacing: 7) {
+                                    Image(systemName: "mappin.and.ellipse")
+                                        .font(.system(size: 13, weight: .semibold))
+                                    Text(event.location)
+                                        .font(.appBodyMedium)
+                                        .lineLimit(1)
+                                    Image(systemName: "chevron.forward")
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .opacity(0.75)
+                                }
+                                .foregroundStyle(.white.opacity(0.95))
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(
+                                    Capsule().fill(.white.opacity(0.14))
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, 4)
+                        }
                     }
                     .padding(.horizontal, 24)
                     .padding(.top, 8)
@@ -115,18 +252,34 @@ struct EventHeroDetailView: View {
                             .buttonStyle(.plain)
                             .disabled(isTogglingLock)
 
-                            ShareLink(item: "sirr://event/\(event.id.uuidString)") {
+                            ShareLink(item: "https://guileless-squirrel-b6537a.netlify.app/event/\(event.id.uuidString)") {
                                 ActionChip(icon: "square.and.arrow.up.fill", title: "مشاركة", style: .translucent)
                             }
                             .buttonStyle(.plain)
 
                             Button {
-                                // Settings action placeholder
+                                showSettingsSheet = true
                             } label: {
                                 ActionChip(icon: "gearshape.fill", title: "الإعدادات", style: .translucent)
                             }
                             .buttonStyle(.plain)
+                            .sheet(isPresented: $showSettingsSheet) {
+                                EventSettingsSheet(
+                                    event: event,
+                                    onDeleted: {
+                                        showSettingsSheet = false
+                                        onDeleted()
+                                    },
+                                    onRecurrenceChanged: { template in
+                                        seriesTemplate = template
+                                        onSeriesChanged?()
+                                    }
+                                )
+                                .presentationDetents([.large])
+                                .presentationDragIndicator(.visible)
+                            }
                         }
+                        seriesSection
                     } else {
                         // Participant: enroll / unenroll button
                         if isRegistrationLocked && !isEnrolled {
@@ -143,6 +296,33 @@ struct EventHeroDetailView: View {
                                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                                     .fill(Color.gray.opacity(0.4))
                             )
+                        } else if hasPendingPayment {
+                            VStack(spacing: 10) {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "hourglass")
+                                        .foregroundStyle(.yellow)
+                                    Text("بانتظار تأكيد صاحب الحدث")
+                                        .font(.appBody)
+                                        .foregroundStyle(.white)
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 54)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                        .fill(Color.yellow.opacity(0.25))
+                                )
+                                Button {
+                                    handleCancelPending()
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        if isCancellingPending { ProgressView().tint(.white) }
+                                        Text("إلغاء الطلب")
+                                            .font(.appCaption)
+                                            .foregroundStyle(.white.opacity(0.85))
+                                            .underline()
+                                    }
+                                }
+                                .disabled(isCancellingPending)
+                            }
                         } else {
                             Button {
                                 if isEnrolled {
@@ -181,6 +361,17 @@ struct EventHeroDetailView: View {
                                         showEnrollmentSheet = false
                                         Task { await loadParticipants() }
                                         onEnroll()
+                                    },
+                                    onSubmittedPayment: { number, groupSize in
+                                        showEnrollmentSheet = false
+                                        hasPendingPayment = true
+                                        stcPaySheetNumber = number
+                                        stcPaySheetGroupSize = groupSize
+                                        Task { await loadParticipants() }
+                                    },
+                                    onSeatsFull: {
+                                        showEnrollmentSheet = false
+                                        showWaitlistSheet = true
                                     }
                                 )
                             }
@@ -206,10 +397,6 @@ struct EventHeroDetailView: View {
                         }
                         .padding()
                         .background(Color.white.opacity(0.2))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .stroke(.white.opacity(0.2), lineWidth: 1)
-                        )
                         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                         .shadow(color: .black.opacity(0.25), radius: 12, y: 6)
                     }
@@ -237,49 +424,109 @@ struct EventHeroDetailView: View {
                                 .frame(maxWidth: .infinity, minHeight: 60)
                         } else {
                             ForEach(participants) { participant in
-                                HStack(spacing: 12) {
-                                    if let avatarUrl = participant.avatarUrl, let url = URL(string: avatarUrl) {
-                                        AsyncImage(url: url) { phase in
-                                            switch phase {
-                                            case .success(let image):
-                                                image.resizable().scaledToFill()
-                                            default:
-                                                Image(systemName: "person.crop.circle.fill")
-                                                    .resizable().scaledToFit()
-                                                    .foregroundStyle(.white.opacity(0.9))
+                                VStack(spacing: 0) {
+                                    HStack(spacing: 12) {
+                                        if let avatarUrl = participant.avatarUrl, let url = URL(string: avatarUrl) {
+                                            AsyncImage(url: url) { phase in
+                                                switch phase {
+                                                case .success(let image):
+                                                    image.resizable().scaledToFill()
+                                                default:
+                                                    Image(systemName: "person.crop.circle.fill")
+                                                        .resizable().scaledToFit()
+                                                        .foregroundStyle(.white.opacity(0.9))
+                                                }
                                             }
-                                        }
-                                        .frame(width: 38, height: 38)
-                                        .clipShape(Circle())
-                                    } else {
-                                        Image(systemName: "person.crop.circle.fill")
-                                            .resizable()
-                                            .scaledToFit()
                                             .frame(width: 38, height: 38)
-                                            .foregroundStyle(.white.opacity(0.9))
+                                            .clipShape(Circle())
+                                        } else {
+                                            Image(systemName: "person.crop.circle.fill")
+                                                .resizable()
+                                                .scaledToFit()
+                                                .frame(width: 38, height: 38)
+                                                .foregroundStyle(.white.opacity(0.9))
+                                        }
+
+                                        Text(participant.displayName ?? participant.guestName ?? "ضيف")
+                                            .font(.appBodyMedium)
+                                            .foregroundStyle(.white)
+
+                                        Spacer()
+
+                                        if participant.isGuest {
+                                            Text("ضيف")
+                                                .font(.appCaption)
+                                                .foregroundStyle(.white.opacity(0.6))
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.white.opacity(0.12))
+                                                .clipShape(Capsule())
+                                        } else if participant.userId == event.creatorId {
+                                            Text("المنظم")
+                                                .font(.appCaption)
+                                                .foregroundStyle(.white.opacity(0.6))
+                                        } else if participant.isPending {
+                                            Text("بانتظار التأكيد")
+                                                .font(.appCaption)
+                                                .foregroundStyle(.yellow)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(Color.yellow.opacity(0.18))
+                                                .clipShape(Capsule())
+                                        }
                                     }
 
-                                    Text(participant.displayName ?? "مشارك")
-                                        .font(.appBodyMedium)
-                                        .foregroundStyle(.white)
+                                    if isOwner && participant.isPending && participant.userId != nil {
+                                        HStack(spacing: 10) {
+                                            Button {
+                                                handleOwnerConfirm(participant: participant)
+                                            } label: {
+                                                HStack(spacing: 6) {
+                                                    if actionInFlight == participant.userId {
+                                                        ProgressView().tint(.black)
+                                                    }
+                                                    Text("تأكيد")
+                                                        .font(.appCaption)
+                                                        .foregroundStyle(.black)
+                                                }
+                                                .frame(maxWidth: .infinity, minHeight: 36)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                                        .fill(Color.green)
+                                                )
+                                            }
+                                            .buttonStyle(.plain)
+                                            .disabled(actionInFlight != nil)
 
-                                    Spacer()
-
-                                    if participant.userId == event.creatorId {
-                                        Text("المنظم")
-                                            .font(.appCaption)
-                                            .foregroundStyle(.white.opacity(0.6))
+                                            Button {
+                                                handleOwnerReject(participant: participant)
+                                            } label: {
+                                                Text("رفض")
+                                                    .font(.appCaption)
+                                                    .foregroundStyle(.white)
+                                                    .frame(maxWidth: .infinity, minHeight: 36)
+                                                    .background(
+                                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                                            .fill(Color.red.opacity(0.8))
+                                                    )
+                                            }
+                                            .buttonStyle(.plain)
+                                            .disabled(actionInFlight != nil)
+                                        }
+                                        .padding(.top, 8)
                                     }
                                 }
                                 .padding(.vertical, 12)
                                 .padding(.horizontal, 14)
                                 .background(Color.white.opacity(0.2))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .stroke(.white.opacity(0.18), lineWidth: 1)
-                                )
                                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                                 .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
+                            }
+
+                            if let err = ownerActionError {
+                                Text(err)
+                                    .font(.appCaption)
+                                    .foregroundStyle(.red)
                             }
                         }
                     }
@@ -300,8 +547,79 @@ struct EventHeroDetailView: View {
                 let client = SupabaseClientManager.shared.client
                 currentUserId = try? await client.auth.session.user.id
                 await loadParticipants()
+                if let templateId = event.templateId {
+                    seriesTemplate = try? await EventService.shared.getEventTemplate(templateId: templateId)
+                }
             }
         }
+        .sheet(isPresented: Binding(
+            get: { stcPaySheetNumber != nil },
+            set: { if !$0 { stcPaySheetNumber = nil } }
+        )) {
+            if let number = stcPaySheetNumber {
+                STCPaySheet(eventName: event.name, amount: event.pricePerPerson, stcPayNumber: number, groupSize: stcPaySheetGroupSize)
+            }
+        }
+        .sheet(isPresented: $showWaitlistSheet) {
+            STCPayWaitlistSheet(eventName: event.name, onJoin: {
+                guard let uid = currentUserId else { return }
+                do {
+                    try await STCPayService.shared.joinWaitlist(eventId: event.id, userId: uid)
+                } catch {
+                    print("[Waitlist] Error — \(error.localizedDescription)")
+                }
+            })
+        }
+        .confirmationDialog(
+            "تخطَّ الأسبوع القادم",
+            isPresented: $showSkipConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("تخطَّ", role: .destructive) { handleSkipNext() }
+            Button("إلغاء", role: .cancel) {}
+        } message: {
+            Text("لن يُنشأ تمرين الأسبوع القادم، وتستمر السلسلة بعده كالمعتاد.")
+        }
+        .alert("التمرين القادم منشور بالفعل", isPresented: $showSkipAlreadyOpen) {
+            Button("حسنًا", role: .cancel) {}
+        } message: {
+            Text("تمرين الأسبوع القادم منشور. إذا أردت إلغاءه، افتح صفحته واحذفه من الإعدادات.")
+        }
+    }
+
+    /// Tries the Google Maps app first (its URL scheme is only accepted when
+    /// the app is installed); otherwise falls back to the system Apple Maps.
+    private func openInMaps() {
+        var components = URLComponents(string: "comgooglemaps://")
+        components?.queryItems = [URLQueryItem(name: "q", value: mapsQuery)]
+        guard let googleURL = components?.url else {
+            openAppleMaps()
+            return
+        }
+        openURL(googleURL) { accepted in
+            if !accepted { openAppleMaps() }
+        }
+    }
+
+    private func openAppleMaps() {
+        if let lat = event.latitude, let lon = event.longitude {
+            let placemark = MKPlacemark(coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon))
+            let item = MKMapItem(placemark: placemark)
+            item.name = event.location
+            item.openInMaps()
+        } else {
+            var components = URLComponents(string: "https://maps.apple.com/")
+            components?.queryItems = [URLQueryItem(name: "q", value: event.location)]
+            if let url = components?.url { openURL(url) }
+        }
+    }
+
+    /// Coordinates when available (exact pin), else the free-text place name.
+    private var mapsQuery: String {
+        if let lat = event.latitude, let lon = event.longitude {
+            return "\(lat),\(lon)"
+        }
+        return event.location
     }
 
     private func loadParticipants() async {
@@ -309,11 +627,35 @@ struct EventHeroDetailView: View {
         defer { participantsLoading = false }
         do {
             participants = try await EventService.shared.getEventParticipants(eventId: event.id)
-            if let uid = currentUserId {
-                isEnrolled = participants.contains { $0.userId == uid }
+            if let uid = currentUserId, let mine = participants.first(where: { $0.userId == uid && !$0.isGuest }) {
+                isEnrolled = mine.isConfirmed
+                hasPendingPayment = mine.isPending
+            } else {
+                isEnrolled = false
+                hasPendingPayment = false
             }
         } catch {
             print("[Participants] Error — \(error.localizedDescription)")
+        }
+    }
+
+    private func handleSkipNext() {
+        guard let template = seriesTemplate, !isSeriesActionInFlight else { return }
+        isSeriesActionInFlight = true
+        seriesActionError = nil
+        Task {
+            defer { isSeriesActionInFlight = false }
+            do {
+                let result = try await EventService.shared.skipNextOccurrence(templateId: template.id, fromEventId: event.id)
+                switch result {
+                case .skipped:
+                    seriesTemplate = try? await EventService.shared.getEventTemplate(templateId: template.id)
+                case .alreadyOpen:
+                    showSkipAlreadyOpen = true
+                }
+            } catch {
+                seriesActionError = "تعذر تخطي الأسبوع القادم. حاول مرة أخرى."
+            }
         }
     }
 
@@ -327,6 +669,61 @@ struct EventHeroDetailView: View {
                 await loadParticipants()
             } catch {
                 print("[LeaveEvent] Error — \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func handleCancelPending() {
+        guard let uid = currentUserId else { return }
+        isCancellingPending = true
+        Task {
+            defer { isCancellingPending = false }
+            do {
+                _ = try await STCPayService.shared.cancelPending(eventId: event.id, userId: uid)
+                hasPendingPayment = false
+                await loadParticipants()
+            } catch {
+                print("[CancelPending] Error — \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func handleOwnerConfirm(participant: ParticipantRecord) {
+        guard let creatorId = currentUserId, let joinerId = participant.userId else { return }
+        actionInFlight = joinerId
+        ownerActionError = nil
+        Task {
+            defer { actionInFlight = nil }
+            do {
+                try await STCPayService.shared.confirmPayment(
+                    eventId: event.id,
+                    joinerId: joinerId,
+                    creatorId: creatorId
+                )
+                await loadParticipants()
+            } catch {
+                ownerActionError = "تعذر تأكيد الدفعة"
+                print("[ConfirmPayment] Error — \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func handleOwnerReject(participant: ParticipantRecord) {
+        guard let creatorId = currentUserId, let joinerId = participant.userId else { return }
+        actionInFlight = joinerId
+        ownerActionError = nil
+        Task {
+            defer { actionInFlight = nil }
+            do {
+                _ = try await STCPayService.shared.rejectPayment(
+                    eventId: event.id,
+                    joinerId: joinerId,
+                    creatorId: creatorId
+                )
+                await loadParticipants()
+            } catch {
+                ownerActionError = "تعذر رفض الدفعة"
+                print("[RejectPayment] Error — \(error.localizedDescription)")
             }
         }
     }
@@ -347,10 +744,6 @@ private struct IconButton: View {
                 .foregroundStyle(.white)
                 .frame(width: 40, height: 40)
                 .background(.ultraThinMaterial)
-                .overlay(
-                    Circle()
-                        .stroke(.white.opacity(0.25), lineWidth: 1)
-                )
                 .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
                 .clipShape(Circle())
         }
@@ -398,10 +791,6 @@ private struct ActionChip: View {
                 }
             }
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(style == .translucent ? Color.white.opacity(0.15) : Color.clear, lineWidth: 1)
-        )
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
     }
@@ -411,7 +800,9 @@ private struct ActionChip: View {
 struct EnrollmentSheetView: View {
     let event: EventData
     let onEnroll: () -> Void
-    
+    var onSubmittedPayment: ((String, Int) -> Void)? = nil
+    var onSeatsFull: (() -> Void)? = nil
+
     @Environment(\.dismiss) private var dismiss
     @State private var currentPage: Int = 0
     @State private var isNameSelected: Bool = false
@@ -430,8 +821,8 @@ struct EnrollmentSheetView: View {
         ]
     }
     
-    // Current user
-    private let userName = "محمد معلا"
+    // Current user's display name (loaded from profile)
+    @State private var userName: String = ""
 
     private var enrollmentEventImage: some View {
         Group {
@@ -545,12 +936,12 @@ struct EnrollmentSheetView: View {
                                         .frame(width: 40, height: 40)
                                         .foregroundStyle(.white.opacity(0.9))
                                     
-                                    Text(userName)
+                                    Text(userName.isEmpty ? "…" : userName)
                                         .font(.appBodySemibold)
                                         .foregroundStyle(.white)
-                                    
+
                                     Spacer()
-                                    
+
                                     if isNameSelected {
                                         Image(systemName: "checkmark.circle.fill")
                                             .foregroundStyle(.green)
@@ -563,10 +954,6 @@ struct EnrollmentSheetView: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                             }
 
-                            Divider()
-                                .background(Color.white.opacity(0.25))
-                                .padding(.vertical, 12)
-                            
                             // Participants list
                             if participants.count > 0 {
                                 VStack(spacing: 12) {
@@ -672,10 +1059,10 @@ struct EnrollmentSheetView: View {
                                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                 } else {
                                     if event.pricePerPerson > 0 {
-                                        Image(systemName: "apple.logo")
+                                        Image(systemName: "creditcard.fill")
                                             .foregroundStyle(.white)
                                     }
-                                    Text(event.pricePerPerson > 0 ? "سجل — Apple Pay" : "سجل")
+                                    Text(event.pricePerPerson > 0 ? "ادفع عبر STC Pay" : "سجل")
                                         .font(.appBodySemibold)
                                         .foregroundStyle(.white)
                                 }
@@ -701,6 +1088,13 @@ struct EnrollmentSheetView: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+        .task { await loadUserName() }
+    }
+
+    private func loadUserName() async {
+        if let profile = try? await AuthService.shared.getCurrentUserProfile() {
+            userName = profile.name
+        }
     }
 
     private func handleEnroll() {
@@ -709,26 +1103,31 @@ struct EnrollmentSheetView: View {
             paymentError = nil
             Task {
                 defer { isProcessingPayment = false }
-
-                guard PaymentService.isApplePayAvailable else {
-                    paymentError = "Apple Pay غير متاح على هذا الجهاز"
-                    return
-                }
-
-                let authorized = await PaymentService.shared.requestPayment(
-                    amount: event.pricePerPerson,
-                    eventName: event.name
-                )
-
-                guard authorized else {
-                    paymentError = "تم إلغاء الدفع"
-                    return
-                }
-
                 do {
-                    try await EventService.shared.joinEvent(eventId: event.id)
-                    onEnroll()
-                    dismiss()
+                    let session = try await SupabaseClientManager.shared.client.auth.session
+                    let result = try await STCPayService.shared.submitPayment(
+                        eventId: event.id,
+                        userId: session.user.id,
+                        guestNames: participants.filter { $0 != userName }
+                    )
+                    switch result {
+                    case .submitted(_, let number, let groupSize):
+                        onSubmittedPayment?(number, groupSize)
+                        dismiss()
+                    case .seatsFull:
+                        onSeatsFull?()
+                        dismiss()
+                    case .alreadyJoined(let status):
+                        switch status {
+                        case .confirmed: paymentError = "أنت مسجل بالفعل في هذه الفعالية"
+                        case .pending: paymentError = "لديك طلب دفع قيد التأكيد"
+                        case .rejected: paymentError = "تم رفض طلبك سابقاً"
+                        }
+                    case .creatorMissingNumber:
+                        paymentError = "صاحب الفعالية لم يضف رقم STC Pay بعد"
+                    case .registrationClosed:
+                        paymentError = "التسجيل مغلق لهذه الفعالية"
+                    }
                 } catch {
                     paymentError = error.localizedDescription
                 }
