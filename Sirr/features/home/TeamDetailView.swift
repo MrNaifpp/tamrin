@@ -26,6 +26,32 @@ struct TeamDetailView: View {
         }
     }
 
+    /// The roster drives the list, but the headline count falls back to the
+    /// workspace record. get_workspace (roster) can fail while get_my_workspaces
+    /// (count) succeeds, and showing ٠ beside the drawer's real count reads as a
+    /// bug — both numbers come from workspace_members, so they must agree.
+    private var memberCount: Int {
+        members.isEmpty ? (team?.memberCount ?? 0) : members.count
+    }
+
+    /// The group has members, but this screen failed to load them.
+    private var rosterUnavailable: Bool {
+        members.isEmpty && (team?.memberCount ?? 0) > 0
+    }
+
+    /// Arabic counted-noun agreement: أعضاء for 3–10, عضوًا for 11–99, عضو otherwise.
+    private func membersLabel(_ count: Int) -> String {
+        let n = count % 100
+        switch count {
+        case 1: return "عضو واحد"
+        case 2: return "عضوان"
+        default:
+            if (3...10).contains(n) { return "\(count.formatted()) أعضاء" }
+            if (11...99).contains(n) { return "\(count.formatted()) عضوًا" }
+            return "\(count.formatted()) عضو"
+        }
+    }
+
     private var dayText: String {
         guard let plan else { return "" }
         return plan.weekdays.compactMap { weekdayName($0) }.joined(separator: "، ")
@@ -208,7 +234,7 @@ struct TeamDetailView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
 
-                Text("\(members.count.formatted()) عضوًا")
+                Text(membersLabel(memberCount))
                     .font(TamrinFont.font(size: 14, weight: .medium))
                     .foregroundStyle(.white.opacity(0.6))
             }
@@ -365,10 +391,12 @@ struct TeamDetailView: View {
     private var membersCard: some View {
         PlanGlassSection(
             title: "الأعضاء",
-            caption: members.isEmpty ? nil : "\(members.count.formatted()) عضوًا"
+            caption: memberCount == 0 ? nil : membersLabel(memberCount)
         ) {
             if members.isEmpty {
-                Text("ما انضم أحد بعد. شارك رابط الدعوة عشان يدخلون.")
+                Text(rosterUnavailable
+                     ? "تعذر تحميل قائمة الأعضاء. اسحب لتحديث الصفحة."
+                     : "ما انضم أحد بعد. شارك رابط الدعوة عشان يدخلون.")
                     .font(TamrinFont.subheadline)
                     .foregroundStyle(.white.opacity(0.55))
                     .fixedSize(horizontal: false, vertical: true)

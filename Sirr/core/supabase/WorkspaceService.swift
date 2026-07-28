@@ -98,12 +98,20 @@ final class WorkspaceService {
     }
 
     func getWorkspace(id: UUID) async throws -> WorkspaceDetail {
-        let response = try await client
-            .rpc("get_workspace", params: ["p_workspace_id": id.uuidString])
-            .execute()
-        let detail = try JSONDecoder().decode(WorkspaceDetail.self, from: response.data)
-        wsLogger.info("API getWorkspace succeeded (id: \(id))")
-        return detail
+        do {
+            let response = try await client
+                .rpc("get_workspace", params: ["p_workspace_id": id.uuidString])
+                .execute()
+            let detail = try JSONDecoder().decode(WorkspaceDetail.self, from: response.data)
+            wsLogger.info("API getWorkspace succeeded (id: \(id), members: \(detail.members.count))")
+            return detail
+        } catch {
+            // The roster is the only thing this call feeds, and HomeStore reads it
+            // through `try?`. Without this line a failure here is indistinguishable
+            // from a group that genuinely has no members.
+            wsLogger.error("API getWorkspace failed (id: \(id)): \(error.localizedDescription)")
+            throw error
+        }
     }
 
     func getInvitePreview(code: String) async throws -> WorkspaceInvitePreview {
