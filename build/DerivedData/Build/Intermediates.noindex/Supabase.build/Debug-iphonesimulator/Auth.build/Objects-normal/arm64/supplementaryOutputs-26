@@ -1,0 +1,23 @@
+{
+  "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/SourcePackages/checkouts/supabase-swift/Sources/Auth/Exports.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/arm64/Exports.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/arm64/Exports.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/arm64/Exports.dia",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/arm64/Exports.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/arm64/Exports.swiftdeps"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/SourcePackages/checkouts/supabase-swift/Sources/Auth/Internal/APIClient.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/arm64/APIClient.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/arm64/APIClient.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/arm64/APIClient.dia",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/arm64/APIClient.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/arm64/APIClient.swiftdeps"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/SourcePackages/checkouts/supabase-swift/Sources/Auth/Internal/CodeVerifierStorage.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/arm64/CodeVerifierStorage.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/arm64/CodeVerifierStorage.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/arm64/CodeVerifierStorage.dia",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/arm64/CodeVerifierStorage.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/arm64/CodeVerifierStorage.swiftdeps"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/SourcePackages/checkouts/supabase-swift/Sources/Auth/Internal/SessionManager.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/x86_64/SessionManager.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/x86_64/SessionManager.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/x86_64/SessionManager.dia",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/x86_64/SessionManager.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/x86_64/SessionManager.swiftdeps"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/SourcePackages/checkouts/supabase-swift/Sources/Auth/Internal/SessionStorage.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/x86_64/SessionStorage.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/x86_64/SessionStorage.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/x86_64/SessionStorage.dia",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/x86_64/SessionStorage.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/x86_64/SessionStorage.swiftdeps"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/SourcePackages/checkouts/supabase-swift/Sources/Auth/Internal/URLOpener.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/x86_64/URLOpener.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/x86_64/URLOpener.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/x86_64/URLOpener.dia",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/x86_64/URLOpener.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphonesimulator/Auth.build/Objects-normal/x86_64/URLOpener.swiftdeps"
+  }
+}

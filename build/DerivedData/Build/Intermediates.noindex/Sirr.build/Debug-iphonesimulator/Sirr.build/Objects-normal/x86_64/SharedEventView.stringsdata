@@ -1,0 +1,72 @@
+{
+  "source": "/Users/naifalialshahrani/Documents/tamrin/Sirr/pages/SharedEventView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "جاري تحميل الفعالية...",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 68
+        }
+      },
+      {
+        "comment": "",
+        "key": "رجوع",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 91
+        }
+      },
+      {
+        "comment": "",
+        "key": "تم التسجيل بنجاح",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 162
+        }
+      },
+      {
+        "comment": "",
+        "key": "بانتظار تأكيد صاحب الحدث",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 176
+        }
+      },
+      {
+        "comment": "",
+        "key": "إلغاء الطلب",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 188
+        }
+      },
+      {
+        "comment": "",
+        "key": "التسجيل مغلق",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 199
+        }
+      },
+      {
+        "comment": "",
+        "key": "ادفع عبر STC Pay",
+        "location": {
+          "startingColumn": 69,
+          "startingLine": 224
+        }
+      },
+      {
+        "comment": "",
+        "key": "انضم للتمرين",
+        "location": {
+          "startingColumn": 97,
+          "startingLine": 224
+        }
+      }
+    ]
+  },
+  "version": 1
+}

@@ -1,0 +1,23 @@
+{
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/ContentView.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/ContentView.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/ContentView.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/ContentView.dia",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/ContentView.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/ContentView.swiftdeps"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/NewActivtyCardView.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/NewActivtyCardView.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/NewActivtyCardView.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/NewActivtyCardView.dia",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/NewActivtyCardView.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/NewActivtyCardView.swiftdeps"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/GeneratedAssetSymbols.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/GeneratedAssetSymbols.dia",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftdeps"
+  }
+}

@@ -1,0 +1,74 @@
+<h2>The workspace screen: settings sheet or full page?</h2>
+<p class="subtitle">Where members, the invite link, and owner controls (rename, remove member, delete) live. Reached from the switcher sheet or the workspace avatar. Click your pick.</p>
+
+<style>
+  .phone { width: 260px; height: 480px; border: 2px solid #444; border-radius: 28px; padding: 10px; background: #0e0e12; color: #eee; display: flex; flex-direction: column; overflow: hidden; margin: 0 auto; font-family: -apple-system, sans-serif; }
+  .phone * { box-sizing: border-box; }
+  .sheet-top { background: #1c1c24; border-radius: 16px 16px 0 0; padding: 14px; margin: auto -2px -2px; }
+  .grabber { width: 36px; height: 4px; background: #444; border-radius: 2px; margin: 0 auto 10px; }
+  .row { display: flex; align-items: center; gap: 8px; padding: 9px 4px; font-size: 13px; border-bottom: 1px solid #26262e; }
+  .row:last-child { border-bottom: 0; }
+  .avatar { width: 26px; height: 26px; border-radius: 999px; background: #3a3a46; display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; }
+  .tag { font-size: 10px; color: #9a9aa5; background: #26262e; border-radius: 999px; padding: 2px 8px; margin-inline-start: auto; }
+  .biglink { background: #26324e; color: #8fb0ff; border-radius: 12px; padding: 10px; font-size: 12px; text-align: center; margin: 8px 0; }
+  .danger { color: #e0655a; }
+  .wsdot { width: 44px; height: 44px; border-radius: 12px; background: #4a6cf7; display: flex; align-items: center; justify-content: center; font-size: 18px; margin: 0 auto 6px; }
+  .hdr { text-align: center; font-weight: 700; font-size: 15px; }
+  .sub { text-align: center; font-size: 11px; color: #9a9aa5; margin-bottom: 8px; }
+  .navrow { display: flex; align-items: center; justify-content: space-between; padding: 8px 6px; }
+  .pill { background: #26262e; border-radius: 999px; padding: 6px 12px; font-size: 13px; }
+</style>
+
+<div class="cards">
+
+  <div class="card" data-choice="sheet" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone" dir="rtl">
+        <div style="opacity:.25; padding: 8px 6px; font-size:13px">شباب الحي — الأحداث…</div>
+        <div class="sheet-top">
+          <div class="grabber"></div>
+          <div class="wsdot">ش</div>
+          <div class="hdr">شباب الحي</div>
+          <div class="sub">٨ أعضاء · أنت المالك</div>
+          <div class="biglink">🔗 مشاركة رابط الدعوة</div>
+          <div class="row"><span class="avatar">ن</span> نايف <span class="tag">المالك</span></div>
+          <div class="row"><span class="avatar">س</span> سعد <span class="tag">إزالة</span></div>
+          <div class="row"><span class="avatar">ف</span> فهد <span class="tag">إزالة</span></div>
+          <div class="row danger">حذف المساحة</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — One settings sheet</h3>
+      <p>Everything in a single half-sheet over the feed: invite link up top, member list with inline remove, rename + delete at the bottom. Matches your existing EventSettingsSheet pattern. Quick, but scrolls once a group passes ~10 members.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="page" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone" dir="rtl">
+        <div class="navrow">
+          <span class="pill">⚙︎</span>
+          <span style="font-weight:700; font-size:14px">شباب الحي</span>
+          <span class="pill">‹ رجوع</span>
+        </div>
+        <div style="padding: 4px 6px">
+          <div class="wsdot" style="width:54px;height:54px;font-size:22px">ش</div>
+          <div class="hdr">شباب الحي</div>
+          <div class="sub">٨ أعضاء · ١٢ حدث</div>
+          <div class="biglink">🔗 مشاركة رابط الدعوة</div>
+          <div class="label" style="font-size:10px;color:#888;padding:4px">الأعضاء</div>
+          <div class="row"><span class="avatar">ن</span> نايف <span class="tag">المالك</span></div>
+          <div class="row"><span class="avatar">س</span> سعد</div>
+          <div class="row"><span class="avatar">ف</span> فهد</div>
+          <div class="row"><span class="avatar">م</span> محمد</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Full workspace page</h3>
+      <p>A pushed page: identity header, invite link, full scrollable member list; owner controls behind the ⚙︎ (rename, regenerate link, delete). Room to grow (stats, media, roles later), one more navigation level.</p>
+    </div>
+  </div>
+
+</div>

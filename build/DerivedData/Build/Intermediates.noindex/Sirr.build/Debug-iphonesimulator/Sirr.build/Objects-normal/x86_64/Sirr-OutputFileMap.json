@@ -1,0 +1,379 @@
+{
+  "" : {
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/Sirr-primary.dia",
+    "emit-module-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/Sirr-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/Sirr-primary-emit-module.dia",
+    "pch" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/Sirr-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/Sirr-primary.swiftdeps"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/App/FontDebugger.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontDebugger.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontDebugger.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontDebugger.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontDebugger.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontDebugger.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontDebugger.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontDebugger.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontDebugger~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/App/QuickFontTest.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/QuickFontTest.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/QuickFontTest.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/QuickFontTest.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/QuickFontTest.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/QuickFontTest.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/QuickFontTest.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/QuickFontTest.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/QuickFontTest~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/App/SirrApp.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SirrApp.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SirrApp.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SirrApp.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SirrApp.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SirrApp.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SirrApp.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SirrApp.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SirrApp~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/AppState.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AppState.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AppState.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AppState.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AppState.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AppState.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AppState.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AppState.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AppState~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/Components/EventSettingsSheet.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventSettingsSheet.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventSettingsSheet.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventSettingsSheet.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventSettingsSheet.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventSettingsSheet.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventSettingsSheet.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventSettingsSheet.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventSettingsSheet~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/Components/NavigationBarView.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NavigationBarView.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NavigationBarView.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NavigationBarView.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NavigationBarView.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NavigationBarView.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NavigationBarView.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NavigationBarView.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NavigationBarView~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/Components/STCPaySheet.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPaySheet.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPaySheet.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPaySheet.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPaySheet.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPaySheet.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPaySheet.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPaySheet.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPaySheet~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/Components/STCPayWaitlistSheet.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPayWaitlistSheet.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPayWaitlistSheet.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPayWaitlistSheet.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPayWaitlistSheet.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPayWaitlistSheet.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPayWaitlistSheet.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPayWaitlistSheet.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPayWaitlistSheet~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/Components/liquid_button.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/liquid_button.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/liquid_button.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/liquid_button.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/liquid_button.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/liquid_button.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/liquid_button.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/liquid_button.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/liquid_button~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/ContentView.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/ContentView.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/ContentView.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/ContentView.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/ContentView.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/ContentView.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/ContentView.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/ContentView.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/ContentView~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/Extensions/FontExtension.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontExtension.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontExtension.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontExtension.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontExtension.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontExtension.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontExtension.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontExtension.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontExtension~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/Extensions/FontExtensionAlt.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontExtensionAlt.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontExtensionAlt.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontExtensionAlt.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontExtensionAlt.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontExtensionAlt.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontExtensionAlt.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontExtensionAlt.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/FontExtensionAlt~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/Models/EventData.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventData.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventData.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventData.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventData.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventData.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventData.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventData.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventData~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/NewActivtyCardView.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NewActivtyCardView.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NewActivtyCardView.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NewActivtyCardView.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NewActivtyCardView.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NewActivtyCardView.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NewActivtyCardView.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NewActivtyCardView.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NewActivtyCardView~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/core/payment/PaymentStatus.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PaymentStatus.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PaymentStatus.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PaymentStatus.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PaymentStatus.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PaymentStatus.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PaymentStatus.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PaymentStatus.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PaymentStatus~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/core/payment/STCPay.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPay.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPay.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPay.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPay.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPay.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPay.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPay.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPay~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/core/payment/STCPayService.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPayService.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPayService.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPayService.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPayService.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPayService.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPayService.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPayService.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPayService~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/core/push/DeepLinkRouter.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/DeepLinkRouter.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/DeepLinkRouter.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/DeepLinkRouter.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/DeepLinkRouter.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/DeepLinkRouter.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/DeepLinkRouter.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/DeepLinkRouter.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/DeepLinkRouter~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/core/push/PushAppDelegate.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PushAppDelegate.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PushAppDelegate.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PushAppDelegate.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PushAppDelegate.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PushAppDelegate.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PushAppDelegate.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PushAppDelegate.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PushAppDelegate~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/core/push/PushManager.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PushManager.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PushManager.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PushManager.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PushManager.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PushManager.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PushManager.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PushManager.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PushManager~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/core/supabase/AuthService.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AuthService.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AuthService.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AuthService.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AuthService.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AuthService.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AuthService.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AuthService.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AuthService~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/core/supabase/EventService.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventService.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventService.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventService.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventService.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventService.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventService.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventService.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventService~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/core/supabase/SupabaseClientManager.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SupabaseClientManager.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SupabaseClientManager.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SupabaseClientManager.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SupabaseClientManager.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SupabaseClientManager.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SupabaseClientManager.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SupabaseClientManager.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SupabaseClientManager~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/features/auth/AppleSignInCoordinator.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AppleSignInCoordinator.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AppleSignInCoordinator.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AppleSignInCoordinator.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AppleSignInCoordinator.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AppleSignInCoordinator.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AppleSignInCoordinator.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AppleSignInCoordinator.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AppleSignInCoordinator~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/features/auth/AuthViewModel.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AuthViewModel.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AuthViewModel.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AuthViewModel.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AuthViewModel.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AuthViewModel.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AuthViewModel.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AuthViewModel.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AuthViewModel~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/features/auth/LoginOTPView.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginOTPView.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginOTPView.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginOTPView.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginOTPView.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginOTPView.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginOTPView.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginOTPView.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginOTPView~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/features/auth/LoginOnbord.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginOnbord.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginOnbord.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginOnbord.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginOnbord.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginOnbord.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginOnbord.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginOnbord.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginOnbord~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/features/auth/LoginView.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginView.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginView.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginView.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginView.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginView.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginView.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginView.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/LoginView~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/features/auth/SignupView.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SignupView.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SignupView.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SignupView.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SignupView.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SignupView.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SignupView.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SignupView.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SignupView~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/features/profile/EditProfileSheet.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EditProfileSheet.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EditProfileSheet.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EditProfileSheet.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EditProfileSheet.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EditProfileSheet.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EditProfileSheet.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EditProfileSheet.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EditProfileSheet~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/features/splash/RootView.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/RootView.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/RootView.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/RootView.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/RootView.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/RootView.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/RootView.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/RootView.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/RootView~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/features/splash/SplashView.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SplashView.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SplashView.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SplashView.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SplashView.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SplashView.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SplashView.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SplashView.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SplashView~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/pages/EventHeroDetailView.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventHeroDetailView.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventHeroDetailView.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventHeroDetailView.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventHeroDetailView.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventHeroDetailView.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventHeroDetailView.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventHeroDetailView.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventHeroDetailView~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/pages/EventPageView.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventPageView.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventPageView.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventPageView.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventPageView.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventPageView.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventPageView.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventPageView.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/EventPageView~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/pages/NewEventView.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NewEventView.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NewEventView.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NewEventView.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NewEventView.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NewEventView.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NewEventView.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NewEventView.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NewEventView~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/pages/SharedEventView.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SharedEventView.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SharedEventView.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SharedEventView.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SharedEventView.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SharedEventView.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SharedEventView.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SharedEventView.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SharedEventView~partial.swiftmodule"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/GeneratedAssetSymbols.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/GeneratedAssetSymbols.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/GeneratedAssetSymbols.dia",
+    "index-unit-output-path" : "/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/GeneratedAssetSymbols.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/GeneratedAssetSymbols.swiftdeps",
+    "swiftmodule" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/GeneratedAssetSymbols~partial.swiftmodule"
+  }
+}

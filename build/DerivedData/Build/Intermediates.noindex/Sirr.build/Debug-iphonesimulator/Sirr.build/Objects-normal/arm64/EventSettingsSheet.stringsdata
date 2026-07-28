@@ -1,0 +1,64 @@
+{
+  "source": "/Users/naifalialshahrani/Documents/tamrin/Sirr/Components/EventSettingsSheet.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "حذف المناسبة",
+        "location": {
+          "startingColumn": 13,
+          "startingLine": 66
+        }
+      },
+      {
+        "comment": "",
+        "key": "حذف",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 70
+        }
+      },
+      {
+        "comment": "",
+        "key": "إلغاء",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 71
+        }
+      },
+      {
+        "comment": "",
+        "key": "سيتم حذف المناسبة وجميع المشاركين نهائيًا. لا يمكن التراجع عن هذا الإجراء.",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 73
+        }
+      },
+      {
+        "comment": "",
+        "key": "إعدادات إضافية",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 81
+        }
+      },
+      {
+        "comment": "",
+        "key": "حذف المناسبة",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 151
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 220
+        }
+      }
+    ]
+  },
+  "version": 1
+}

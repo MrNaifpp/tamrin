@@ -1,0 +1,23 @@
+{
+  "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/SourcePackages/checkouts/supabase-swift/Sources/Realtime/Exports.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphoneos/Realtime.build/Objects-normal/arm64/Exports.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphoneos/Realtime.build/Objects-normal/arm64/Exports.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphoneos/Realtime.build/Objects-normal/arm64/Exports.dia",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphoneos/Realtime.build/Objects-normal/arm64/Exports.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphoneos/Realtime.build/Objects-normal/arm64/Exports.swiftdeps"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/SourcePackages/checkouts/supabase-swift/Sources/Realtime/PostgresAction.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphoneos/Realtime.build/Objects-normal/arm64/PostgresAction.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphoneos/Realtime.build/Objects-normal/arm64/PostgresAction.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphoneos/Realtime.build/Objects-normal/arm64/PostgresAction.dia",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphoneos/Realtime.build/Objects-normal/arm64/PostgresAction.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphoneos/Realtime.build/Objects-normal/arm64/PostgresAction.swiftdeps"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/SourcePackages/checkouts/supabase-swift/Sources/Realtime/PostgresActionData.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphoneos/Realtime.build/Objects-normal/arm64/PostgresActionData.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphoneos/Realtime.build/Objects-normal/arm64/PostgresActionData.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphoneos/Realtime.build/Objects-normal/arm64/PostgresActionData.dia",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphoneos/Realtime.build/Objects-normal/arm64/PostgresActionData.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Supabase.build/Debug-iphoneos/Realtime.build/Objects-normal/arm64/PostgresActionData.swiftdeps"
+  }
+}

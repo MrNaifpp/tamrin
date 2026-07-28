@@ -1,0 +1,30 @@
+{
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/core/payment/PaymentStatus.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PaymentStatus.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PaymentStatus.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PaymentStatus.dia",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PaymentStatus.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/PaymentStatus.swiftdeps"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/core/payment/STCPay.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPay.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPay.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPay.dia",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPay.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPay.swiftdeps"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/core/payment/STCPayService.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPayService.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPayService.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPayService.dia",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPayService.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/STCPayService.swiftdeps"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/core/push/DeepLinkRouter.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/DeepLinkRouter.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/DeepLinkRouter.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/DeepLinkRouter.dia",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/DeepLinkRouter.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/DeepLinkRouter.swiftdeps"
+  }
+}

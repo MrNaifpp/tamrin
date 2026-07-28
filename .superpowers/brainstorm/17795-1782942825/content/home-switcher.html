@@ -1,0 +1,97 @@
+<h2>Home screen: how do you switch workspaces?</h2>
+<p class="subtitle">The app is always "inside" one workspace (Slack-style). The card feed you already built stays — the question is where the switcher lives. Mockups are RTL/Arabic like the real app. Click the one that feels right.</p>
+
+<style>
+  .phone { width: 260px; height: 480px; border: 2px solid #444; border-radius: 28px; padding: 10px; background: #0e0e12; color: #eee; display: flex; flex-direction: column; overflow: hidden; margin: 0 auto; font-family: -apple-system, sans-serif; }
+  .phone * { box-sizing: border-box; }
+  .navrow { display: flex; align-items: center; justify-content: space-between; padding: 8px 6px; }
+  .pill { background: #26262e; border-radius: 999px; padding: 6px 12px; font-size: 13px; }
+  .evcard { background: linear-gradient(160deg,#2c2c38,#1a1a22); border-radius: 18px; flex: 1; margin: 8px 4px; padding: 14px; display: flex; flex-direction: column; justify-content: flex-end; }
+  .evtitle { font-size: 17px; font-weight: 700; }
+  .evmeta { font-size: 12px; color: #9a9aa5; margin-top: 4px; }
+  .dots { text-align: center; color: #666; font-size: 11px; padding: 6px; }
+  .sheet { background: #1c1c24; border-radius: 16px 16px 0 0; padding: 12px; margin: 0 -2px -2px; }
+  .wsrow { display: flex; align-items: center; gap: 8px; padding: 8px 6px; border-radius: 10px; font-size: 13px; }
+  .wsrow.active { background: #2e2e3a; }
+  .wsdot { width: 26px; height: 26px; border-radius: 8px; background: #4a6cf7; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
+  .chiprow { display: flex; gap: 6px; padding: 6px 4px; overflow: hidden; }
+  .chip { background: #26262e; border-radius: 999px; padding: 6px 12px; font-size: 12px; white-space: nowrap; }
+  .chip.on { background: #4a6cf7; }
+</style>
+
+<div class="cards">
+
+  <div class="card" data-choice="title-menu" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone" dir="rtl">
+        <div class="navrow">
+          <span class="pill">＋</span>
+          <span class="pill" style="font-weight:700">شباب الحي ▾</span>
+          <span class="pill">👤</span>
+        </div>
+        <div class="evcard">
+          <div class="evtitle">كرة قدم — ملعب النخيل</div>
+          <div class="evmeta">الجمعة ٨ م · ١٢/١٦ مشارك · ٢٥ ر.س</div>
+        </div>
+        <div class="dots">● ○ ○</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Workspace name as the title</h3>
+      <p>The nav-bar title <em>is</em> the current workspace. Tapping it drops a sheet with your workspaces + "create". Zero new chrome — reuses your glass-pill toolbar. Switching is 2 taps.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="slack-rail" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone" dir="rtl">
+        <div class="navrow">
+          <span class="pill">＋</span>
+          <span class="pill" style="font-weight:700">شباب الحي</span>
+          <span class="wsdot">ش</span>
+        </div>
+        <div class="evcard" style="margin-bottom:0">
+          <div class="evtitle">كرة قدم — ملعب النخيل</div>
+          <div class="evmeta">الجمعة ٨ م · ١٢/١٦ مشارك</div>
+        </div>
+        <div class="sheet">
+          <div class="label" style="font-size:10px;color:#888">مساحاتك</div>
+          <div class="wsrow active" dir="rtl"><span class="wsdot">ش</span> شباب الحي</div>
+          <div class="wsrow" dir="rtl"><span class="wsdot" style="background:#e0655a">ع</span> عيال العمل</div>
+          <div class="wsrow" dir="rtl"><span class="wsdot" style="background:#3aa675">＋</span> مساحة جديدة</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Avatar button + switcher sheet</h3>
+      <p>A workspace avatar (colored initial) sits in the corner; tapping opens a half-sheet switcher with avatars, like Slack/Discord. More visual identity per group, one extra element in the bar.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="chips" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="phone" dir="rtl">
+        <div class="navrow">
+          <span class="pill">＋</span>
+          <span class="pill" style="font-weight:700">تمرين</span>
+          <span class="pill">👤</span>
+        </div>
+        <div class="chiprow">
+          <span class="chip on">شباب الحي</span>
+          <span class="chip">عيال العمل</span>
+          <span class="chip">＋</span>
+        </div>
+        <div class="evcard">
+          <div class="evtitle">كرة قدم — ملعب النخيل</div>
+          <div class="evmeta">الجمعة ٨ م · ١٢/١٦ مشارك · ٢٥ ر.س</div>
+        </div>
+        <div class="dots">● ○ ○</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Chips row under the header</h3>
+      <p>All workspaces always visible as horizontal chips; tap to switch instantly (1 tap). Fastest switching, but permanently costs vertical space and gets crowded past ~4 workspaces.</p>
+    </div>
+  </div>
+
+</div>

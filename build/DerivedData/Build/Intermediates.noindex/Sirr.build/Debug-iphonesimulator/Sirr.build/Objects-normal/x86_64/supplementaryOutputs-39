@@ -1,0 +1,23 @@
+{
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/AppState.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AppState.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AppState.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AppState.dia",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AppState.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/AppState.swiftdeps"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/pages/NewEventView.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NewEventView.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NewEventView.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NewEventView.dia",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NewEventView.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/NewEventView.swiftdeps"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/pages/SharedEventView.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SharedEventView.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SharedEventView.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SharedEventView.dia",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SharedEventView.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/x86_64/SharedEventView.swiftdeps"
+  }
+}

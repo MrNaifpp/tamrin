@@ -1,0 +1,23 @@
+{
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/core/supabase/AuthService.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/AuthService.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/AuthService.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/AuthService.dia",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/AuthService.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/AuthService.swiftdeps"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/core/supabase/EventService.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/EventService.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/EventService.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/EventService.dia",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/EventService.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/EventService.swiftdeps"
+  },
+  "/Users/naifalialshahrani/Documents/tamrin/Sirr/core/supabase/SupabaseClientManager.swift" : {
+    "const-values" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/SupabaseClientManager.swiftconstvalues",
+    "dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/SupabaseClientManager.d",
+    "diagnostics" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/SupabaseClientManager.dia",
+    "object" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/SupabaseClientManager.o",
+    "swift-dependencies" : "/Users/naifalialshahrani/Documents/tamrin/build/DerivedData/Build/Intermediates.noindex/Sirr.build/Debug-iphonesimulator/Sirr.build/Objects-normal/arm64/SupabaseClientManager.swiftdeps"
+  }
+}

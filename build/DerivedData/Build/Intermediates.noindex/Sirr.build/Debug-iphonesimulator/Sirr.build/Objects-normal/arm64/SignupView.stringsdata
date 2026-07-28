@@ -1,0 +1,96 @@
+{
+  "source": "/Users/naifalialshahrani/Documents/tamrin/Sirr/features/auth/SignupView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "مرحباً",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 57
+        }
+      },
+      {
+        "comment": "",
+        "key": "أكمل إنشاء حسابك أو انتقل إلى الصفحة الرئيسية",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 60
+        }
+      },
+      {
+        "comment": "",
+        "key": "التالي - الصفحة الرئيسية",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 70
+        }
+      },
+      {
+        "comment": "",
+        "key": "كمــل ملفـك الشخـصي",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 127
+        }
+      },
+      {
+        "comment": "",
+        "key": "اسـم الكريـم",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 133
+        }
+      },
+      {
+        "comment": "",
+        "key": "اسـم الكريـم",
+        "location": {
+          "startingColumn": 73,
+          "startingLine": 136
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 39,
+          "startingLine": 136
+        }
+      },
+      {
+        "comment": "",
+        "key": "المركـز المفضـل",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 151
+        }
+      },
+      {
+        "comment": "",
+        "key": "لديك حساب بالفعل؟",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 191
+        }
+      },
+      {
+        "comment": "",
+        "key": "تسجيل الدخول",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 193
+        }
+      },
+      {
+        "comment": "",
+        "key": "التالي",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 222
+        }
+      }
+    ]
+  },
+  "version": 1
+}

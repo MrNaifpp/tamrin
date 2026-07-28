@@ -1,0 +1,48 @@
+{
+  "source": "/Users/naifalialshahrani/Documents/tamrin/Sirr/features/auth/LoginOTPView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "ادخل رمز التفعيل",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 29
+        }
+      },
+      {
+        "comment": "",
+        "key": "أرسلنا لك رمز تفعيل على بريدك",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 32
+        }
+      },
+      {
+        "comment": "",
+        "key": "إعادة إرسال الرمز",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 61
+        }
+      },
+      {
+        "comment": "",
+        "key": "التالي",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 84
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 183
+        }
+      }
+    ]
+  },
+  "version": 1
+}

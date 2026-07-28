@@ -1,0 +1,40 @@
+{
+  "source": "/Users/naifalialshahrani/Documents/tamrin/Sirr/pages/EventPageView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "القادمة",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 109
+        }
+      },
+      {
+        "comment": "",
+        "key": "لا توجد فعاليات",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 232
+        }
+      },
+      {
+        "comment": "",
+        "key": "أنشئ فعالية أو انضم إلى واحدة",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 235
+        }
+      },
+      {
+        "comment": "",
+        "key": "إنشاء فعالية",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 242
+        }
+      }
+    ]
+  },
+  "version": 1
+}

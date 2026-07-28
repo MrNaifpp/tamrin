@@ -1,0 +1,64 @@
+{
+  "source": "/Users/naifalialshahrani/Documents/tamrin/Sirr/App/FontDebugger.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Font Test - عام الحرف",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 58
+        }
+      },
+      {
+        "comment": "",
+        "key": "If fonts look different, they're working! 🎉",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 80
+        }
+      },
+      {
+        "comment": "",
+        "key": "Regular: مرحباً بكم في التطبيق",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 62
+        }
+      },
+      {
+        "comment": "",
+        "key": "Medium: مرحباً بكم في التطبيق",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 65
+        }
+      },
+      {
+        "comment": "",
+        "key": "SemiBold: مرحباً بكم في التطبيق",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 68
+        }
+      },
+      {
+        "comment": "",
+        "key": "Bold: مرحباً بكم في التطبيق",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 71
+        }
+      },
+      {
+        "comment": "",
+        "key": "Black: مرحباً بكم في التطبيق",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 74
+        }
+      }
+    ]
+  },
+  "version": 1
+}

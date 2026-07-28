@@ -1,0 +1,63 @@
+<h2>Last two screens: invite join + empty state</h2>
+<p class="subtitle">One proposed design each — confirm or tell me what to change. Left: what a friend sees when they open your invite link. Right: what a brand-new user sees before having any workspace.</p>
+
+<style>
+  .phone { width: 260px; height: 480px; border: 2px solid #444; border-radius: 28px; padding: 10px; background: #0e0e12; color: #eee; display: flex; flex-direction: column; overflow: hidden; margin: 0 auto; font-family: -apple-system, sans-serif; }
+  .phone * { box-sizing: border-box; }
+  .wsdot { width: 56px; height: 56px; border-radius: 14px; background: #4a6cf7; display: flex; align-items: center; justify-content: center; font-size: 24px; margin: 0 auto 8px; }
+  .hdr { text-align: center; font-weight: 700; font-size: 17px; }
+  .sub { text-align: center; font-size: 12px; color: #9a9aa5; margin-top: 4px; }
+  .cta { background: #4a6cf7; border-radius: 999px; padding: 12px; text-align: center; font-size: 14px; font-weight: 600; margin: 6px 0; }
+  .cta.ghost { background: #26262e; color: #bbb; }
+  .avstack { display: flex; justify-content: center; margin: 10px 0 4px; }
+  .avstack span { width: 28px; height: 28px; border-radius: 999px; background: #3a3a46; border: 2px solid #0e0e12; display: flex; align-items: center; justify-content: center; font-size: 11px; margin: 0 -5px; }
+  .spacer { flex: 1; }
+  .art { font-size: 44px; text-align: center; margin-bottom: 8px; }
+</style>
+
+<div class="split">
+
+  <div class="mockup">
+    <div class="mockup-header">Join via invite link — opens over whatever screen you're on</div>
+    <div class="mockup-body">
+      <div class="phone" dir="rtl">
+        <div class="spacer"></div>
+        <div class="wsdot">ش</div>
+        <div class="hdr">شباب الحي</div>
+        <div class="sub">دعاك نايف للانضمام</div>
+        <div class="avstack"><span>ن</span><span>س</span><span>ف</span><span>+٥</span></div>
+        <div class="sub">٨ أعضاء</div>
+        <div class="spacer"></div>
+        <div class="cta">انضمام</div>
+        <div class="cta ghost">ليس الآن</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">Empty state — new account, zero workspaces</div>
+    <div class="mockup-body">
+      <div class="phone" dir="rtl">
+        <div class="spacer"></div>
+        <div class="art">🏟️</div>
+        <div class="hdr">ابدأ مساحتك الأولى</div>
+        <div class="sub">المساحة هي مجموعتك — أنشئ واحدة لشلّتك<br>أو انضم برابط دعوة من صديق</div>
+        <div class="spacer"></div>
+        <div class="cta">إنشاء مساحة</div>
+        <div class="cta ghost">عندي رابط دعوة</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="options" style="margin-top:16px">
+  <div class="option" data-choice="approve" onclick="toggleSelect(this)">
+    <div class="letter">✓</div>
+    <div class="content"><h3>Both look right</h3><p>Wrap up the UI section and write the full spec.</p></div>
+  </div>
+  <div class="option" data-choice="tweak" onclick="toggleSelect(this)">
+    <div class="letter">✎</div>
+    <div class="content"><h3>Change something</h3><p>Click this and tell me in the terminal what to adjust.</p></div>
+  </div>
+</div>

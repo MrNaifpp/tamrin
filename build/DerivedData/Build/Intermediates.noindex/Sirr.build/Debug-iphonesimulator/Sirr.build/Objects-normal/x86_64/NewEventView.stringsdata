@@ -1,0 +1,304 @@
+{
+  "source": "/Users/naifalialshahrani/Documents/tamrin/Sirr/pages/NewEventView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "خطأ",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 292
+        }
+      },
+      {
+        "comment": "",
+        "key": "موقع التمرين",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 123
+        }
+      },
+      {
+        "comment": "",
+        "key": "وصف التمرين",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 145
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 151
+        }
+      },
+      {
+        "comment": "",
+        "key": "حسناً",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 293
+        }
+      },
+      {
+        "comment": "",
+        "key": "أضف رقم STC Pay",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 330
+        }
+      },
+      {
+        "comment": "",
+        "key": "لاستلام مدفوعات الفعاليات المدفوعة، أضف رقم STC Pay الخاص بك.",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 335
+        }
+      },
+      {
+        "comment": "",
+        "key": "مثل 05XXXXXXXX",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 345
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 21,
+          "startingLine": 343
+        }
+      },
+      {
+        "comment": "",
+        "key": "حفظ ومتابعة",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 376
+        }
+      },
+      {
+        "comment": "",
+        "key": "0",
+        "location": {
+          "startingColumn": 61,
+          "startingLine": 537
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 537
+        }
+      },
+      {
+        "comment": "",
+        "key": "حذف",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 571
+        }
+      },
+      {
+        "comment": "",
+        "key": "حفظ",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 585
+        }
+      },
+      {
+        "comment": "",
+        "key": "اختيار صورة",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 637
+        }
+      },
+      {
+        "comment": "",
+        "key": "اسم التمرين",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 659
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 665
+        }
+      },
+      {
+        "comment": "",
+        "key": "إعدادات إضافية",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 688
+        }
+      },
+      {
+        "comment": "",
+        "key": "يبدأ",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 722
+        }
+      },
+      {
+        "comment": "",
+        "key": "ينتهي",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 753
+        }
+      },
+      {
+        "comment": "",
+        "key": "القطة",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 813
+        }
+      },
+      {
+        "comment": "",
+        "key": "الموافقة على اللاعبين",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 840
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 846
+        }
+      },
+      {
+        "comment": "",
+        "key": "قيمة الملعب",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 877
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 885
+        }
+      },
+      {
+        "comment": "",
+        "key": "العدد",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 918
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 925
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 986
+        }
+      },
+      {
+        "comment": "",
+        "key": "حفظ",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 1003
+        }
+      },
+      {
+        "comment": "",
+        "key": "اختيار صورة",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1031
+        }
+      },
+      {
+        "comment": "",
+        "key": "اختر صورة للتمرين",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1035
+        }
+      },
+      {
+        "comment": "",
+        "key": "اسم المكان",
+        "location": {
+          "startingColumn": 58,
+          "startingLine": 1196
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 1196
+        }
+      },
+      {
+        "comment": "",
+        "key": "اضغط على الخريطة لتحديد الموقع",
+        "location": {
+          "startingColumn": 50,
+          "startingLine": 1262
+        }
+      },
+      {
+        "comment": "",
+        "key": "تم تحديد الموقع على الخريطة",
+        "location": {
+          "startingColumn": 111,
+          "startingLine": 1262
+        }
+      },
+      {
+        "comment": "",
+        "key": "حذف",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1275
+        }
+      },
+      {
+        "comment": "",
+        "key": "حفظ",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1289
+        }
+      }
+    ]
+  },
+  "version": 1
+}
