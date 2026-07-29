@@ -131,7 +131,7 @@ private struct EventResponseFlow: View {
                 if slideToConfirmTitle == nil {
                     ToolbarItem(placement: .confirmationAction) {
                         Button(confirmationTitle, role: .destructive) {
-                            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                            Haptics.impact(.rigid)
                             isReasonPresented = true
                         }
                     }
@@ -343,7 +343,7 @@ private struct SlideToConfirmButton: View {
                             .onChanged { value in
                                 progress = min(max(-value.translation.width / travel, 0), 1)
                                 if progress > threshold, !didHaptic {
-                                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                                    Haptics.impact(.rigid)
                                     didHaptic = true
                                 } else if progress < threshold {
                                     didHaptic = false
@@ -351,7 +351,7 @@ private struct SlideToConfirmButton: View {
                             }
                             .onEnded { _ in
                                 if progress > threshold {
-                                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                                    Haptics.success()
                                     confirm()
                                     withAnimation(.smooth(duration: 0.25)) { progress = 0 }
                                 } else {

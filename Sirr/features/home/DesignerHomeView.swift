@@ -31,6 +31,7 @@ struct DesignerHomeView: View {
     @State private var didMenuHaptic = false
     @State private var showPlanDetails = false
     @State private var showProfile = false
+    @State private var showAppSettings = false
     @State private var showCreateTeam = false
     @State private var showQuickAdd = false
     @State private var pendingQuickAddDestination: HomeQuickAddDestination?
@@ -75,6 +76,7 @@ struct DesignerHomeView: View {
             guard !booted else { return }
             feed.onSelectWorkspace = { appState.currentWorkspaceId = $0 }
             feed.onLogout = { Task { await appState.authVM.logout() } }
+            feed.onDeleteAccount = { try await appState.authVM.deleteAccount() }
             await feed.bootstrap(initialWorkspaceID: appState.currentWorkspaceId)
             booted = true
             await openDeepLinkedEventIfNeeded()
@@ -177,6 +179,7 @@ struct DesignerHomeView: View {
                         showQuickAdd = true
                     },
                     openSettings: { setMenu(open: false); showProfile = true },
+                    openAppSettings: { setMenu(open: false); showAppSettings = true },
                     onSelectTeam: { id in feed.selectTeam(id); setMenu(open: false) }
                 )
 
@@ -249,7 +252,7 @@ struct DesignerHomeView: View {
                                     registeredCount: feed.registeredCount(for: occurrence),
                                     actions: cardActions(for: occurrence)
                                 ) {
-                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                    Haptics.impact(.light)
                                     registrationEntryEventID = nil
                                     selected = occurrence
                                 }
@@ -271,7 +274,7 @@ struct DesignerHomeView: View {
                                             registeredCount: feed.registeredCount(for: occurrence),
                                             actions: cardActions(for: occurrence)
                                         ) {
-                                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                            Haptics.impact(.light)
                                             registrationEntryEventID = nil
                                             selected = occurrence
                                         }
@@ -306,15 +309,15 @@ struct DesignerHomeView: View {
                                 ? nil
                                 : (currentIndex == 0 ? "التمرين الجاي" : "التمارين القادمة"),
                             openMenu: {
-                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                Haptics.impact(.light)
                                 setMenu(open: true)
                             },
                             openPlan: {
-                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                Haptics.impact(.light)
                                 showPlanDetails = true
                             },
                             openProfile: {
-                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                Haptics.impact(.light)
                                 showProfile = true
                             }
                         )
@@ -375,6 +378,9 @@ struct DesignerHomeView: View {
                 }
                 .sheet(isPresented: $showProfile) {
                     ProfileSettingsView(feed: feed)
+                }
+                .sheet(isPresented: $showAppSettings) {
+                    AppSettingsView(feed: feed, openProfile: { showProfile = true })
                 }
                 .sheet(
                     isPresented: $showQuickAdd,
@@ -537,10 +543,10 @@ struct DesignerHomeView: View {
             eventActionsInFlight[occurrence.id] = nil
             switch outcome {
             case .success:
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                Haptics.success()
                 showActionToast("تم إرسال الدعوة إلى أعضاء المجموعة")
             case .failure(let message):
-                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                Haptics.error()
                 actionError = message
             }
         }
@@ -573,7 +579,7 @@ struct DesignerHomeView: View {
                 userInfo: [NSLocalizedDescriptionKey: message]
             )
         }
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        Haptics.success()
     }
 
     private func showActionToast(_ message: String) {
@@ -653,7 +659,7 @@ struct DesignerHomeView: View {
                     menuDragProgress = min(max(-value.translation.width / revealDistance, 0), 1)
                 }
                 if menuProgress() > 0.78, !didMenuHaptic {
-                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred(intensity: 0.65)
+                    Haptics.impact(.rigid, intensity: 0.65)
                     didMenuHaptic = true
                 }
             }
@@ -889,7 +895,7 @@ private struct HomeQuickAddSheet: View {
         destination: HomeQuickAddDestination
     ) -> some View {
         Button {
-            UISelectionFeedbackGenerator().selectionChanged()
+            Haptics.selection()
             onSelect(destination)
         } label: {
             HStack(spacing: 14) {

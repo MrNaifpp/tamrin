@@ -18,8 +18,11 @@ struct TeamSideMenu: View {
     @Bindable var feed: HomeStore
     let createTeam: () -> Void
     let openSettings: () -> Void
+    let openAppSettings: () -> Void
     let onSelectTeam: (UUID) -> Void
     @State private var scrollOffset: CGFloat = 0
+    /// Shared by the two header buttons so their glass shapes merge.
+    @Namespace private var headerGlass
 
     var body: some View {
         GeometryReader { proxy in
@@ -85,31 +88,69 @@ struct TeamSideMenu: View {
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, alignment: .trailing)
 
-            Button(action: createTeam) {
-                Label("إضافة", systemImage: "plus")
-                    .labelStyle(.iconOnly)
-                    .font(.system(size: 18, weight: .semibold))
-                    .frame(
-                        width: 30,
-                        height: 30
-                    )
-            }
-            .buttonStyle(.glassProminent)
-            .buttonBorderShape(.circle)
-            .controlSize(.regular)
-            .tint(.blue)
-            .accessibilityLabel("إضافة")
-            .accessibilityHint(
-                feed.isCurrentTeamOwner
-                    ? "يفتح خيارات إنشاء تمرين أو مجموعة"
-                    : "يفتح خيارات إنشاء مجموعة أو الانضمام إلى مجموعة"
-            )
-            .frame(maxWidth: .infinity, alignment: .leading)
+            headerControls
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(width: width)
         // Physical placement is fixed: Arabic title on the right and the
         // primary action on the left, independent of an ancestor's RTL rules.
         .environment(\.layoutDirection, .leftToRight)
+    }
+
+    /// Settings and add as one merged glass capsule.
+    ///
+    /// `ControlGroup` is the obvious container for a pair like this, but its
+    /// grouped-glass appearance only comes from a toolbar. This header is a
+    /// hand-built overlay inside the drawer, so a control group there falls back
+    /// to a flat filled rectangle and has to be `fixedSize`d — which drops it
+    /// under the standard control metrics. `glassEffectUnion` is the API for the
+    /// same visual outside a toolbar: two ordinary buttons whose glass shapes
+    /// merge into one capsule, each keeping the system's 44pt hit target.
+    ///
+    /// Physical order is gear then plus: the header is pinned to LTR, so in the
+    /// Arabic reading direction the primary action (add) still comes first.
+    private var headerControls: some View {
+        GlassEffectContainer(spacing: 4) {
+            HStack(spacing: 4) {
+                headerIconButton(
+                    "gearshape",
+                    label: "الإعدادات",
+                    hint: "يفتح إعدادات التطبيق",
+                    action: openAppSettings
+                )
+
+                headerIconButton(
+                    "plus",
+                    label: "إضافة",
+                    hint: feed.isCurrentTeamOwner
+                        ? "يفتح خيارات إنشاء تمرين أو مجموعة"
+                        : "يفتح خيارات إنشاء مجموعة أو الانضمام إلى مجموعة",
+                    action: createTeam
+                )
+            }
+        }
+    }
+
+    private func headerIconButton(
+        _ systemImage: String,
+        label: String,
+        hint: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.white)
+                // 44×44 is the platform's minimum touch target; the icon-only
+                // control groups in system apps are laid out on the same grid.
+                .frame(width: 44, height: 44)
+                .glassEffect(.regular.interactive(), in: .capsule)
+                .glassEffectUnion(id: "headerControls", namespace: headerGlass)
+                .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityHint(hint)
     }
 
     private func groupsScroll(width: CGFloat) -> some View {
@@ -119,7 +160,7 @@ struct TeamSideMenu: View {
                     let isSelected = team.id == feed.selectedTeamID
 
                     Button {
-                        UISelectionFeedbackGenerator().selectionChanged()
+                        Haptics.selection()
                         onSelectTeam(team.id)
                     } label: {
                         TeamSideMenuRow(team: team, isSelected: isSelected)
@@ -202,7 +243,7 @@ struct TeamSideMenu: View {
                     .background(.white.opacity(0.14), in: .circle)
             }
             .padding(.horizontal, 10)
-            .frame(width: width, height: 62)
+            .frame(width: width, height: TeamSideMenu.accountRowHeight)
             .glassEffect(.regular.interactive(), in: .capsule)
             .contentShape(.capsule)
         }
@@ -210,6 +251,8 @@ struct TeamSideMenu: View {
         .accessibilityLabel(feed.profileName.isEmpty ? "حسابي" : feed.profileName)
         .accessibilityHint("يفتح تعديل الاسم والمركز")
     }
+
+    private static let accountRowHeight: CGFloat = 62
 
     private var profileSubtitle: String {
         let position = feed.playerPosition.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -295,5 +338,5 @@ private struct MenuProfileAvatar: View {
 
 #Preview {
     TeamSideMenu(feed: HomeStore.preview, createTeam: {}, openSettings: {},
-                 onSelectTeam: { _ in })
+                 openAppSettings: {}, onSelectTeam: { _ in })
 }

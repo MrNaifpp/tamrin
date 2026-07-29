@@ -251,7 +251,7 @@ struct TeamDetailView: View {
                     let isSelected = item.id == plan?.id
                     Button {
                         selectedPlanID = item.id
-                        UISelectionFeedbackGenerator().selectionChanged()
+                        Haptics.selection()
                     } label: {
                         Text(item.name)
                             .font(TamrinFont.font(size: 14, weight: .medium))
@@ -488,7 +488,7 @@ struct TeamDetailView: View {
                         Button {
                             // Copy the full join link (same as the share button), not just the code.
                             UIPasteboard.general.string = team.inviteURL?.absoluteString ?? team.inviteCode
-                            UINotificationFeedbackGenerator().notificationOccurred(.success)
+                            Haptics.success()
                             withAnimation(.snappy) { didCopyCode = true }
                             Task {
                                 try? await Task.sleep(for: .seconds(2))

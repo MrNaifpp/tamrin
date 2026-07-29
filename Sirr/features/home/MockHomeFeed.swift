@@ -197,6 +197,9 @@ final class HomeStore {
     /// profile screen can sign out.
     var onSelectWorkspace: ((UUID?) -> Void)?
     var onLogout: (() -> Void)?
+    /// Throws so the settings sheet can report the reason instead of silently
+    /// dropping the user back to Home with the account still alive.
+    var onDeleteAccount: (() async throws -> Void)?
 
     // Backend context / derived caches.
     private(set) var currentUserID: UUID?

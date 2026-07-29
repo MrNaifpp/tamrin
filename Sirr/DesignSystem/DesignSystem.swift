@@ -525,7 +525,7 @@ struct DayPicker: View {
             ForEach(days, id: \.0) { day, label in
                 Button {
                     if selection.contains(day) { selection.remove(day) } else { selection.insert(day) }
-                    UISelectionFeedbackGenerator().selectionChanged()
+                    Haptics.selection()
                 } label: {
                     Text(label).font(TamrinFont.font(size: 15, weight: .bold))
                         .frame(maxWidth: .infinity).frame(height: 42)

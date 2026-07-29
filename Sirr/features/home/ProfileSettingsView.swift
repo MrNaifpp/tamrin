@@ -4,6 +4,9 @@ import PhotosUI
 /// Account sheet. Deliberately narrow in scope — a photo, a name and a pitch
 /// position — so it fits on screen in one piece instead of the old
 /// overview-then-editor pair that needed two detents and a mode switch.
+///
+/// Signing out lives in `AppSettingsView` next to account deletion, so the two
+/// session-ending actions sit together instead of one hiding behind an editor.
 struct ProfileSettingsView: View {
     @Bindable var feed: HomeStore
     @Environment(\.dismiss) private var dismiss
@@ -12,7 +15,6 @@ struct ProfileSettingsView: View {
     @State private var customPosition = ""
     @State private var photoItem: PhotosPickerItem?
     @State private var avatarData: Data?
-    @State private var showLogoutConfirm = false
     @FocusState private var nameFocused: Bool
 
     private let positions = ["حارس", "دفاع", "وسط", "هجوم", "مخصص"]
@@ -33,7 +35,6 @@ struct ProfileSettingsView: View {
                 avatarPicker
                 nameField
                 positionPicker
-                logoutButton
             }
             .padding(.horizontal, 22)
             .padding(.top, 12)
@@ -72,13 +73,6 @@ struct ProfileSettingsView: View {
                 position = "مخصص"
                 customPosition = saved
             }
-        }
-        .confirmationDialog("تسجيل الخروج؟", isPresented: $showLogoutConfirm, titleVisibility: .visible) {
-            Button("تسجيل الخروج", role: .destructive) {
-                dismiss()
-                feed.onLogout?()
-            }
-            Button("تراجع", role: .cancel) {}
         }
     }
 
@@ -147,7 +141,7 @@ struct ProfileSettingsView: View {
                 ForEach(positions, id: \.self) { value in
                     Button {
                         position = value
-                        UISelectionFeedbackGenerator().selectionChanged()
+                        Haptics.selection()
                     } label: {
                         Text(value)
                             .font(TamrinFont.font(size: 14, weight: .bold))
@@ -179,27 +173,13 @@ struct ProfileSettingsView: View {
         .animation(.snappy(duration: 0.22), value: position)
     }
 
-    /// Sign-out is destructive and secondary to editing, so it sits at the
-    /// bottom of the content as a plain destructive button — the save action
-    /// lives in the navigation bar where iOS puts it.
-    private var logoutButton: some View {
-        Button("تسجيل الخروج", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
-            showLogoutConfirm = true
-        }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.capsule)
-        .controlSize(.large)
-        .tint(.red)
-        .padding(.top, 4)
-    }
-
     private func save() {
         feed.saveProfile(
             name: trimmedName,
             avatarData: avatarData,
             playerPosition: resolvedPosition
         )
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        Haptics.success()
         dismiss()
     }
 }

@@ -117,7 +117,7 @@ struct EventDetailView: View {
                         userInfo: [NSLocalizedDescriptionKey: message]
                     )
                 }
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                Haptics.success()
             }
         }
         .sheet(isPresented: $showRegisterFlow) {
@@ -314,7 +314,7 @@ struct EventDetailView: View {
         } else {
             let full = occurrence.capacity > 0 && confirmedCount >= occurrence.capacity
             Button {
-                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                Haptics.impact(.medium)
                 showRegisterFlow = true
             } label: {
                 Label(full ? "انضم لقائمة الانتظار" : "سجل في التمرين", systemImage: "plus")
@@ -494,10 +494,10 @@ struct EventDetailView: View {
             paymentActionInFlight = nil
             switch outcome {
             case .success:
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                Haptics.success()
             case .failure(let message):
                 paymentActionError = message
-                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                Haptics.error()
             }
         }
     }
@@ -510,10 +510,10 @@ struct EventDetailView: View {
             paymentActionInFlight = nil
             switch outcome {
             case .success:
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                Haptics.success()
             case .failure(let message):
                 paymentActionError = message
-                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                Haptics.error()
             }
         }
     }
@@ -1014,10 +1014,10 @@ struct RegistrationFlowSheet: View {
             submitting = false
             switch outcome {
             case .success:
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                Haptics.success()
                 step = .success
             case .failure(let message):
-                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                Haptics.error()
                 failureMessage = message
             }
         }
@@ -1118,7 +1118,7 @@ struct RegistrationFlowSheet: View {
         in loadedDestination: PaymentDestination
     ) -> some View {
         Button {
-            UISelectionFeedbackGenerator().selectionChanged()
+            Haptics.selection()
             destination = loadedDestination.selecting(method)
             step = .details
         } label: {
@@ -1154,7 +1154,7 @@ struct RegistrationFlowSheet: View {
 
     private func snapshotDestinationRow(_ destination: PaymentDestination) -> some View {
         Button {
-            UISelectionFeedbackGenerator().selectionChanged()
+            Haptics.selection()
             step = .details
         } label: {
             HStack(spacing: 14) {
@@ -1254,7 +1254,7 @@ struct RegistrationFlowSheet: View {
 
     private func copy(_ value: String, message: String) {
         UIPasteboard.general.string = value
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        Haptics.success()
         withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
             copiedMessage = message
         }

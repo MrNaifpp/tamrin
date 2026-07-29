@@ -186,7 +186,7 @@ struct CreateTeamFlow: View {
             draft.plans.append(composerPlan)
         }
         goingForward = true
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        Haptics.success()
         withAnimation { isComposing = false }
     }
 
@@ -206,10 +206,10 @@ struct CreateTeamFlow: View {
             do {
                 let team = try await feed.createTeam(from: draft)
                 createdTeam = team
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                Haptics.success()
             } catch {
                 failureMessage = error.localizedDescription
-                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                Haptics.error()
             }
             isCreating = false
         }
@@ -346,7 +346,7 @@ private struct IdentityStepPage: View {
                                     draft.teamSymbol = symbol
                                     draft.avatarData = nil
                                     photoItem = nil
-                                    UISelectionFeedbackGenerator().selectionChanged()
+                                    Haptics.selection()
                                 } label: {
                                     Image(systemName: symbol)
                                         .font(.system(size: TamrinControlMetrics.symbolSize, weight: .semibold))
@@ -564,7 +564,7 @@ private struct TemplateComposerPage: View {
                             ForEach(nameSuggestions, id: \.self) { suggestion in
                                 Button {
                                     plan.name = suggestion
-                                    UISelectionFeedbackGenerator().selectionChanged()
+                                    Haptics.selection()
                                 } label: {
                                     Text(suggestion)
                                         .font(TamrinFont.font(size: 13, weight: .medium))
@@ -784,7 +784,7 @@ private struct ScheduleSheet: View {
         let isOn = plan.weekdays.contains(day)
         return Button {
             if isOn { plan.weekdays.remove(day) } else { plan.weekdays.insert(day) }
-            UISelectionFeedbackGenerator().selectionChanged()
+            Haptics.selection()
         } label: {
             Text(letter)
                 .font(TamrinFont.font(size: 16, weight: .bold))
@@ -858,7 +858,7 @@ private struct CapacitySheet: View {
                     ForEach(quickPicks, id: \.self) { value in
                         Button {
                             plan.capacity = value
-                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            Haptics.impact(.light)
                         } label: {
                             Text(value.arabicDigits)
                                 .font(TamrinFont.font(size: 15, weight: .medium))
@@ -938,7 +938,7 @@ private struct CapacityStepButton: View {
     var body: some View {
         Button {
             action()
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            Haptics.impact(.light)
         } label: {
             Image(systemName: symbol)
                 .font(.system(size: TamrinControlMetrics.symbolSize, weight: .bold))
@@ -1050,7 +1050,7 @@ private struct LocationSheet: View {
                             plan.locationAddress = result.subtitle
                             plan.latitude = result.latitude
                             plan.longitude = result.longitude
-                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            Haptics.impact(.light)
                             dismiss()
                         } label: {
                             LabeledContent {
@@ -1133,7 +1133,7 @@ private struct VenueCostSheet: View {
                 ForEach(quickAmounts, id: \.self) { amount in
                     Button {
                         plan.totalVenueCost = amount
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        Haptics.impact(.light)
                     } label: {
                         Text(amount.cleanAmount)
                             .font(TamrinFont.font(size: 15, weight: .medium))
@@ -1316,7 +1316,7 @@ private struct MembersStepPage: View {
             }
         }
         manualName = ""
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        Haptics.impact(.light)
     }
 }
 
@@ -1529,12 +1529,12 @@ struct AddSessionSheet: View {
                 } else {
                     try await feed.addSession(plan)
                 }
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                Haptics.success()
                 isPresented = false
             } catch {
                 saving = false
                 failureMessage = error.localizedDescription
-                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                Haptics.error()
             }
         }
     }

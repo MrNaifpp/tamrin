@@ -276,6 +276,35 @@ final class AuthService {
         }
     }
 
+    /// Thrown when the account still owns a group other people are in. The
+    /// server refuses in that case rather than cascading the group away, and
+    /// the UI turns this into an instruction the user can act on.
+    struct OwnsSharedWorkspaceError: LocalizedError {
+        var errorDescription: String? {
+            "لديك مجموعة فيها أعضاء آخرون. احذف المجموعة أو انقل ملكيتها أولًا، ثم احذف الحساب."
+        }
+    }
+
+    /// Delete the signed-in account. The `delete_account` RPC removes the auth
+    /// row, and every table hanging off it cascades. The local session is then
+    /// dropped so the app returns to the login flow.
+    func deleteAccount() async throws {
+        do {
+            try await client.rpc("delete_account").execute()
+            authLogger.info("API deleteAccount succeeded")
+        } catch {
+            if "\(error)".contains("OWNS_SHARED_WORKSPACE") {
+                authLogger.error("API deleteAccount blocked: owns a shared workspace")
+                throw OwnsSharedWorkspaceError()
+            }
+            authLogger.error("API deleteAccount failed: \(error.localizedDescription)")
+            throw error
+        }
+        // The user is gone server-side, so a remote sign-out has nothing left to
+        // revoke — clearing the stored session locally is what matters.
+        try? await client.auth.signOut()
+    }
+
     // Current session
     func session() async throws -> Session? {
         do {

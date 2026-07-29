@@ -172,6 +172,27 @@ class AuthViewModel: ObservableObject {
         }
     }
 
+    /// Delete the account for good and return to the login flow. Throws so the
+    /// settings sheet can keep the user on screen and show why it failed —
+    /// unlike `logout()`, a half-finished deletion must not look like it worked.
+    func deleteAccount() async throws {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        do {
+            try await AuthService.shared.deleteAccount()
+            isAuthenticated = false
+            isNewUserAfterOTP = false
+            cameFromAppleSignIn = false
+            prefilledName = ""
+            currentProfile = nil
+            logger.info("Account deletion succeeded")
+        } catch {
+            logger.error("Account deletion failed: \(error.localizedDescription)")
+            throw error
+        }
+    }
+
     /// Complete signup: ensure auth user (anonymous if needed), create profile, then go to main.
     func completeProfile(fullName: String, preferredPosition: String, imageData: Data?) async {
         isLoading = true

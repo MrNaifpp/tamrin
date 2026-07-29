@@ -114,7 +114,7 @@ struct PaymentMethodSelectionSheet: View {
         let isSelected = method(for: .cash) != nil
 
         return Button {
-            UISelectionFeedbackGenerator().selectionChanged()
+            Haptics.selection()
             if isSelected {
                 remove(.cash)
                 showToast("تمت إزالة الدفع كاش", symbol: "trash.fill")
@@ -187,7 +187,7 @@ struct PaymentMethodSelectionSheet: View {
         let isSelected = method(for: provider) != nil
 
         return Button {
-            UISelectionFeedbackGenerator().selectionChanged()
+            Haptics.selection()
             editorProvider = provider
             isEditorPresented = true
         } label: {
@@ -463,7 +463,7 @@ private struct PaymentMethodDetailsEditor: View {
             title: existing == nil ? "إضافة وسيلة الدفع" : "حفظ التعديلات",
             tint: provider.brandColor
         ) {
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            Haptics.impact(.medium)
             onSave(currentDraft)
         }
         .disabled(!isValid)
