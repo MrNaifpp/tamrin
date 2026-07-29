@@ -32,8 +32,14 @@ struct SignupView: View {
 
     private let pageBackground = Color(red: 248/255.0, green: 248/255.0, blue: 247/255.0)
 
+    /// Sign in with Apple already supplies the name, so the field arrives
+    /// prefilled and must never gate the button — App Review guideline 4 reads a
+    /// blocked button as requiring the user to provide what Authentication
+    /// Services already gave. Email sign-ups have no such source, so they still
+    /// have to type one.
     private var isFormValid: Bool {
-        !fullName.trimmingCharacters(in: .whitespaces).isEmpty
+        if vm.cameFromAppleSignIn { return true }
+        return !fullName.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     var body: some View {
@@ -240,7 +246,15 @@ struct SignupView: View {
         .environment(\.layoutDirection, .rightToLeft)
         .scrollDismissesKeyboard(.interactively)
         .navigationBarBackButtonHidden(true)
-        .onAppear { vm.errorMessage = nil }
+        .onAppear {
+            vm.errorMessage = nil
+            // Seed the name Apple supplied (or the one already on the profile) so
+            // the user reviews it rather than retyping it. Guarded on `isEmpty` so
+            // a re-appear cannot overwrite an edit they just made.
+            if fullName.isEmpty, !vm.prefilledName.isEmpty {
+                fullName = vm.prefilledName
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {

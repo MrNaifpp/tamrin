@@ -22,6 +22,12 @@ class AuthViewModel: ObservableObject {
     @Published var isLoading = false
     /// Current user profile from users table (for edit profile sheet).
     @Published var currentProfile: UserRecord? = nil
+    /// Name to seed the profile step with, resolved from the Apple credential or
+    /// the stored row. Empty when nothing is known.
+    @Published var prefilledName = ""
+    /// True when the session came from Sign in with Apple. The profile step uses
+    /// this to stop gating its button on a name Apple already supplied.
+    @Published var cameFromAppleSignIn = false
 
     func login(email: String, password: String) async {
         isLoading = true
@@ -92,6 +98,9 @@ class AuthViewModel: ObservableObject {
         do {
             let isNewUser = try await AuthService.shared.verifyOTP(email: email, token: token)
             isAuthenticated = true
+            // Email sign-in supplies no name, so the profile step must still ask.
+            cameFromAppleSignIn = false
+            prefilledName = ""
             isNewUserAfterOTP = isNewUser
             logger.info("Verify OTP succeeded (isNewUser: \(isNewUser))")
         } catch {
@@ -112,9 +121,24 @@ class AuthViewModel: ObservableObject {
                 idToken: appleResult.idToken,
                 nonce: appleResult.nonce
             )
+            // Apple sends fullName/email only on the very first authorization for
+            // an Apple ID, so hand them over now — this both persists the name and
+            // gives the profile step something to prefill, instead of asking the
+            // user to retype what Apple already provided.
+            //
+            // Resolve before touching any @Published flag: isLoggedIn mirrors
+            // isAuthenticated, so publishing it ahead of this await would render
+            // Home for the length of the round-trip before swapping to the
+            // profile step. Setting them together keeps it to one UI update.
+            let resolvedName = await AuthService.shared.adoptAppleIdentity(
+                fullName: appleResult.fullName,
+                email: appleResult.email
+            )
+            prefilledName = resolvedName
+            cameFromAppleSignIn = true
             isAuthenticated = true
             isNewUserAfterOTP = isNew
-            logger.info("Apple sign-in succeeded (isNewUser: \(isNew))")
+            logger.info("Apple sign-in succeeded (isNewUser: \(isNew), hasName: \(!resolvedName.isEmpty))")
         } catch {
             if (error as NSError).code == ASAuthorizationError.canceled.rawValue { return }
             logger.error("Apple sign-in failed: \(error.localizedDescription)")
@@ -137,6 +161,10 @@ class AuthViewModel: ObservableObject {
             try await AuthService.shared.signOut()
             isAuthenticated = false
             isNewUserAfterOTP = false
+            // Clear the Apple-derived state so it cannot leak into whoever signs
+            // in next on this device.
+            cameFromAppleSignIn = false
+            prefilledName = ""
             logger.info("Logout succeeded")
         } catch {
             logger.error("Logout failed: \(error.localizedDescription)")

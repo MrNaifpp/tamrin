@@ -58,6 +58,36 @@ private struct UpdateSTCPayPayload: Encodable {
     }
 }
 
+/// Name-only insert for the Apple sign-in path, which runs before the profile
+/// step and so may have no row yet. `postion` is `not null default ''` in the
+/// schema, so leaving it out is valid.
+private struct AppleNamePayload: Encodable {
+    let userId: UUID
+    let name: String
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case name
+    }
+}
+
+/// Name-only update for the Apple sign-in path, so storing the name Apple sent
+/// cannot clobber a position or avatar the row already has.
+private struct AppleNameUpdate: Encodable {
+    let name: String
+}
+
+/// Decodes the `user_id` PostgREST hands back from an update with `.select()`.
+/// An empty array means no row matched, which is how the update-then-insert
+/// paths below tell "updated" from "does not exist yet".
+private struct UserIdRow: Decodable {
+    let userId: UUID
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+    }
+}
+
 final class AuthService {
     static let shared = AuthService()
     private let client = SupabaseClientManager.shared.client
@@ -96,16 +126,53 @@ final class AuthService {
                 position: preferredPosition,
                 avatarUrl: avatarUrl
             )
-            try await client
-                .from("users")
-                .insert(record)
-                .execute()
-            authLogger.info("API createOrUpdateProfile succeeded")
+            // Update first, insert only when nothing matched. The Apple sign-in
+            // path may already have created this row, so a plain insert can
+            // collide — but upsert is not an option either: public.users was
+            // created by hand and its user_id carries no unique constraint, so
+            // ON CONFLICT fails with 42P10. This works either way.
+            let created = try await updateThenInsertProfile(
+                userId: userId,
+                record: record,
+                update: UpdateUserPayload(name: fullName, position: preferredPosition, avatarUrl: avatarUrl)
+            )
+            authLogger.info("API createOrUpdateProfile succeeded (inserted: \(created))")
         } catch {
             authLogger.error("API createOrUpdateProfile failed: \(error.localizedDescription)")
             if let e = error as? URLError { authLogger.error("URLError: \(String(describing: e))") }
             throw error
         }
+    }
+
+    /// Writes the caller's profile row without an ON CONFLICT target: updates
+    /// first, inserts only when the update matched nothing. Returns true when a
+    /// row was inserted.
+    ///
+    /// Needed because `public.users` was created by hand and its `user_id` has no
+    /// unique constraint in this project, so `upsert(onConflict:)` fails with
+    /// 42P10 "no unique or exclusion constraint matching the ON CONFLICT
+    /// specification". Add the primary key and this can go back to a plain upsert.
+    private func updateThenInsertProfile(
+        userId: UUID,
+        record: UserRecord,
+        update: UpdateUserPayload
+    ) async throws -> Bool {
+        // .select() makes the update return the rows it touched, which is how we
+        // tell "updated" from "no such row" — PostgREST reports no count otherwise.
+        let touched: [UserIdRow] = try await client
+            .from("users")
+            .update(update)
+            .eq("user_id", value: userId)
+            .select("user_id")
+            .execute()
+            .value
+        guard touched.isEmpty else { return false }
+
+        try await client
+            .from("users")
+            .insert(record)
+            .execute()
+        return true
     }
 
     /// Fetch the current user's row from public.users. Returns nil if not found or no session.
@@ -246,6 +313,84 @@ final class AuthService {
             authLogger.error("API signInWithApple failed: \(error.localizedDescription)")
             if let e = error as? URLError { authLogger.error("URLError: \(String(describing: e))") }
             throw error
+        }
+    }
+
+    /// Stores the name Apple hands back and returns what the profile step should
+    /// prefill, so the user is never asked to retype what Apple already sent
+    /// (App Review guideline 4 — Design).
+    ///
+    /// Apple populates `fullName`/`email` **only on the first authorization** for
+    /// an Apple ID; every later sign-in returns nil. A name arriving here must
+    /// therefore be persisted at once or it is lost for good. Preference order:
+    ///
+    ///   1. a name already on the row — the user may have edited it themselves,
+    ///      so it outranks anything we could derive
+    ///   2. the name Apple just sent, which we persist
+    ///   3. the local part of the email, as a prefill only — never written,
+    ///      because it is a guess rather than something Apple or the user stated
+    ///
+    /// Returns "" only when none of the three is available, which is the one case
+    /// where the profile step still has to ask.
+    func adoptAppleIdentity(fullName: PersonNameComponents?, email: String?) async -> String {
+        let stored = (try? await getCurrentUserProfile())?
+            .name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let stored, !stored.isEmpty {
+            authLogger.info("Apple identity: keeping the name already on the profile")
+            return stored
+        }
+
+        if let fullName {
+            let formatted = PersonNameComponentsFormatter
+                .localizedString(from: fullName, style: .default, options: [])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !formatted.isEmpty {
+                await persistAppleName(formatted)
+                return formatted
+            }
+        }
+
+        // No name from Apple: either a repeat sign-in, or the user chose to hide
+        // it. Fall back to the email so the field is never empty and the button
+        // is never blocked.
+        let sessionEmail = (try? await client.auth.session)?.user.email
+        let fallback = (email ?? sessionEmail)
+            .flatMap { $0.split(separator: "@").first }
+            .map(String.init)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        authLogger.info("Apple identity: no name supplied, prefilling from email (empty: \(fallback.isEmpty))")
+        return fallback
+    }
+
+    /// Writes just the name onto the caller's row, creating the row when Apple
+    /// sign-in happens before the profile step. Upsert rather than insert because
+    /// a row may already exist from an earlier sign-in.
+    private func persistAppleName(_ name: String) async {
+        guard let session = try? await client.auth.session else { return }
+        do {
+            // Update then insert, for the same reason as createOrUpdateProfile:
+            // user_id has no unique constraint, so ON CONFLICT is unavailable.
+            // Name-only, so a position or avatar already on the row survives.
+            let touched: [UserIdRow] = try await client
+                .from("users")
+                .update(AppleNameUpdate(name: name))
+                .eq("user_id", value: session.user.id)
+                .select("user_id")
+                .execute()
+                .value
+            if touched.isEmpty {
+                try await client
+                    .from("users")
+                    .insert(AppleNamePayload(userId: session.user.id, name: name))
+                    .execute()
+            }
+            authLogger.info("Apple identity: persisted the name Apple supplied (inserted: \(touched.isEmpty))")
+        } catch {
+            // Non-fatal — the caller still prefills from the returned value, so
+            // the user is not blocked. Logged loudly because a silent failure
+            // here means Apple's name is gone by the next sign-in.
+            authLogger.error("Apple identity: failed to persist the name: \(error.localizedDescription)")
         }
     }
 
