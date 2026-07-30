@@ -285,9 +285,11 @@ final class AuthService {
         }
     }
 
-    /// Delete the signed-in account. The `delete_account` RPC removes the auth
-    /// row, and every table hanging off it cascades. The local session is then
-    /// dropped so the app returns to the login flow.
+    /// Delete the signed-in account. The `delete_account` RPC strips every
+    /// personal field, blocks sign-in and unlinks the identities, while leaving
+    /// one anonymous users row behind so the event and payment history other
+    /// members share does not go with it. The local session is then dropped so
+    /// the app returns to the login flow.
     func deleteAccount() async throws {
         do {
             try await client.rpc("delete_account").execute()
@@ -300,8 +302,9 @@ final class AuthService {
             authLogger.error("API deleteAccount failed: \(error.localizedDescription)")
             throw error
         }
-        // The user is gone server-side, so a remote sign-out has nothing left to
-        // revoke — clearing the stored session locally is what matters.
+
+        // Sign-in is already blocked server-side, so this is about clearing the
+        // stored session and returning to the login flow.
         try? await client.auth.signOut()
     }
 
