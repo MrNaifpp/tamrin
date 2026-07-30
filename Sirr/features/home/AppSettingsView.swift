@@ -8,9 +8,6 @@ import UserNotifications
 /// switches that pretend to do something.
 struct AppSettingsView: View {
     @Bindable var feed: HomeStore
-    /// Presented by home after this sheet dismisses; two sheets cannot be up
-    /// at once, so the hop has to go through the parent.
-    let openProfile: () -> Void
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -151,9 +148,11 @@ struct AppSettingsView: View {
     }
 
     private var accountRow: some View {
-        Button {
-            dismiss()
-            openProfile()
+        // Pushed onto this sheet's own stack rather than swapped for a sibling
+        // sheet. The old hop dismissed الإعدادات before home presented حسابي, so
+        // its إلغاء landed back on home and there was no way to return here.
+        NavigationLink {
+            ProfileSettingsView(feed: feed, isPushed: true)
         } label: {
             settingsRow(
                 icon: "person.crop.circle",
@@ -375,5 +374,5 @@ struct AppSettingsView: View {
 }
 
 #Preview {
-    AppSettingsView(feed: HomeStore.preview, openProfile: {})
+    AppSettingsView(feed: HomeStore.preview)
 }

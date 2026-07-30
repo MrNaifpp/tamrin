@@ -380,7 +380,7 @@ struct DesignerHomeView: View {
                     ProfileSettingsView(feed: feed)
                 }
                 .sheet(isPresented: $showAppSettings) {
-                    AppSettingsView(feed: feed, openProfile: { showProfile = true })
+                    AppSettingsView(feed: feed)
                 }
                 .sheet(
                     isPresented: $showQuickAdd,

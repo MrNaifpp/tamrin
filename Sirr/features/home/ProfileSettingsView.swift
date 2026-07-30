@@ -9,6 +9,11 @@ import PhotosUI
 /// session-ending actions sit together instead of one hiding behind an editor.
 struct ProfileSettingsView: View {
     @Bindable var feed: HomeStore
+    /// True when pushed onto the settings sheet's navigation stack rather than
+    /// presented as its own sheet. A pushed copy must not build a second
+    /// NavigationStack or apply its own detent, and it drops إلغاء because the
+    /// system back button is already the way out.
+    var isPushed: Bool = false
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var position = ""
@@ -30,34 +35,15 @@ struct ProfileSettingsView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 20) {
-                avatarPicker
-                nameField
-                positionPicker
-            }
-            .padding(.horizontal, 22)
-            .padding(.top, 12)
-            .padding(.bottom, 18)
-            // Measured before the expanding frame below, so the sheet's
-            // detent follows the content rather than the NavigationStack.
-            .sheetContentHeight()
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .navigationTitle("حسابي")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("إلغاء", role: .cancel) { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("حفظ") { save() }
-                        .disabled(trimmedName.isEmpty)
-                        .fontWeight(.semibold)
-                }
+        Group {
+            if isPushed {
+                form
+            } else {
+                NavigationStack { form }
+                    .fittedSheet(includesNavigationBar: true)
             }
         }
         .environment(\.layoutDirection, .rightToLeft)
-        .fittedSheet(includesNavigationBar: true)
         .task(id: photoItem) {
             if let data = try? await photoItem?.loadTransferable(type: Data.self) {
                 avatarData = data
@@ -72,6 +58,40 @@ struct ProfileSettingsView: View {
             } else if !saved.isEmpty {
                 position = "مخصص"
                 customPosition = saved
+            }
+        }
+    }
+
+    private var form: some View {
+        VStack(spacing: 20) {
+            avatarPicker
+            nameField
+            positionPicker
+        }
+        .padding(.horizontal, 22)
+        .padding(.top, 12)
+        .padding(.bottom, 18)
+        // Measured before the expanding frame below, so the sheet's detent
+        // follows the content rather than the NavigationStack. Still wanted when
+        // pushed: the settings sheet reduces these heights with max() and allows
+        // expansion, so it grows to fit this form and shrinks back on pop.
+        .sheetContentHeight()
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .navigationTitle("حسابي")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            // Pushed, the system back button already returns to الإعدادات, and a
+            // second affordance beside it would read as cancelling the whole
+            // sheet rather than going back one level.
+            if !isPushed {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("إلغاء", role: .cancel) { dismiss() }
+                }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("حفظ") { save() }
+                    .disabled(trimmedName.isEmpty)
+                    .fontWeight(.semibold)
             }
         }
     }
