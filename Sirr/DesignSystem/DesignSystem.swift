@@ -316,6 +316,39 @@ extension View {
     }
 }
 
+// MARK: - Sheet titles
+
+extension View {
+    /// Title and explanatory line for a sheet's bar.
+    ///
+    /// `navigationSubtitle` can't be used for this: its label carries no font
+    /// attributes, so it inherits the 18pt `UILabel` appearance default — bigger
+    /// than the title above it — and the resulting two-line block sits packed
+    /// against the sheet's top edge. Drawing the pair as a principal item keeps
+    /// the native placement while the sizes and the breathing room stay ours.
+    func sheetTitle(_ title: String, subtitle: String? = nil) -> some View {
+        navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    VStack(spacing: 2) {
+                        Text(title)
+                            .font(TamrinFont.font(size: 17, weight: .bold))
+                        if let subtitle {
+                            Text(subtitle)
+                                .font(TamrinFont.font(size: 12))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.center)
+                        }
+                    }
+                    .padding(.top, 30)
+                    .padding(.bottom, 6)
+                }
+            }
+    }
+}
+
 // MARK: - Native controls
 
 /// The app's action buttons are the stock iOS 26 ones — `.glassProminent` for a
@@ -485,17 +518,51 @@ struct FloatingCloseButton: View {
     }
 }
 
+/// The app's own icon, drawn at whatever size the caller asks for. The artwork
+/// comes from the bundled icon rather than a stand-in glyph, so the mark on
+/// screen is always the same one on the Home Screen — including its light /
+/// dark variants, which the asset catalog resolves for us.
 struct BrandMark: View {
     var size: CGFloat = 72
+
+    /// Icon Composer ships the icon unmasked (the system applies the squircle
+    /// at display time), so we apply iOS's own corner ratio here.
+    private var cornerRadius: CGFloat { size * 0.2237 }
+
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: size * 0.3, style: .continuous).fill(TamrinTheme.ink)
-            Image(systemName: "figure.strengthtraining.traditional")
-                .font(.system(size: size * 0.42, weight: .semibold)).foregroundStyle(.white)
+        Group {
+            if let icon = Self.appIcon {
+                Image(uiImage: icon)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                // No icon in the bundle (previews, and any build that ships
+                // without one) — fall back to the wordless glyph tile.
+                ZStack {
+                    Rectangle().fill(TamrinTheme.ink)
+                    Image(systemName: "figure.strengthtraining.traditional")
+                        .font(.system(size: size * 0.42, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+            }
         }
         .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .accessibilityHidden(true)
     }
+
+    /// The asset-catalog entry first — that one carries the light/dark/tinted
+    /// variants. `CFBundleIconFiles` is the flattened PNG the launcher uses and
+    /// only stands in when the catalog lookup misses.
+    private static let appIcon: UIImage? = {
+        if let named = UIImage(named: "AppIcon") { return named }
+        guard let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
+              let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
+              let files = primary["CFBundleIconFiles"] as? [String],
+              let last = files.last
+        else { return nil }
+        return UIImage(named: last)
+    }()
 }
 
 struct SpringCardPressStyle: ButtonStyle {
@@ -559,10 +626,20 @@ struct StatusPill: View {
     }
 }
 
+extension Locale {
+    /// Arabic copy, Western digits — the only locale the UI formats against.
+    ///
+    /// Plain `ar` / `ar_SA` render Arabic-Indic numerals (٠١٢٣), which this app
+    /// never shows: every number on screen is 0123456789. The `numbers=latn`
+    /// keyword keeps month names, weekday names and AM/PM Arabic while pinning
+    /// the numbering system, so callers get the Arabic wording for free.
+    static let tamrin = Locale(identifier: "ar_SA@numbers=latn")
+}
+
 extension Date {
-    var arabicDay: String { formatted(.dateTime.locale(Locale(identifier: "ar_SA")).weekday(.wide)) }
-    var arabicDate: String { formatted(.dateTime.locale(Locale(identifier: "ar_SA")).day().month(.wide)) }
-    var arabicTime: String { formatted(.dateTime.locale(Locale(identifier: "ar_SA")).hour().minute()) }
+    var arabicDay: String { formatted(.dateTime.locale(.tamrin).weekday(.wide)) }
+    var arabicDate: String { formatted(.dateTime.locale(.tamrin).day().month(.wide)) }
+    var arabicTime: String { formatted(.dateTime.locale(.tamrin).hour().minute()) }
 }
 
 extension Double {

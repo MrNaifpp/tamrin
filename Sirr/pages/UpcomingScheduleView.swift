@@ -25,7 +25,7 @@ struct UpcomingScheduleView: View {
     private static let monthFormatter: DateFormatter = {
         let f = DateFormatter()
         f.calendar = Calendar(identifier: .gregorian)
-        f.locale = Locale(identifier: "ar")
+        f.locale = .tamrin
         f.dateFormat = "MMMM"
         return f
     }()
@@ -33,7 +33,7 @@ struct UpcomingScheduleView: View {
     private static let cardDateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.calendar = Calendar(identifier: .gregorian)
-        f.locale = Locale(identifier: "ar")
+        f.locale = .tamrin
         f.dateFormat = "EEEE d MMMM"
         return f
     }()
@@ -41,13 +41,13 @@ struct UpcomingScheduleView: View {
     private static let timeFormatter: DateFormatter = {
         let f = DateFormatter()
         f.calendar = Calendar(identifier: .gregorian)
-        f.locale = Locale(identifier: "ar")
+        f.locale = .tamrin
         f.timeStyle = .short
         return f
     }()
 
     private static func arDigits(_ n: Int) -> String {
-        n.formatted(.number.locale(Locale(identifier: "ar")).grouping(.never))
+        n.formatted(.number.locale(.tamrin).grouping(.never))
     }
 
     private var nextEvent: EventData? { events.first }

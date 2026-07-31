@@ -4,8 +4,9 @@ import SwiftUI
 /// bound to HomeStore. Shown by DesignerHomeView when `feed.teams.isEmpty`
 /// (fresh signup, or after deleting your last group): pick "create a group" or
 /// "join by invite code". ProfileSetupView and ContactPicker from the designer's
-/// OnboardingViews.swift are intentionally not ported here (ContactPicker already
-/// lives in CreateTeamFlow.swift; profile setup isn't part of this increment).
+/// OnboardingViews.swift are intentionally not ported here (the create-group
+/// wizard invites by shareable link, not from contacts; profile setup isn't part
+/// of this increment).
 struct WelcomeView: View {
     @Bindable var feed: HomeStore
     @State private var showCreate: Bool
@@ -28,10 +29,10 @@ struct WelcomeView: View {
                     Text("اختر كيف تبدأ، والباقي علينا.").font(TamrinFont.title3).foregroundStyle(.secondary).padding(.top, 8)
                     Spacer().frame(height: 34)
                     Button { showCreate = true } label: {
-                        WelcomeChoiceCard(title: "أنشئ مجموعتك", subtitle: "رتّب روتين اللعب وادعُ الربع", symbol: "sparkles", dark: true)
+                        WelcomeChoiceCard(title: "أنشئ مجموعتك", subtitle: "رتّب روتين اللعب وادعُ الربع", symbol: "sparkles", accent: TamrinTheme.lime)
                     }.buttonStyle(SpringCardPressStyle())
                     Button { showJoin = true } label: {
-                        WelcomeChoiceCard(title: "انضم لمجموعة", subtitle: "ادخل برمز الدعوة ووفر مكانك", symbol: "link", dark: false)
+                        WelcomeChoiceCard(title: "انضم لمجموعة", subtitle: "ادخل برمز الدعوة ووفر مكانك", symbol: "link", accent: TamrinTheme.secondary)
                     }.buttonStyle(SpringCardPressStyle()).padding(.top, 12)
                     Spacer()
                     Text("مجموعاتك خاصة — ما يدخلها إلا بدعوة").font(TamrinFont.footnote).foregroundStyle(.tertiary)
@@ -45,30 +46,33 @@ struct WelcomeView: View {
     }
 }
 
+/// Both choices sit on the same surface — the ranking between them is carried
+/// by the accent behind the glyph, not by one card being a black slab. Two
+/// competing surfaces read as two unrelated controls.
 private struct WelcomeChoiceCard: View {
     let title: String
     let subtitle: String
     let symbol: String
-    let dark: Bool
+    let accent: Color
     var body: some View {
         HStack(spacing: 16) {
             Image(systemName: symbol)
                 .font(.system(size: 19, weight: .bold))
                 .frame(width: 50, height: 50)
-                .background(dark ? TamrinTheme.lime : TamrinTheme.secondary, in: .circle)
+                .background(accent, in: .circle)
                 .foregroundStyle(TamrinTheme.ink)
             VStack(alignment: .leading, spacing: 5) {
                 Text(title).font(TamrinFont.title3)
-                Text(subtitle).font(TamrinFont.subheadline).foregroundStyle(dark ? .white.opacity(0.6) : .secondary)
+                Text(subtitle).font(TamrinFont.subheadline).foregroundStyle(.secondary)
             }
             Spacer()
             Image(systemName: "chevron.left").font(.caption.bold()).opacity(0.55)
         }
-        .foregroundStyle(dark ? .white : .primary)
+        .foregroundStyle(.primary)
         .padding(16)
         .frame(maxWidth: .infinity, minHeight: 100)
-        .background(dark ? TamrinTheme.ink : TamrinTheme.glass, in: .rect(cornerRadius: 26))
-        .shadow(color: .black.opacity(dark ? 0.14 : 0.04), radius: 22, y: 10)
+        .background(TamrinTheme.glass, in: .rect(cornerRadius: 26))
+        .shadow(color: .black.opacity(0.04), radius: 22, y: 10)
     }
 }
 

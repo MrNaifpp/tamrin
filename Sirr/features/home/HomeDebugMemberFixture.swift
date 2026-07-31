@@ -164,7 +164,7 @@ enum HomeDebugMemberFixture {
 
     private static func nextTuesdayEvening(after date: Date) -> Date {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.locale = Locale(identifier: "ar_SA")
+        calendar.locale = .tamrin
         var components = DateComponents()
         components.weekday = 3
         components.hour = 20

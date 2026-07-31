@@ -159,7 +159,7 @@ struct EventSettingsSheet: View {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .fill(.white.opacity(0.08))
             )
-            caption("يُنشأ تمرين الأسبوع القادم تلقائيًا قبل موعده بـ٣ أيام، ويصل إشعار لجميع الأعضاء.")
+            caption("يُنشأ تمرين الأسبوع القادم تلقائيًا قبل موعده بـ3 أيام، ويصل إشعار لجميع الأعضاء.")
 
             if let recurrenceError {
                 Text(recurrenceError)

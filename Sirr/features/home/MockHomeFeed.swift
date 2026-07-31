@@ -19,6 +19,34 @@ enum FeedTeamRole { case admin, member }
 enum FeedCapacityPolicy { case waitlist, closed }
 enum FeedScheduleKind { case recurring, oneOff }
 
+/// Where a team trains. A custom venue is one only the team knows — the rest
+/// house, the neighbourhood pitch — so it is typed in by hand; a rented one is
+/// a commercial pitch that exists on the map, so it is searched for.
+enum FeedVenueKind: String, Hashable, CaseIterable {
+    case custom, rented
+
+    var title: String {
+        switch self {
+        case .custom: "ملعب مخصص"
+        case .rented: "ملعب مؤجر"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .custom: "ملعب معروف بينكم وخاص فيكم، مثل ملعب الاستراحة أو ملعب الحي."
+        case .rented: "ملعب تجاري تستأجرونه لتمارينكم."
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .custom: "house.and.flag.fill"
+        case .rented: "sportscourt.fill"
+        }
+    }
+}
+
 /// Scope selected by an organizer when saving edits to a recurring exercise.
 /// An occurrence-only edit leaves the weekly template untouched, while a
 /// series edit refreshes the template used to generate future occurrences.
@@ -40,7 +68,6 @@ struct TeamDraft {
     var teamName = ""
     var teamSymbol = "figure.soccer"
     var avatarData: Data?
-    var invitedNames: [String] = []
     var plans: [PlanDraft] = []
     var startDate = Date.now
 }
@@ -53,6 +80,10 @@ struct PlanDraft: Identifiable, Hashable {
     var endTime = Calendar.current.date(from: DateComponents(hour: 21, minute: 30)) ?? .now
     var locationName = ""
     var locationAddress = ""
+    /// Custom venues have no map entry, so the organizer may paste a Google
+    /// Maps link instead. Optional, and only ever filled for `.custom`.
+    var mapsURL = ""
+    var venueKind: FeedVenueKind = .custom
     var latitude = 24.7136
     var longitude = 46.6753
     var capacity = 12

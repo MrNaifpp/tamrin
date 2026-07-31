@@ -455,7 +455,6 @@ private struct PaymentMethodDetailsEditor: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
-        .background(.ultraThinMaterial)
     }
 
     private var saveButton: some View {

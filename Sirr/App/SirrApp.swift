@@ -19,6 +19,9 @@ struct SirrApp: App {
         WindowGroup {
             RootView()
                 .applyAppFont()
+                // Anything that formats against the environment locale rather
+                // than passing one explicitly still has to land on 0123456789.
+                .environment(\.locale, .tamrin)
                 .onOpenURL { url in
                     DeepLinkRouter.shared.submit(url)
                 }

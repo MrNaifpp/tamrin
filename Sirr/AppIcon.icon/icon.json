@@ -1,0 +1,58 @@
+{
+  "fill" : {
+    "linear-gradient" : [
+      "srgb:0.27000,0.90000,0.32250,1.00000",
+      "display-p3:0.37302,0.70000,0.31500,1.00000"
+    ]
+  },
+  "groups" : [
+    {
+      "blend-mode" : "normal",
+      "layers" : [
+        {
+          "image-name" : "Rectangle 11114173896.png",
+          "name" : "Rectangle 11114173896",
+          "position" : {
+            "scale" : 0.3,
+            "translation-in-points" : [
+              50,
+              10
+            ]
+          }
+        },
+        {
+          "image-name" : "Ellipse 5368.png",
+          "name" : "Ellipse 5368",
+          "position" : {
+            "scale" : 1.1500000000000001,
+            "translation-in-points" : [
+              -3,
+              98
+            ]
+          }
+        }
+      ],
+      "position" : {
+        "scale" : 1,
+        "translation-in-points" : [
+          10,
+          -20
+        ]
+      },
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}

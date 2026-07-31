@@ -134,7 +134,7 @@ struct GroupsDrawer: View {
                         .font(.appBodyMedium)
                         .foregroundStyle(.white)
                     if let count = ws.memberCount {
-                        Text("الأعضاء \(count.formatted(.number.locale(Locale(identifier: "ar")).grouping(.never)))")
+                        Text("الأعضاء \(count.formatted(.number.locale(.tamrin).grouping(.never)))")
                             .font(.appCaption)
                             .foregroundStyle(Color(white: 0.6))
                     }

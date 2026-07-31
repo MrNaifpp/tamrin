@@ -96,121 +96,120 @@ struct SignupView: View {
             pageBackground
                 .ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 24) {
-                        // Avatar (center) — same as LoginView
-                        PhotosPicker(selection: $selectedItem, matching: .images) {
-                            ZStack {
-                                Circle()
-                                    .fill(Color(white: 0.88))
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 24) {
+                    // Avatar (center) — same as LoginView
+                    PhotosPicker(selection: $selectedItem, matching: .images) {
+                        ZStack {
+                            Circle()
+                                .fill(Color(white: 0.88))
+                                .frame(width: 120, height: 120)
+                            if let data = selectedImageData, let uiImage = UIImage(data: data) {
+                                Image(uiImage: uiImage)
+                                    .resizable()
+                                    .scaledToFill()
                                     .frame(width: 120, height: 120)
-                                if let data = selectedImageData, let uiImage = UIImage(data: data) {
-                                    Image(uiImage: uiImage)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 120, height: 120)
-                                        .clipShape(Circle())
-                                } else {
-                                    Image(systemName: "person.fill")
-                                        .font(.system(size: 48))
-                                        .foregroundStyle(Color(white: 0.65))
-                                }
+                                    .clipShape(Circle())
+                            } else {
+                                Image(systemName: "person.fill")
+                                    .font(.system(size: 48))
+                                    .foregroundStyle(Color(white: 0.65))
                             }
                         }
-                        .buttonStyle(.plain)
-                        .onChange(of: selectedItem) { newItem in
-                            Task {
-                                if let data = try? await newItem?.loadTransferable(type: Data.self) {
-                                    selectedImageData = data
-                                }
+                    }
+                    .buttonStyle(.plain)
+                    .onChange(of: selectedItem) { newItem in
+                        Task {
+                            if let data = try? await newItem?.loadTransferable(type: Data.self) {
+                                selectedImageData = data
                             }
                         }
-                        .padding(.top, 16)
+                    }
+                    .padding(.top, 16)
 
-                        // Title: كمــل ملفـك الشخـصي
-                        Text("كمــل ملفـك الشخـصي")
-                            .font(.appHeadline)
+                    // Title: كمــل ملفـك الشخـصي
+                    Text("كمــل ملفـك الشخـصي")
+                        .font(.appHeadline)
+                        .foregroundStyle(Color(white: 0.2))
+
+                    // Full name — اسـم الكريـم
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("اسـم الكريـم")
+                            .font(.appBody)
+                            .foregroundStyle(Color(white: 0.5))
+                        TextField("", text: $fullName, prompt: Text("اسـم الكريـم").foregroundColor(Color(white: 0.6)))
+                            .font(.appBody)
                             .foregroundStyle(Color(white: 0.2))
-
-                        // Full name — اسـم الكريـم
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("اسـم الكريـم")
-                                .font(.appBody)
-                                .foregroundStyle(Color(white: 0.5))
-                            TextField("", text: $fullName, prompt: Text("اسـم الكريـم").foregroundColor(Color(white: 0.6)))
-                                .font(.appBody)
-                                .foregroundStyle(Color(white: 0.2))
-                                .padding(.horizontal, 18)
-                                .frame(height: 56)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 32, style: .continuous)
-                                        .fill(Color(white: 0.92))
-                                )
-                        }
-                        .padding(.horizontal, 24)
-                        .padding(.top, 8)
-
-                        // Preferred position — المركـز المفضـل — select حارس دفاع وسط هجوم
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("المركـز المفضـل")
-                                .font(.appBody)
-                                .foregroundStyle(Color(white: 0.5))
-                            Menu {
-                                ForEach(PreferredPosition.allCases, id: \.self) { position in
-                                    Button(position.rawValue) {
-                                        preferredPosition = position
-                                    }
-                                }
-                            } label: {
-                                HStack {
-                                    Text(preferredPosition.rawValue)
-                                        .font(.appBody)
-                                        .foregroundStyle(Color(white: 0.2))
-                                    Spacer(minLength: 12)
-                                    Image(systemName: "chevron.down")
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(Color(white: 0.45))
-                                }
-                                .padding(.horizontal, 18)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 56)
-                            }
+                            .padding(.horizontal, 18)
+                            .frame(height: 56)
                             .background(
                                 RoundedRectangle(cornerRadius: 32, style: .continuous)
                                     .fill(Color(white: 0.92))
                             )
-                        }
-                        .padding(.horizontal, 24)
-                        .padding(.top, 8)
-
-                        // Back to login link
-                        Button(action: {
-                            if let onBack {
-                                onBack()
-                            } else {
-                                dismiss()
-                            }
-                        }) {
-                            HStack(spacing: 6) {
-                                Text("لديك حساب بالفعل؟")
-                                    .foregroundStyle(Color(white: 0.5))
-                                Text("تسجيل الدخول")
-                                    .font(.appBodySemibold)
-                                    .foregroundStyle(Color(white: 0.3))
-                            }
-                            .font(.appBody)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(vm.isLoading)
-                        .padding(.top, 16)
-
-                        Spacer(minLength: 24)
                     }
-                }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 8)
 
-                // Next button: create user record (auth + profile) then app shows main page
-                Button {
+                    // Preferred position — المركـز المفضـل — select حارس دفاع وسط هجوم
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("المركـز المفضـل")
+                            .font(.appBody)
+                            .foregroundStyle(Color(white: 0.5))
+                        Menu {
+                            ForEach(PreferredPosition.allCases, id: \.self) { position in
+                                Button(position.rawValue) {
+                                    preferredPosition = position
+                                }
+                            }
+                        } label: {
+                            HStack {
+                                Text(preferredPosition.rawValue)
+                                    .font(.appBody)
+                                    .foregroundStyle(Color(white: 0.2))
+                                Spacer(minLength: 12)
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(Color(white: 0.45))
+                            }
+                            .padding(.horizontal, 18)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 56)
+                        }
+                        .background(
+                            RoundedRectangle(cornerRadius: 32, style: .continuous)
+                                .fill(Color(white: 0.92))
+                        )
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 8)
+
+                    // Back to login link
+                    Button(action: {
+                        if let onBack {
+                            onBack()
+                        } else {
+                            dismiss()
+                        }
+                    }) {
+                        HStack(spacing: 6) {
+                            Text("لديك حساب بالفعل؟")
+                                .foregroundStyle(Color(white: 0.5))
+                            Text("تسجيل الدخول")
+                                .font(.appBodySemibold)
+                                .foregroundStyle(Color(white: 0.3))
+                        }
+                        .font(.appBody)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(vm.isLoading)
+                    .padding(.top, 16)
+
+                    Spacer(minLength: 24)
+                }
+            }
+            // Next: create user record (auth + profile) then app shows main page
+            .safeAreaInset(edge: .bottom) {
+                TamrinActionButton(title: "التالي", isLoading: vm.isLoading, tint: .black) {
                     Task {
                         await vm.completeProfile(
                             fullName: fullName.trimmingCharacters(in: .whitespaces),
@@ -218,29 +217,10 @@ struct SignupView: View {
                             imageData: selectedImageData
                         )
                     }
-                } label: {
-                    Group {
-                        if vm.isLoading {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        } else {
-                            Text("التالي")
-                                .font(TamrinFont.font(size: 17, weight: .medium))
-                                .foregroundStyle(.white)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: TamrinControlMetrics.actionHeight)
-                    .background(
-                        RoundedRectangle(cornerRadius: 25, style: .continuous)
-                            .fill(isFormValid ? Color(red: 92/255, green: 92/255, blue: 92/255) : Color(white: 0.25))
-                    )
                 }
-                .buttonStyle(.plain)
-                .disabled(vm.isLoading || !isFormValid)
+                .disabled(!isFormValid)
                 .padding(.horizontal, 24)
-                .padding(.top, 12)
-                .padding(.bottom, 24)
+                .padding(.bottom, 10)
             }
         }
         .environment(\.layoutDirection, .rightToLeft)

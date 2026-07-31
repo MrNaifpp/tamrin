@@ -15,6 +15,7 @@ struct LoginView: View {
     @State private var email = ""
     @State private var selectedItem: PhotosPickerItem?
     @State private var selectedImageData: Data?
+    @State private var showsOTP = false
 
     private let pageBackground = Color(red: 248/255.0, green: 248/255.0, blue: 247/255.0)
 
@@ -36,95 +37,88 @@ struct LoginView: View {
             pageBackground
                 .ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 24) {
-                        // Avatar (center)
-                        PhotosPicker(selection: $selectedItem, matching: .images) {
-                            ZStack {
-                                Circle()
-                                    .fill(Color(white: 0.88))
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 24) {
+                    // Avatar (center)
+                    PhotosPicker(selection: $selectedItem, matching: .images) {
+                        ZStack {
+                            Circle()
+                                .fill(Color(white: 0.88))
+                                .frame(width: 120, height: 120)
+                            if let data = selectedImageData, let uiImage = UIImage(data: data) {
+                                Image(uiImage: uiImage)
+                                    .resizable()
+                                    .scaledToFill()
                                     .frame(width: 120, height: 120)
-                                if let data = selectedImageData, let uiImage = UIImage(data: data) {
-                                    Image(uiImage: uiImage)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 120, height: 120)
-                                        .clipShape(Circle())
-                                } else {
-                                    Image(systemName: "person.fill")
-                                        .font(.system(size: 48))
-                                        .foregroundStyle(Color(white: 0.65))
-                                }
+                                    .clipShape(Circle())
+                            } else {
+                                Image(systemName: "person.fill")
+                                    .font(.system(size: 48))
+                                    .foregroundStyle(Color(white: 0.65))
                             }
                         }
-                        .buttonStyle(.plain)
-                        .onChange(of: selectedItem) { newItem in
-                            Task {
-                                if let data = try? await newItem?.loadTransferable(type: Data.self) {
-                                    selectedImageData = data
-                                }
-                            }
-                        }
-                        .padding(.top, 16)
-
-                        // Text: سجـل بالبريـد الالكتروني
-                        Text("سجـل بالبريـد الالكتروني")
-                            .font(.appHeadline)
-                            .foregroundStyle(Color(white: 0.2))
-                        Text("سجـل أو أنشئ حسابك بالبريـد الالكتروني")
-                            .font(.appBody)
-                            .foregroundStyle(Color(white: 0.5))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 32)
-
-                        // Email field
-                        TextField("", text: $email, prompt: Text("example@example").foregroundColor(Color(white: 0.6)))
-                            .font(.appBody)
-                            .foregroundStyle(Color(white: 0.2))
-                            .textInputAutocapitalization(.never)
-                            .keyboardType(.emailAddress)
-                            .padding(.horizontal, 18)
-                            .frame(height: 56)
-                            .background(
-                                RoundedRectangle(cornerRadius: 32, style: .continuous)
-                                    .fill(Color(white: 0.92))
-                            )
-                            .padding(.horizontal, 24)
-                            .padding(.top, 8)
-
-                        if let error = vm.errorMessage {
-                            Text(error)
-                                .font(.appCaption)
-                                .foregroundStyle(.red)
-                                .padding(.horizontal, 24)
-                        }
-
-                        Spacer(minLength: 24)
                     }
-                }
+                    .buttonStyle(.plain)
+                    .onChange(of: selectedItem) { newItem in
+                        Task {
+                            if let data = try? await newItem?.loadTransferable(type: Data.self) {
+                                selectedImageData = data
+                            }
+                        }
+                    }
+                    .padding(.top, 16)
 
-                // Next button fixed at bottom (navigates to OTP when tapped)
-                NavigationLink(destination: LoginOTPView(email: trimmedEmail, vm: vm)) {
-                    Text("التالي")
-                        .font(TamrinFont.font(size: 17, weight: .medium))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: TamrinControlMetrics.actionHeight)
+                    // Text: سجـل بالبريـد الالكتروني
+                    Text("سجـل بالبريـد الالكتروني")
+                        .font(.appHeadline)
+                        .foregroundStyle(Color(white: 0.2))
+                    Text("سجـل أو أنشئ حسابك بالبريـد الالكتروني")
+                        .font(.appBody)
+                        .foregroundStyle(Color(white: 0.5))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+
+                    // Email field
+                    TextField("", text: $email, prompt: Text("example@example").foregroundColor(Color(white: 0.6)))
+                        .font(.appBody)
+                        .foregroundStyle(Color(white: 0.2))
+                        .textInputAutocapitalization(.never)
+                        .keyboardType(.emailAddress)
+                        .padding(.horizontal, 18)
+                        .frame(height: 56)
                         .background(
-                            RoundedRectangle(cornerRadius: 25, style: .continuous)
-                                .fill(isEmailValid ? Color(red: 92/255, green: 92/255, blue: 92/255) : Color(white: 0.25))
+                            RoundedRectangle(cornerRadius: 32, style: .continuous)
+                                .fill(Color(white: 0.92))
                         )
+                        .padding(.horizontal, 24)
+                        .padding(.top, 8)
+
+                    if let error = vm.errorMessage {
+                        Text(error)
+                            .font(.appCaption)
+                            .foregroundStyle(.red)
+                            .padding(.horizontal, 24)
+                    }
+
+                    Spacer(minLength: 24)
                 }
-                .buttonStyle(.plain)
+            }
+            // Next: the stock iOS 26 action button, so the fill, press
+            // animation and disabled treatment all come from the platform.
+            .safeAreaInset(edge: .bottom) {
+                TamrinActionButton(title: "التالي", tint: .black) {
+                    showsOTP = true
+                }
                 .disabled(!isEmailValid)
                 .padding(.horizontal, 24)
-                .padding(.top, 12)
-                .padding(.bottom, 24)
+                .padding(.bottom, 10)
             }
         }
         .environment(\.layoutDirection, .rightToLeft)
         .scrollDismissesKeyboard(.interactively)
+        .navigationDestination(isPresented: $showsOTP) {
+            LoginOTPView(email: trimmedEmail, vm: vm)
+        }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {

@@ -71,7 +71,7 @@ extension EventData {
         let f = DateFormatter()
         // Gregorian calendar, Arabic display (not Hijri).
         f.calendar = Calendar(identifier: .gregorian)
-        f.locale = Locale(identifier: "ar")
+        f.locale = .tamrin
         f.dateStyle = .medium
         f.timeStyle = .short
         return f

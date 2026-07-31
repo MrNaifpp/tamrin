@@ -87,7 +87,7 @@ struct NewEventView: View {
         let formatter = DateFormatter()
         // Gregorian calendar, Arabic display (HIG: graphical picker + Gregorian per product decision).
         formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "ar")
+        formatter.locale = .tamrin
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter
@@ -874,7 +874,7 @@ struct NewEventView: View {
             }
 
             if repeatsWeekly {
-                Text("يُنشأ تمرين الأسبوع القادم تلقائيًا قبل موعده بـ٣ أيام، ويصل إشعار لجميع الأعضاء")
+                Text("يُنشأ تمرين الأسبوع القادم تلقائيًا قبل موعده بـ3 أيام، ويصل إشعار لجميع الأعضاء")
                     .font(.appCaption)
                     .foregroundStyle(.white.opacity(0.65))
                     .padding(.horizontal, 4)
@@ -1019,7 +1019,7 @@ struct NewEventView: View {
                     .colorScheme(.dark)
                     .accentColor(.white)
                     .environment(\.calendar, Calendar(identifier: .gregorian))
-                    .environment(\.locale, Locale(identifier: "ar"))
+                    .environment(\.locale, .tamrin)
                     .environment(\.layoutDirection, .rightToLeft)
                     .padding(.horizontal, 20)
 

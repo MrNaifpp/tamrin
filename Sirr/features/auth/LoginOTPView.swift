@@ -22,81 +22,61 @@ struct LoginOTPView: View {
             pageBackground
                 .ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 24) {
-                        // Title (match pic: ادخل رمز التفعيل)
-                        Text("ادخل رمز التفعيل")
-                            .font(.appTitle)
-                            .foregroundStyle(Color(white: 0.2))
-                        Text("أرسلنا لك رمز تفعيل على بريدك")
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 24) {
+                    // Title (match pic: ادخل رمز التفعيل)
+                    Text("ادخل رمز التفعيل")
+                        .font(.appTitle)
+                        .foregroundStyle(Color(white: 0.2))
+                    Text("أرسلنا لك رمز تفعيل على بريدك")
+                        .font(.appBody)
+                        .foregroundStyle(Color(white: 0.5))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                    Text(email)
+                        .font(TamrinFont.font(size: 18, weight: .medium))
+                        .foregroundStyle(Color(white: 0.3))
+
+                    // OTP input: 6 slots with dashed lines in one rounded container (LTR fill)
+                    OTPInputView(otpCode: $otpCode, digitCount: otpDigitCount, isFocused: $isOTPFocused)
+                        .environment(\.layoutDirection, .leftToRight)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 8)
+
+                    if let error = vm.errorMessage {
+                        Text(error)
+                            .font(.appCaption)
+                            .foregroundStyle(.red)
+                            .padding(.horizontal, 24)
+                    }
+
+                    // Resend
+                    Button {
+                        Task {
+                            await vm.requestOTP(email: email)
+                        }
+                    } label: {
+                        Text("إعادة إرسال الرمز")
                             .font(.appBody)
                             .foregroundStyle(Color(white: 0.5))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 24)
-                        Text(email)
-                            .font(TamrinFont.font(size: 18, weight: .medium))
-                            .foregroundStyle(Color(white: 0.3))
-
-                        // OTP input: 6 slots with dashed lines in one rounded container (LTR fill)
-                        OTPInputView(otpCode: $otpCode, digitCount: otpDigitCount, isFocused: $isOTPFocused)
-                            .environment(\.layoutDirection, .leftToRight)
-                            .padding(.horizontal, 24)
-                            .padding(.top, 8)
-
-                        if let error = vm.errorMessage {
-                            Text(error)
-                                .font(.appCaption)
-                                .foregroundStyle(.red)
-                                .padding(.horizontal, 24)
-                        }
-
-                        // Resend
-                        Button {
-                            Task {
-                                await vm.requestOTP(email: email)
-                            }
-                        } label: {
-                            Text("إعادة إرسال الرمز")
-                                .font(.appBody)
-                                .foregroundStyle(Color(white: 0.5))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(vm.isLoading)
-                        .padding(.top, 12)
-
-                        Spacer(minLength: 24)
                     }
-                }
+                    .buttonStyle(.plain)
+                    .disabled(vm.isLoading)
+                    .padding(.top, 12)
 
-                // Next: verify OTP with API, then app shows signup (new user) or home
-                Button {
+                    Spacer(minLength: 24)
+                }
+            }
+            // Next: verify OTP with API, then app shows signup (new user) or home
+            .safeAreaInset(edge: .bottom) {
+                TamrinActionButton(title: "التالي", isLoading: vm.isLoading, tint: .black) {
                     Task {
                         await vm.verifyOTP(email: email, token: otpCode)
                     }
-                } label: {
-                    Group {
-                        if vm.isLoading {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        } else {
-                            Text("التالي")
-                                .font(TamrinFont.font(size: 17, weight: .medium))
-                                .foregroundStyle(.white)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: TamrinControlMetrics.actionHeight)
-                    .background(
-                        RoundedRectangle(cornerRadius: 25, style: .continuous)
-                            .fill(otpCode.count >= otpDigitCount ? Color(red: 92/255, green: 92/255, blue: 92/255) : Color(white: 0.25))
-                    )
                 }
-                .buttonStyle(.plain)
-                .disabled(vm.isLoading || otpCode.count < otpDigitCount)
+                .disabled(otpCode.count < otpDigitCount)
                 .padding(.horizontal, 24)
-                .padding(.top, 12)
-                .padding(.bottom, 24)
+                .padding(.bottom, 10)
             }
         }
         .environment(\.layoutDirection, .rightToLeft)

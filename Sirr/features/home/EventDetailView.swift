@@ -1237,7 +1237,7 @@ struct RegistrationFlowSheet: View {
     private func currency(_ amount: Double) -> String {
         let value = amount.formatted(
             .number
-                .locale(Locale(identifier: "ar_SA"))
+                .locale(.tamrin)
                 .precision(.fractionLength(0 ... 2))
         )
         return "\(value) ر.س"

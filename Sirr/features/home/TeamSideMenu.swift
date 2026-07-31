@@ -288,7 +288,7 @@ private struct TeamSideMenuRow: View {
                     .font(TamrinFont.font(size: 16, weight: isSelected ? .bold : .medium))
                     .foregroundStyle(.white)
                     .lineLimit(1)
-                Text("\(team.memberCount.formatted(.number.locale(Locale(identifier: "ar_SA")).grouping(.never))) عضو")
+                Text("\(team.memberCount.formatted(.number.locale(.tamrin).grouping(.never))) عضو")
                     .font(TamrinFont.font(size: 11, weight: .regular))
                     .foregroundStyle(.white.opacity(0.52))
                     .lineLimit(1)

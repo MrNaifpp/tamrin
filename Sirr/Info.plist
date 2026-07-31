@@ -13,6 +13,10 @@
 			</array>
 		</dict>
 	</array>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>whatsapp</string>
+	</array>
 	<key>UIAppFonts</key>
 	<array>
 		<string>ThmanyahSans-Light.ttf</string>

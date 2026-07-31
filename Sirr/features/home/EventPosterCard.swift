@@ -55,15 +55,42 @@ struct EventPosterCard: View {
         self.action = action
     }
 
+    /// A swipe that starts on the card is meant for the groups drawer (or the
+    /// vertical card scroll), not for opening the event. The card fills the
+    /// screen, so a swipe never leaves its bounds and SwiftUI would otherwise
+    /// still count the release as a tap. Track the pan and drop the tap once
+    /// the finger has clearly moved.
+    @State private var didPan = false
+
+    /// Enough travel to read as a swipe rather than a shaky finger.
+    private let panSlop: CGFloat = 10
+
     private var artName: String { "ExerciseArt\((occurrence.artIndex % 3) + 1)" }
     private var hasActions: Bool { !actions.isEmpty }
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            Button(action: action) {
+            Button {
+                guard !didPan else { return }
+                action()
+            } label: {
                 posterContent
             }
             .buttonStyle(SpringCardPressStyle())
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        // The first change of a new touch reports no travel —
+                        // use it to arm the next press rather than resetting on
+                        // end, which would race the button's own action.
+                        if value.translation == .zero {
+                            didPan = false
+                        } else if abs(value.translation.width) > panSlop
+                                    || abs(value.translation.height) > panSlop {
+                            didPan = true
+                        }
+                    }
+            )
             .accessibilityLabel("\(occurrence.title)، \(occurrence.startAt.arabicDay)، الساعة \(occurrence.startAt.arabicTime)")
             .accessibilityHint("يفتح تفاصيل الموعد")
 

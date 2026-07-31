@@ -215,7 +215,7 @@ struct DesignerHomeView: View {
             .environment(\.layoutDirection, .leftToRight)
             .background(Color(red: 0.067, green: 0.067, blue: 0.067))
             .ignoresSafeArea()
-            .simultaneousGesture(menuGesture(revealDistance: revealDistance, screenWidth: proxy.size.width))
+            .simultaneousGesture(menuGesture(revealDistance: revealDistance))
         }
         .ignoresSafeArea()
     }
@@ -643,14 +643,24 @@ struct DesignerHomeView: View {
         didMenuHaptic = false
     }
 
-    private func menuGesture(revealDistance: CGFloat, screenWidth: CGFloat) -> some Gesture {
+    private func menuGesture(revealDistance: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 8, coordinateSpace: .local)
             .onChanged { value in
                 if !isMenuGestureActive {
                     let isHorizontal = abs(value.translation.width) > abs(value.translation.height) * 1.15
                     guard isHorizontal else { return }
-                    let startsAtRightEdge = value.startLocation.x > screenWidth - 30
-                    guard isMenuOpen || startsAtRightEdge else { return }
+                    // A horizontal pull anywhere on the page drives the drawer,
+                    // not just a narrow edge strip: the poster card drops its
+                    // own tap as soon as the finger pans, so the two no longer
+                    // compete for the same swipe. Vertical drags still belong
+                    // to the card scroll.
+                    //
+                    // Direction decides intent — the drawer opens on a leftward
+                    // pull and closes on the reverse, so a swipe the other way
+                    // is left alone rather than armed and then clamped to a
+                    // no-op.
+                    let opens = value.translation.width < 0
+                    guard isMenuOpen != opens else { return }
                     isMenuGestureActive = true
                 }
                 if isMenuOpen {

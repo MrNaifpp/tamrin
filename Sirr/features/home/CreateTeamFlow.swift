@@ -2,8 +2,6 @@ import SwiftUI
 import MapKit
 import PhotosUI
 import Observation
-import Contacts
-import ContactsUI
 
 @MainActor @Observable
 final class LocationSearchService {
@@ -16,16 +14,29 @@ final class LocationSearchService {
     }
 
     var results: [Result] = []
+    var isSearching = false
+    /// Results arrive out of order when the organizer keeps typing, so every
+    /// response is checked against the query that is still current.
+    private var latestQuery = ""
 
     func search(_ query: String) async {
-        guard query.count > 2 else { results = []; return }
+        latestQuery = query
+        guard query.count > 2 else {
+            results = []
+            isSearching = false
+            return
+        }
+        isSearching = true
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = query
         request.region = MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 24.7136, longitude: 46.6753),
             span: MKCoordinateSpan(latitudeDelta: 0.7, longitudeDelta: 0.7)
         )
-        guard let response = try? await MKLocalSearch(request: request).start() else { return }
+        let response = try? await MKLocalSearch(request: request).start()
+        guard latestQuery == query else { return }
+        isSearching = false
+        guard let response else { return }
         results = response.mapItems.prefix(6).map {
             let coordinate = $0.location.coordinate
             let address = $0.addressRepresentations?.fullAddress(includingRegion: true, singleLine: true) ?? "الرياض"
@@ -35,21 +46,21 @@ final class LocationSearchService {
 }
 
 private enum CreationStep: Int, CaseIterable {
-    case identity, templates, members
+    case identity, templates, invite
 
     var title: String {
         switch self {
         case .identity: "هوية المجموعة"
         case .templates: "تمارين المجموعة"
-        case .members: "الأعضاء"
+        case .invite: "دعوة الأعضاء"
         }
     }
 
     var counter: String {
         switch self {
-        case .identity: "١ من ٣"
-        case .templates: "٢ من ٣"
-        case .members: "٣ من ٣"
+        case .identity: "1 من 3"
+        case .templates: "2 من 3"
+        case .invite: "3 من 3"
         }
     }
 }
@@ -57,7 +68,8 @@ private enum CreationStep: Int, CaseIterable {
 private let weekdayNames: [Int: String] = [1: "الأحد", 2: "الاثنين", 3: "الثلاثاء", 4: "الأربعاء", 5: "الخميس", 6: "الجمعة", 7: "السبت"]
 
 private extension Int {
-    var arabicDigits: String { formatted(.number.locale(Locale(identifier: "ar_SA")).grouping(.never)) }
+    /// Western digits in Arabic copy — see `Locale.tamrin`.
+    var appDigits: String { formatted(.number.locale(.tamrin).grouping(.never)) }
 }
 
 private extension PlanDraft {
@@ -104,46 +116,47 @@ struct CreateTeamFlow: View {
             Circle().fill(.primary.opacity(0.035)).frame(width: 340, height: 340).blur(radius: 70)
                 .offset(x: 150, y: -300).ignoresSafeArea().allowsHitTesting(false)
 
-            if let createdTeam {
-                CreationSuccessPage(team: createdTeam, draft: draft) { isPresented = false }
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
-            } else {
-                VStack(spacing: 0) {
-                    FlowHeader(step: step, back: goBack)
-                    ZStack {
-                        switch step {
-                        case .identity:
-                            IdentityStepPage(draft: $draft, advance: advanceFromIdentity)
-                                .transition(stepTransition)
-                        case .templates:
-                            if isComposing {
-                                TemplateComposerPage(
-                                    plan: $composerPlan,
-                                    initialSheet: composerInitialSheet,
-                                    save: savePlan,
-                                    cancel: cancelComposer
-                                )
-                                .transition(stepTransition)
-                            } else {
-                                TemplatesListPage(
-                                    draft: $draft,
-                                    addPlan: { startComposer(with: PlanDraft()) },
-                                    editPlan: { startComposer(with: $0) },
-                                    advance: { move(to: .members) }
-                                )
-                                .transition(stepTransition)
+            VStack(spacing: 0) {
+                FlowHeader(step: step, back: goBack)
+                ZStack {
+                    switch step {
+                    case .identity:
+                        IdentityStepPage(draft: $draft, advance: advanceFromIdentity)
+                            .transition(stepTransition)
+                    case .templates:
+                        if isComposing {
+                            TemplateComposerPage(
+                                plan: $composerPlan,
+                                initialSheet: composerInitialSheet,
+                                save: savePlan,
+                                cancel: cancelComposer
+                            )
+                            .transition(stepTransition)
+                        } else {
+                            TemplatesListPage(
+                                draft: $draft,
+                                isCreating: isCreating,
+                                addPlan: { startComposer(with: PlanDraft()) },
+                                editPlan: { startComposer(with: $0) },
+                                advance: create
+                            )
+                            .transition(stepTransition)
+                        }
+                    case .invite:
+                        // Reached only once the workspace exists, because the
+                        // join link is issued by the backend on creation.
+                        if let createdTeam {
+                            InviteStepPage(team: createdTeam, planCount: draft.plans.count) {
+                                isPresented = false
                             }
-                        case .members:
-                            MembersStepPage(draft: $draft, isCreating: isCreating, create: create)
-                                .transition(stepTransition)
+                            .transition(stepTransition)
                         }
                     }
-                    .animation(reduceMotion ? nil : .spring(response: 0.46, dampingFraction: 0.9), value: step)
-                    .animation(reduceMotion ? nil : .spring(response: 0.46, dampingFraction: 0.9), value: isComposing)
                 }
+                .animation(reduceMotion ? nil : .spring(response: 0.46, dampingFraction: 0.9), value: step)
+                .animation(reduceMotion ? nil : .spring(response: 0.46, dampingFraction: 0.9), value: isComposing)
             }
         }
-        .animation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.9), value: createdTeam?.id)
         .environment(\.layoutDirection, .rightToLeft)
         .interactiveDismissDisabled()
         .alert("تعذر إنشاء المجموعة", isPresented: Binding(
@@ -199,6 +212,9 @@ struct CreateTeamFlow: View {
         }
     }
 
+    /// Creating the group is what issues the join link, so it happens when the
+    /// organizer leaves the templates step — the invite step then has a real
+    /// link to share instead of a placeholder.
     private func create() {
         guard !isCreating else { return }
         isCreating = true
@@ -207,6 +223,7 @@ struct CreateTeamFlow: View {
                 let team = try await feed.createTeam(from: draft)
                 createdTeam = team
                 Haptics.success()
+                move(to: .invite)
             } catch {
                 failureMessage = error.localizedDescription
                 Haptics.error()
@@ -221,8 +238,9 @@ struct CreateTeamFlow: View {
             isPresented = false
         case .templates:
             if isComposing { cancelComposer() } else { move(to: .identity) }
-        case .members:
-            move(to: .templates)
+        case .invite:
+            // The group already exists — there is nothing to go back to.
+            break
         }
     }
 }
@@ -236,14 +254,22 @@ private struct FlowHeader: View {
     var body: some View {
         VStack(spacing: 14) {
             HStack {
-                Button(action: back) {
-                    Image(systemName: step == .identity ? "xmark" : "chevron.right")
-                        .font(.system(size: TamrinControlMetrics.symbolSize, weight: .semibold))
-                        .frame(width: TamrinControlMetrics.touchTarget, height: TamrinControlMetrics.touchTarget)
+                // The last step has no way back: the group is already created.
+                Group {
+                    if step == .invite {
+                        Color.clear
+                    } else {
+                        Button(action: back) {
+                            Image(systemName: step == .identity ? "xmark" : "chevron.right")
+                                .font(.system(size: TamrinControlMetrics.symbolSize, weight: .semibold))
+                                .frame(width: TamrinControlMetrics.touchTarget, height: TamrinControlMetrics.touchTarget)
+                        }
+                        .buttonStyle(.plain)
+                        .background(TamrinTheme.glass, in: .circle)
+                        .accessibilityLabel(step == .identity ? "إغلاق" : "رجوع")
+                    }
                 }
-                .buttonStyle(.plain)
-                .background(TamrinTheme.glass, in: .circle)
-                .accessibilityLabel(step == .identity ? "إغلاق" : "رجوع")
+                .frame(width: TamrinControlMetrics.touchTarget, height: TamrinControlMetrics.touchTarget)
 
                 Spacer()
 
@@ -393,6 +419,7 @@ private struct IdentityStepPage: View {
 
 private struct TemplatesListPage: View {
     @Binding var draft: TeamDraft
+    let isCreating: Bool
     let addPlan: () -> Void
     let editPlan: (PlanDraft) -> Void
     let advance: () -> Void
@@ -442,7 +469,7 @@ private struct TemplatesListPage: View {
             .padding(.horizontal, 22)
         }
         .safeAreaInset(edge: .bottom) {
-            TamrinActionButton(title: "متابعة", action: advance)
+            TamrinActionButton(title: "أنشئ المجموعة", isLoading: isCreating, action: advance)
                 .disabled(draft.plans.isEmpty)
                 .padding(.horizontal, 22)
                 .padding(.bottom, 10)
@@ -481,7 +508,7 @@ private struct TemplateCard: View {
                 }
                 HStack(spacing: 8) {
                     TemplateTag(symbol: "mappin", text: plan.locationName)
-                    TemplateTag(symbol: "person.2", text: "\(plan.capacity.arabicDigits) لاعب")
+                    TemplateTag(symbol: "person.2", text: "\(plan.capacity.appDigits) لاعب")
                     TemplateTag(
                         symbol: "banknote",
                         text: plan.totalVenueCost == 0
@@ -590,12 +617,14 @@ private struct TemplateComposerPage: View {
                     ComposerTile(
                         symbol: "mappin.and.ellipse",
                         title: "الملعب",
-                        value: plan.locationName.isEmpty ? nil : plan.locationName
+                        value: plan.locationName.isEmpty
+                            ? nil
+                            : "\(plan.locationName)\n\(plan.venueKind.title)"
                     ) { activeSheet = .location }
                     ComposerTile(
                         symbol: "person.2.fill",
                         title: "عدد اللاعبين",
-                        value: "حتى \(plan.capacity.arabicDigits)\n\(plan.capacityPolicy == .waitlist ? "مع قائمة انتظار" : "يقفل عند الاكتمال")"
+                        value: "حتى \(plan.capacity.appDigits)\n\(plan.capacityPolicy == .waitlist ? "مع قائمة انتظار" : "يقفل عند الاكتمال")"
                     ) { activeSheet = .capacity }
                     ComposerTile(
                         symbol: "banknote.fill",
@@ -611,12 +640,12 @@ private struct TemplateComposerPage: View {
                             ? nil
                             : (plan.paymentMethods.count == 1
                                ? plan.paymentMethods[0].provider.displayName
-                               : "\(plan.paymentMethods.count.arabicDigits) وسائل دفع")
+                               : "\(plan.paymentMethods.count.appDigits) وسائل دفع")
                     ) { activeSheet = .payment }
                     ComposerTile(
                         symbol: "paperplane.fill",
                         title: "التجهيز والإرسال",
-                        value: "قبلها بـ\(plan.publishLeadDays.arabicDigits) يوم\nالساعة \(plan.publishTime.arabicTime)"
+                        value: "قبلها بـ\(plan.publishLeadDays.appDigits) يوم\nالساعة \(plan.publishTime.arabicTime)"
                     ) { activeSheet = .publishing }
                 }
 
@@ -762,9 +791,7 @@ private struct ScheduleSheet: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .animation(.smooth(duration: 0.3), value: plan.scheduleKind)
             .animation(.smooth(duration: 0.25), value: plan.weekdays)
-            .navigationTitle("متى تتمرنون؟")
-            .navigationSubtitle("حدد نوع الموعد ووقته")
-            .navigationBarTitleDisplayMode(.inline)
+            .sheetTitle("متى تتمرنون؟", subtitle: "حدد نوع الموعد ووقته")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("تم") { dismiss() }
@@ -843,7 +870,7 @@ private struct CapacitySheet: View {
                     CapacityStepButton(symbol: "minus", enabled: plan.capacity > 2) {
                         plan.capacity -= 1
                     }
-                    Text(plan.capacity.arabicDigits)
+                    Text(plan.capacity.appDigits)
                         .font(TamrinFont.font(size: 76, weight: .bold))
                         .monospacedDigit()
                         .contentTransition(.numericText())
@@ -860,7 +887,7 @@ private struct CapacitySheet: View {
                             plan.capacity = value
                             Haptics.impact(.light)
                         } label: {
-                            Text(value.arabicDigits)
+                            Text(value.appDigits)
                                 .font(TamrinFont.font(size: 15, weight: .medium))
                                 .monospacedDigit()
                                 .frame(maxWidth: .infinity)
@@ -895,9 +922,7 @@ private struct CapacitySheet: View {
             // detent follows the content rather than the NavigationStack.
             .sheetContentHeight()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .navigationTitle("كم لاعب يكفيكم؟")
-            .navigationSubtitle("حدد سعة كل موعد")
-            .navigationBarTitleDisplayMode(.inline)
+            .sheetTitle("كم لاعب يكفيكم؟", subtitle: "حدد سعة كل موعد")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("تم") { dismiss() }.fontWeight(.semibold)
@@ -963,7 +988,7 @@ private struct PublishingReminderSheet: View {
                         plan.publishLeadDays -= 1
                     }
                     VStack(spacing: 1) {
-                        Text(plan.publishLeadDays.arabicDigits)
+                        Text(plan.publishLeadDays.appDigits)
                             .font(TamrinFont.font(size: 66, weight: .bold)).monospacedDigit()
                             .contentTransition(.numericText())
                         Text(plan.publishLeadDays == 1 ? "يوم قبله" : "أيام قبله")
@@ -993,9 +1018,7 @@ private struct PublishingReminderSheet: View {
             // detent follows the content rather than the NavigationStack.
             .sheetContentHeight()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .navigationTitle("متى نجهّزه للإرسال؟")
-            .navigationSubtitle("بنذكّرك أنت بس، والأعضاء ما يشوفونه إلا بعد الإرسال")
-            .navigationBarTitleDisplayMode(.inline)
+            .sheetTitle("متى نجهّزه للإرسال؟", subtitle: "بنذكّرك أنت بس، وما يشوفونه إلا بعد الإرسال")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("تم") { dismiss() }.fontWeight(.semibold)
@@ -1007,14 +1030,254 @@ private struct PublishingReminderSheet: View {
     }
 }
 
-/// Venue search. A `NavigationStack` with the system search field and a plain
-/// `List` of results — the same shape Maps uses — plus `ContentUnavailableView`
-/// for the empty state. Full height is deliberate here: the keyboard is up and
-/// the result list grows, which is exactly when iOS uses a full-height sheet.
+/// Picking a venue is two different jobs, so the sheet asks which one first.
+/// A custom venue — the rest house, the neighbourhood pitch — has no entry on
+/// the map, so searching for it is pointless and the organizer describes it by
+/// hand instead. A rented pitch is commercial, so it is found by search. The
+/// choice is pushed onto a `NavigationStack`, so «رجوع» returns to it rather
+/// than closing the sheet.
 private struct LocationSheet: View {
     @Binding var plan: PlanDraft
     @Bindable var search: LocationSearchService
     @Environment(\.dismiss) private var dismiss
+    @State private var path: [FeedVenueKind] = []
+    @State private var detent: PresentationDetent = .medium
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            VenueKindPicker(selected: plan.locationName.isEmpty ? nil : plan.venueKind) { kind in
+                path = [kind]
+            }
+            .sheetTitle("وين تلعبون؟", subtitle: "اختر نوع الملعب")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("إلغاء", role: .cancel) { dismiss() }
+                }
+            }
+            .navigationDestination(for: FeedVenueKind.self) { kind in
+                switch kind {
+                case .custom:
+                    CustomVenueForm(plan: $plan) { dismiss() }
+                case .rented:
+                    RentedVenueSearch(plan: $plan, search: search) { dismiss() }
+                }
+            }
+        }
+        .environment(\.layoutDirection, .rightToLeft)
+        .presentationDetents([.medium, .large], selection: $detent)
+        .presentationDragIndicator(.visible)
+        .presentationBackground(TamrinTheme.sheet)
+        // Both destinations raise the keyboard, so they take the whole sheet
+        // while the choice screen stays a short card.
+        .onChange(of: path) { _, newPath in
+            detent = newPath.isEmpty ? .medium : .large
+        }
+        .onAppear {
+            // Re-opening an answered tile lands on the step that answered it.
+            if !plan.locationName.isEmpty { path = [plan.venueKind] }
+        }
+    }
+}
+
+private struct VenueKindPicker: View {
+    var selected: FeedVenueKind?
+    let choose: (FeedVenueKind) -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            ForEach(FeedVenueKind.allCases, id: \.self) { kind in
+                Button {
+                    Haptics.selection()
+                    choose(kind)
+                } label: {
+                    HStack(spacing: 14) {
+                        Image(systemName: kind.symbol)
+                            .font(.system(size: 19, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 46, height: 46)
+                            .background(Color.accentColor, in: .circle)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(kind.title)
+                                .font(TamrinFont.headline)
+                                .foregroundStyle(.primary)
+                            Text(kind.detail)
+                                .font(TamrinFont.caption)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer(minLength: 6)
+
+                        Image(systemName: selected == kind ? "checkmark.circle.fill" : "chevron.left")
+                            .font(.footnote.bold())
+                            .foregroundStyle(selected == kind ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.tertiary))
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(TamrinTheme.card, in: .rect(cornerRadius: 22, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(selected == kind ? .isSelected : [])
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 22)
+        .padding(.top, 14)
+    }
+}
+
+/// A venue only the team knows can't be searched for, so it is described
+/// instead: a name, where it is, and — when they have one — a Maps link.
+/// Everything but the name is optional.
+private struct CustomVenueForm: View {
+    @Binding var plan: PlanDraft
+    let done: () -> Void
+
+    @State private var name = ""
+    @State private var address = ""
+    @State private var mapsLink = ""
+    @FocusState private var nameFocused: Bool
+
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var trimmedLink: String { mapsLink.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private var isLinkValid: Bool {
+        trimmedLink.isEmpty || URL(string: trimmedLink)?.scheme?.hasPrefix("http") == true
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                VenueField(title: "اسم الملعب", caption: nil) {
+                    TextField("مثلًا: ملعب الاستراحة", text: $name)
+                        .font(TamrinFont.headline)
+                        .focused($nameFocused)
+                        .submitLabel(.next)
+                }
+
+                VenueField(title: "موقعه", caption: "وصف يوصّل الأعضاء للمكان.") {
+                    TextField("مثلًا: حي النرجس، خلف مسجد الفرقان", text: $address, axis: .vertical)
+                        .font(TamrinFont.body)
+                        .lineLimit(1...3)
+                }
+
+                VenueField(title: "رابط قوقل مابز (اختياري)", caption: mapsCaption) {
+                    TextField(
+                        "رابط قوقل مابز",
+                        text: $mapsLink,
+                        prompt: Text(verbatim: "https://maps.app.goo.gl/…").foregroundStyle(.tertiary)
+                    )
+                        .font(TamrinFont.body)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .environment(\.layoutDirection, .leftToRight)
+                        .multilineTextAlignment(.leading)
+                }
+
+                Spacer(minLength: 24)
+            }
+            .padding(.horizontal, 22)
+            .padding(.top, 14)
+        }
+        // The scroll view paints itself over the sheet's presentation
+        // background, so the off-white is restored here — the white belongs to
+        // the fields, not to what they sit on.
+        .background(TamrinTheme.sheet)
+        .scrollDismissesKeyboard(.interactively)
+        .sheetTitle("ملعب مخصص", subtitle: "عرّف أعضاءك على ملعبكم")
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("تم", action: save)
+                    .fontWeight(.semibold)
+                    .disabled(trimmedName.isEmpty || !isLinkValid)
+            }
+        }
+        .onAppear {
+            guard plan.venueKind == .custom else { nameFocused = true; return }
+            name = plan.locationName
+            address = plan.locationAddress
+            mapsLink = plan.mapsURL
+            nameFocused = name.isEmpty
+        }
+    }
+
+    private var mapsCaption: String {
+        isLinkValid ? "إن كان لكم موقع على الخريطة، الصقه هنا." : "الرابط غير صحيح — الصق رابطًا يبدأ بـ https."
+    }
+
+    private func save() {
+        plan.venueKind = .custom
+        plan.locationName = trimmedName
+        plan.locationAddress = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        plan.mapsURL = trimmedLink
+        if let coordinate = Self.coordinate(from: trimmedLink) {
+            plan.latitude = coordinate.latitude
+            plan.longitude = coordinate.longitude
+        }
+        Haptics.impact(.light)
+        done()
+    }
+
+    /// Maps links carry the pin as `@lat,lng`, `?q=lat,lng` or `!3dlat!4dlng`.
+    /// Reading it saves the organizer from placing the pin a second time; a
+    /// shortened link (`maps.app.goo.gl/…`) carries nothing, and the venue then
+    /// simply keeps the default pin.
+    private static func coordinate(from link: String) -> CLLocationCoordinate2D? {
+        let patterns: [Regex<(Substring, Substring, Substring)>] = [
+            /[@=](-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)/,
+            /!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)/
+        ]
+        for pattern in patterns {
+            guard let match = link.firstMatch(of: pattern),
+                  let latitude = Double(match.1),
+                  let longitude = Double(match.2),
+                  (-90.0...90.0).contains(latitude),
+                  (-180.0...180.0).contains(longitude)
+            else { continue }
+            return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        }
+        return nil
+    }
+}
+
+private struct VenueField<Content: View>: View {
+    let title: String
+    let caption: String?
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(TamrinFont.font(size: 13, weight: .medium))
+                .foregroundStyle(.secondary)
+            content
+                .padding(.horizontal, 20)
+                .padding(.vertical, 15)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                // Fields are the white surface; the sheet under them is the
+                // off-white one. Never the other way round.
+                .background(TamrinTheme.card, in: .capsule)
+            if let caption {
+                Text(caption)
+                    .font(TamrinFont.footnote)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+}
+
+/// A commercial pitch is on the map, so this is a search: the system's own
+/// search field, pinned under the navigation bar, with results landing while
+/// the organizer types — no submit.
+private struct RentedVenueSearch: View {
+    @Binding var plan: PlanDraft
+    @Bindable var search: LocationSearchService
+    let done: () -> Void
+
     @State private var query = ""
 
     private var trimmedQuery: String {
@@ -1022,83 +1285,100 @@ private struct LocationSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                if search.results.isEmpty {
-                    Section {
-                        ContentUnavailableView {
-                            Label("ابحث عن الملعب", systemImage: "sportscourt")
-                        } description: {
-                            Text("اكتب اسم الملعب أو الحي ثم اضغط بحث، أو اعتمد الاسم كما كتبته إن كان مكانًا خاصًا.")
-                        } actions: {
-                            if !trimmedQuery.isEmpty {
-                                Button("اعتمد «\(trimmedQuery)»") {
-                                    plan.locationName = trimmedQuery
-                                    dismiss()
-                                }
-                                .buttonStyle(.glassProminent)
-                                .buttonBorderShape(.capsule)
-                                .controlSize(.large)
-                            }
-                        }
-                        .listRowBackground(Color.clear)
-                    }
-                } else {
-                    ForEach(search.results) { result in
-                        Button {
-                            plan.locationName = result.title
-                            plan.locationAddress = result.subtitle
-                            plan.latitude = result.latitude
-                            plan.longitude = result.longitude
-                            Haptics.impact(.light)
-                            dismiss()
-                        } label: {
-                            LabeledContent {
-                                Image(systemName: "chevron.left")
-                                    .font(.caption.bold())
-                                    .foregroundStyle(.tertiary)
-                            } label: {
-                                Label {
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text(result.title).font(TamrinFont.headline)
-                                        Text(result.subtitle)
-                                            .font(TamrinFont.caption)
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(2)
-                                    }
-                                } icon: {
-                                    Image(systemName: "mappin.circle.fill")
-                                        .foregroundStyle(.tint)
-                                }
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .transition(.blurReplace)
+        results
+            .sheetTitle("ملعب مؤجر", subtitle: "سيظهر العنوان لكل الأعضاء")
+            // Pinned under the bar, not auto-presented: presenting it takes
+            // the bar over and hides both the title and the back button.
+            .searchable(
+                text: $query,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "مثلًا: ملعب الحي"
+            )
+            .autocorrectionDisabled()
+            // Results follow the typing, one request per pause rather than one
+            // per keystroke; a new query cancels the sleep of the one before it.
+            .task(id: trimmedQuery) {
+                guard trimmedQuery.count > 2 else {
+                    await search.search(trimmedQuery)
+                    return
                 }
+                try? await Task.sleep(for: .milliseconds(280))
+                guard !Task.isCancelled else { return }
+                await search.search(trimmedQuery)
+            }
+            .onAppear {
+                if plan.venueKind == .rented { query = plan.locationName }
+            }
+    }
+
+    @ViewBuilder
+    private var results: some View {
+        if search.results.isEmpty {
+            ContentUnavailableView {
+                Label("ابحث عن الملعب", systemImage: "sportscourt")
+            } description: {
+                // No "use what I typed" escape hatch here: a venue that isn't on
+                // the map is a custom venue, and that is the other step.
+                Text(trimmedQuery.count > 2 && !search.isSearching
+                     ? "ما لقينا ملعبًا بهذا الاسم. جرّب اسمًا أقصر، أو ارجع واختر «ملعب مخصص»."
+                     : "اكتب اسم الملعب أو الحي وتظهر النتائج وأنت تكتب.")
+            }
+            .frame(maxHeight: .infinity)
+        } else {
+            List {
+                ForEach(search.results) { result in
+                    Button {
+                        select(
+                            name: result.title,
+                            address: result.subtitle,
+                            latitude: result.latitude,
+                            longitude: result.longitude
+                        )
+                    } label: {
+                        // An explicit row, not `LabeledContent`: a two-line
+                        // address pushes its trailing chevron onto a line of
+                        // its own there.
+                        HStack(spacing: 12) {
+                            Image(systemName: "mappin.circle.fill")
+                                .font(.title3)
+                                .foregroundStyle(.tint)
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(result.title).font(TamrinFont.headline)
+                                Text(result.subtitle)
+                                    .font(TamrinFont.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+
+                            Spacer(minLength: 6)
+
+                            Image(systemName: "chevron.left")
+                                .font(.caption.bold())
+                                .foregroundStyle(.tertiary)
+                        }
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .transition(.blurReplace)
             }
             .listStyle(.plain)
+            .scrollDismissesKeyboard(.immediately)
             .animation(.smooth(duration: 0.3), value: search.results.map(\.id))
-            .searchable(text: $query, prompt: "مثلًا: ملعب الحي")
-            .onSubmit(of: .search) {
-                Task { await search.search(trimmedQuery) }
-            }
-            .onChange(of: query) { _, newValue in
-                if newValue.isEmpty { search.results = [] }
-            }
-            .navigationTitle("وين تلعبون؟")
-            .navigationSubtitle("سيظهر العنوان لكل الأعضاء")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("إلغاء", role: .cancel) { dismiss() }
-                }
-            }
         }
-        .environment(\.layoutDirection, .rightToLeft)
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
-        .onAppear { query = plan.locationName }
+    }
+
+    private func select(name: String, address: String, latitude: Double? = nil, longitude: Double? = nil) {
+        plan.venueKind = .rented
+        plan.locationName = name
+        plan.locationAddress = address
+        // A rented pitch carries no hand-written directions of its own.
+        plan.mapsURL = ""
+        if let latitude { plan.latitude = latitude }
+        if let longitude { plan.longitude = longitude }
+        Haptics.impact(.light)
+        done()
     }
 }
 
@@ -1159,7 +1439,7 @@ private struct VenueCostSheet: View {
                         .contentTransition(.numericText())
                 }
                 Spacer()
-                Text("على \(plan.capacity.arabicDigits) لاعب")
+                Text("على \(plan.capacity.appDigits) لاعب")
                     .font(TamrinFont.caption)
                     .foregroundStyle(.secondary)
             }
@@ -1174,9 +1454,7 @@ private struct VenueCostSheet: View {
             // detent follows the content rather than the NavigationStack.
             .sheetContentHeight()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .navigationTitle("كم قيمة الملعب؟")
-            .navigationSubtitle("أدخل إجمالي الإيجار ونحسب القطة تلقائيًا")
-            .navigationBarTitleDisplayMode(.inline)
+            .sheetTitle("كم قيمة الملعب؟", subtitle: "أدخل إجمالي الإيجار ونحسب القطة تلقائيًا")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("اعتماد") { dismiss() }
@@ -1191,239 +1469,247 @@ private struct VenueCostSheet: View {
     }
 }
 
-// MARK: - Step 3: Members
+// MARK: - Step 3: Invite
 
-private struct MembersStepPage: View {
-    @Binding var draft: TeamDraft
-    let isCreating: Bool
-    let create: () -> Void
-    @State private var showContacts = false
-    @State private var manualName = ""
-    @FocusState private var fieldFocused: Bool
+/// By the time this step appears the group already exists, so the whole page is
+/// about getting its join link out: read it, copy it, or hand it straight to
+/// WhatsApp or Messages — the two apps organizers actually use to round people
+/// up. The system share sheet stays available for everything else.
+private struct InviteStepPage: View {
+    let team: FeedTeam
+    let planCount: Int
+    let done: () -> Void
+
+    @Environment(\.openURL) private var openURL
+    @State private var didCopy = false
+    @State private var appeared = false
+
+    /// The join link once the backend has issued one, otherwise the invite code
+    /// on its own — the code is enough to join from the "انضم بالرمز" screen.
+    private var shareValue: String {
+        team.inviteURL?.absoluteString ?? team.inviteCode
+    }
+
+    private var shareMessage: String {
+        team.inviteURL == nil
+            ? "انضم لمجموعة «\(team.name)» في تمرين برمز الدعوة: \(team.inviteCode)"
+            : "انضم لمجموعة «\(team.name)» في تمرين:\n\(shareValue)"
+    }
+
+    private var whatsAppURL: URL? {
+        URL(string: "whatsapp://send?text=\(shareMessage.urlQueryEncoded)")
+    }
+
+    private var messagesURL: URL? {
+        URL(string: "sms:&body=\(shareMessage.urlQueryEncoded)")
+    }
+
+    /// WhatsApp is hidden rather than shown broken when it isn't installed.
+    /// Needs `whatsapp` in LSApplicationQueriesSchemes to answer truthfully.
+    private var isWhatsAppInstalled: Bool {
+        guard let whatsAppURL else { return false }
+        return UIApplication.shared.canOpenURL(whatsAppURL)
+    }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("مين معك في\n«\(draft.teamName)»؟")
+            VStack(spacing: 20) {
+                teamBadge
+
+                VStack(spacing: 8) {
+                    Text("«\(team.name)» جاهزة!")
                         .font(TamrinFont.largeTitle)
                         .tracking(-0.8)
-                    Text("أضفهم الآن أو شارك رابط الدعوة بعد الإنشاء — الخطوة اختيارية.")
+                        .multilineTextAlignment(.center)
+                    Text(planCount == 1
+                         ? "التمرين ومواعيده القادمة صارت جاهزة. ارسل الرابط للأعضاء وخلهم ينضمون."
+                         : "\(planCount.appDigits) تمارين ومواعيدها صارت جاهزة. ارسل الرابط للأعضاء وخلهم ينضمون.")
                         .font(TamrinFont.body)
                         .foregroundStyle(.secondary)
-                }
-                .padding(.top, 8)
-
-                Button { showContacts = true } label: {
-                    HStack(spacing: 14) {
-                        Image(systemName: "person.crop.circle.badge.plus")
-                            .font(.title3.weight(.semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 46, height: 46)
-                            .background(Color.accentColor, in: .circle)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("أضف من جهات الاتصال").font(TamrinFont.headline)
-                            Text("اختر عدة أشخاص دفعة واحدة").font(TamrinFont.caption).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.left").font(.caption.bold()).foregroundStyle(.tertiary)
-                    }
-                    .padding(16)
-                    .background(TamrinTheme.glass, in: .rect(cornerRadius: 24))
-                    .shadow(color: .black.opacity(0.05), radius: 18, y: 9)
-                    .contentShape(.rect)
-                }
-                .buttonStyle(SpringCardPressStyle())
-
-                HStack(spacing: 10) {
-                    TextField("أو اكتب اسمًا يدويًا", text: $manualName)
-                        .focused($fieldFocused)
-                        .submitLabel(.done)
-                        .onSubmit(addManualName)
-                        .padding(.horizontal, 16)
-                        .frame(height: TamrinControlMetrics.actionHeight)
-                        .background(TamrinTheme.glass, in: .capsule)
-                    Button(action: addManualName) {
-                        Image(systemName: "plus")
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                            .frame(width: TamrinControlMetrics.actionHeight, height: TamrinControlMetrics.actionHeight)
-                            .background(Color.accentColor, in: .circle)
-                            .opacity(manualName.trimmingCharacters(in: .whitespaces).isEmpty ? 0.3 : 1)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(manualName.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 10)
                 }
 
-                if !draft.invitedNames.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        SectionEyebrow(text: "بانتظار الدعوة · \(draft.invitedNames.count.arabicDigits)")
-                        VStack(spacing: 0) {
-                            ForEach(draft.invitedNames, id: \.self) { name in
-                                HStack(spacing: 14) {
-                                    Text(String(name.prefix(1)))
-                                        .font(TamrinFont.headline)
-                                        .frame(width: 40, height: 40)
-                                        .background(TamrinTheme.secondary, in: .circle)
-                                    Text(name).font(TamrinFont.font(size: 17, weight: .medium))
-                                    Spacer()
-                                    Button {
-                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                                            draft.invitedNames.removeAll { $0 == name }
-                                        }
-                                    } label: {
-                                        Image(systemName: "xmark")
-                                            .font(.caption.bold())
-                                            .foregroundStyle(.secondary)
-                                            .frame(width: 30, height: 30)
-                                            .background(TamrinTheme.secondary.opacity(0.7), in: .circle)
-                                            .frame(width: TamrinControlMetrics.touchTarget, height: TamrinControlMetrics.touchTarget)
-                                            .contentShape(.rect)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                                .padding(.horizontal, 16)
-                                .frame(height: 60)
-                            }
-                        }
-                        .background(TamrinTheme.glass, in: .rect(cornerRadius: 24))
-                    }
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-                }
+                linkCard
+                copyButton
+                channels
 
-                Spacer(minLength: 30)
+                Spacer(minLength: 20)
             }
             .padding(.horizontal, 22)
-            .animation(.spring(response: 0.34, dampingFraction: 0.88), value: draft.invitedNames)
+            .padding(.top, 6)
+            .frame(maxWidth: .infinity)
         }
-        .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .bottom) {
-            TamrinActionButton(title: "أنشئ المجموعة", isLoading: isCreating, action: create)
+            TamrinActionButton(title: "ادخل إلى المجموعة", prominent: false, action: done)
                 .padding(.horizontal, 22)
                 .padding(.bottom, 10)
         }
-        .sheet(isPresented: $showContacts) {
-            ContactPicker(names: $draft.invitedNames).ignoresSafeArea()
-        }
-    }
-
-    private func addManualName() {
-        let name = manualName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
-        if !draft.invitedNames.contains(name) {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                draft.invitedNames.append(name)
-            }
-        }
-        manualName = ""
-        Haptics.impact(.light)
-    }
-}
-
-// MARK: - Success
-
-private struct CreationSuccessPage: View {
-    let team: FeedTeam
-    let draft: TeamDraft
-    let done: () -> Void
-    @State private var appeared = false
-
-    var body: some View {
-        VStack(spacing: 22) {
-            Spacer()
-
-            Group {
-                if let data = team.avatarData, let image = UIImage(data: data) {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 118, height: 118)
-                        .clipShape(.rect(cornerRadius: 38, style: .continuous))
-                } else {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 38, style: .continuous).fill(TamrinTheme.ink)
-                        Image(systemName: team.symbol)
-                            .font(.system(size: 46, weight: .semibold))
-                            .foregroundStyle(.white)
-                    }
-                    .frame(width: 118, height: 118)
-                }
-            }
-            .shadow(color: .black.opacity(0.16), radius: 30, y: 14)
-            .scaleEffect(appeared ? 1 : 0.6)
-            .animation(.spring(response: 0.5, dampingFraction: 0.68), value: appeared)
-
-            VStack(spacing: 8) {
-                Text("«\(team.name)» جاهزة!")
-                    .font(TamrinFont.largeTitle)
-                    .tracking(-0.8)
-                Text(draft.plans.count == 1
-                     ? "التمرين ومواعيده القادمة صارت جاهزة. شارك الرمز وخل الربع يوفرون أماكنهم."
-                     : "\(draft.plans.count.arabicDigits) تمارين ومواعيدها صارت جاهزة. شارك الرمز وخل الربع يوفرون أماكنهم.")
-                    .font(TamrinFont.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 30)
-            }
-
-            VStack(spacing: 6) {
-                Text("رمز الانضمام")
-                    .font(TamrinFont.font(size: 12, weight: .medium))
-                    .foregroundStyle(.tertiary)
-                Text(team.inviteCode)
-                    .font(TamrinFont.font(size: 28, weight: .bold))
-                    .tracking(5)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 18)
-            .background(TamrinTheme.glass, in: .rect(cornerRadius: 26))
-            .padding(.horizontal, 40)
-
-            Spacer()
-
-            VStack(spacing: 10) {
-                if let url = team.inviteURL {
-                    ShareLink(
-                        item: url,
-                        subject: Text("انضم لمجموعة \(team.name)"),
-                        message: Text("هذا رابط الانضمام لمجموعتنا في تمرين")
-                    ) {
-                        Label("شارك رابط الدعوة", systemImage: "square.and.arrow.up")
-                            .font(TamrinFont.headline)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .tamrinPrimaryAction()
-                }
-
-                TamrinActionButton(title: "ادخل إلى المجموعة", prominent: false, action: done)
-            }
-        }
-        .padding(22)
-        .environment(\.layoutDirection, .rightToLeft)
         .onAppear { appeared = true }
     }
+
+    private var teamBadge: some View {
+        Group {
+            if let data = team.avatarData, let image = UIImage(data: data) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 96, height: 96)
+                    .clipShape(.rect(cornerRadius: 30, style: .continuous))
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 30, style: .continuous).fill(TamrinTheme.ink)
+                    Image(systemName: team.symbol)
+                        .font(.system(size: 38, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 96, height: 96)
+            }
+        }
+        .shadow(color: .black.opacity(0.16), radius: 26, y: 12)
+        .scaleEffect(appeared ? 1 : 0.6)
+        .animation(.spring(response: 0.5, dampingFraction: 0.68), value: appeared)
+    }
+
+    /// The link itself, shown so the organizer can see what they're about to
+    /// send, with the join code underneath for anyone typing it by hand.
+    private var linkCard: some View {
+        VStack(spacing: 14) {
+            HStack(spacing: 12) {
+                Image(systemName: "link")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.tint)
+                    .frame(width: 34, height: 34)
+                    .background(.tint.opacity(0.14), in: .circle)
+                Text(displayLink)
+                    .font(TamrinFont.font(size: 15, weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    // A latin URL reads left-to-right even on this RTL page.
+                    .environment(\.layoutDirection, .leftToRight)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Divider().opacity(0.5)
+
+            HStack {
+                Text("رمز الانضمام")
+                    .font(TamrinFont.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(team.inviteCode)
+                    .font(TamrinFont.font(size: 18, weight: .bold))
+                    .kerning(3)
+            }
+        }
+        .padding(16)
+        .background(TamrinTheme.glass, in: .rect(cornerRadius: 24))
+        .shadow(color: .black.opacity(0.05), radius: 18, y: 9)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("رابط الانضمام، رمز الدعوة \(team.inviteCode)")
+    }
+
+    private var displayLink: String {
+        guard let url = team.inviteURL else { return team.inviteCode }
+        return url.absoluteString.replacingOccurrences(of: "https://", with: "")
+    }
+
+    private var copyButton: some View {
+        Button {
+            UIPasteboard.general.string = shareValue
+            Haptics.success()
+            withAnimation(.snappy) { didCopy = true }
+            Task {
+                try? await Task.sleep(for: .seconds(2))
+                withAnimation(.snappy) { didCopy = false }
+            }
+        } label: {
+            Label(didCopy ? "تم نسخ الرابط" : "انسخ الرابط",
+                  systemImage: didCopy ? "checkmark" : "doc.on.doc")
+                .contentTransition(.symbolEffect(.replace))
+                .frame(maxWidth: .infinity)
+        }
+        .tamrinPrimaryAction()
+        .accessibilityLabel("انسخ رابط الانضمام")
+    }
+
+    private var channels: some View {
+        VStack(spacing: 12) {
+            Text("أو أرسله مباشرة عبر")
+                .font(TamrinFont.footnote)
+                .foregroundStyle(.tertiary)
+
+            HStack(spacing: 10) {
+                if isWhatsAppInstalled, let whatsAppURL {
+                    Button {
+                        Haptics.impact(.light)
+                        openURL(whatsAppURL)
+                    } label: {
+                        ShareChannelLabel(title: "واتساب", symbol: "bubble.left.fill", tint: .whatsAppGreen)
+                    }
+                    .buttonStyle(SpringCardPressStyle())
+                }
+
+                if let messagesURL {
+                    Button {
+                        Haptics.impact(.light)
+                        openURL(messagesURL)
+                    } label: {
+                        ShareChannelLabel(title: "الرسائل", symbol: "message.fill", tint: .blue)
+                    }
+                    .buttonStyle(SpringCardPressStyle())
+                }
+
+                ShareLink(
+                    item: shareValue,
+                    subject: Text("انضم لمجموعة \(team.name)"),
+                    message: Text(shareMessage)
+                ) {
+                    ShareChannelLabel(title: "غير ذلك", symbol: "square.and.arrow.up", tint: .secondary)
+                }
+                .buttonStyle(SpringCardPressStyle())
+            }
+        }
+        .padding(.top, 4)
+    }
 }
 
-// Ported from the designer's OnboardingViews.swift — used by MembersStepPage.
-struct ContactPicker: UIViewControllerRepresentable {
-    @Binding var names: [String]
-    @Environment(\.dismiss) private var dismiss
+/// One share destination — a tinted glyph over its name, sized so two or three
+/// of them fill the row evenly.
+private struct ShareChannelLabel: View {
+    let title: String
+    let symbol: String
+    let tint: Color
 
-    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
-    func makeUIViewController(context: Context) -> CNContactPickerViewController {
-        let picker = CNContactPickerViewController(); picker.delegate = context.coordinator
-        picker.predicateForEnablingContact = NSPredicate(value: true); return picker
-    }
-    func updateUIViewController(_ uiViewController: CNContactPickerViewController, context: Context) {}
-
-    final class Coordinator: NSObject, CNContactPickerDelegate {
-        var parent: ContactPicker
-        init(parent: ContactPicker) { self.parent = parent }
-        func contactPicker(_ picker: CNContactPickerViewController, didSelect contacts: [CNContact]) {
-            let formatter = CNContactFormatter()
-            let newNames = contacts.compactMap { formatter.string(from: $0) }.filter { !$0.isEmpty }
-            parent.names = Array(Set(parent.names + newNames)).sorted(); parent.dismiss()
+    var body: some View {
+        VStack(spacing: 9) {
+            Image(systemName: symbol)
+                .font(.system(size: 21, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 50, height: 50)
+                .background(tint, in: .circle)
+            Text(title)
+                .font(TamrinFont.font(size: 13, weight: .medium))
+                .foregroundStyle(.primary)
         }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(TamrinTheme.glass, in: .rect(cornerRadius: 24))
+        .contentShape(.rect)
+    }
+}
+
+private extension Color {
+    static let whatsAppGreen = Color(red: 0.15, green: 0.83, blue: 0.40)
+}
+
+private extension String {
+    /// Percent-encoding for a value going into a URL query, escaping `&`, `=`
+    /// and `+` too — the share text carries a link and arabic punctuation.
+    var urlQueryEncoded: String {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
+        return addingPercentEncoding(withAllowedCharacters: allowed) ?? self
     }
 }
 
