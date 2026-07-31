@@ -28,6 +28,12 @@ struct DesignerHomeView: View {
     @State private var isMenuOpen = false
     @State private var menuDragProgress: CGFloat = 0
     @State private var isMenuGestureActive = false
+    /// A horizontal pan's release must not read as a card tap: the poster card
+    /// fills the screen, so a drawer swipe never leaves the button's bounds and
+    /// would otherwise still fire it. Tracked here — not on the card — because
+    /// a DragGesture attached to scroll content blocks the ScrollView's pan,
+    /// while this root-level gesture observes without blocking.
+    @State private var sawHorizontalPan = false
     @State private var didMenuHaptic = false
     @State private var showPlanDetails = false
     @State private var showProfile = false
@@ -252,6 +258,7 @@ struct DesignerHomeView: View {
                                     registeredCount: feed.registeredCount(for: occurrence),
                                     actions: cardActions(for: occurrence)
                                 ) {
+                                    guard !sawHorizontalPan else { return }
                                     Haptics.impact(.light)
                                     registrationEntryEventID = nil
                                     selected = occurrence
@@ -274,6 +281,7 @@ struct DesignerHomeView: View {
                                             registeredCount: feed.registeredCount(for: occurrence),
                                             actions: cardActions(for: occurrence)
                                         ) {
+                                            guard !sawHorizontalPan else { return }
                                             Haptics.impact(.light)
                                             registrationEntryEventID = nil
                                             selected = occurrence
@@ -287,7 +295,13 @@ struct DesignerHomeView: View {
                                 .scrollTargetLayout()
                                 .padding(.horizontal, 20)
                             }
-                            .scrollTargetBehavior(.viewAligned(limitBehavior: .always))
+                            // .alwaysByOne, not .always: cards are container−64
+                            // tall with 110 of spacing, so the next snap point
+                            // sits 46pt beyond one container length — the most
+                            // .always lets a swipe travel. Under .always every
+                            // swipe was clamped short of the next card and
+                            // sprang back, locking the stack on the first card.
+                            .scrollTargetBehavior(.viewAligned(limitBehavior: .alwaysByOne))
                             .scrollPosition(id: $scrolledID)
                             .refreshable { await feed.refresh() }
                         }
@@ -649,11 +663,15 @@ struct DesignerHomeView: View {
                 if !isMenuGestureActive {
                     let isHorizontal = abs(value.translation.width) > abs(value.translation.height) * 1.15
                     guard isHorizontal else { return }
+                    // Suppress the card tap for this touch in both directions,
+                    // even when the drawer below declines the swipe: a
+                    // horizontal pan is never a tap.
+                    sawHorizontalPan = true
                     // A horizontal pull anywhere on the page drives the drawer,
-                    // not just a narrow edge strip: the poster card drops its
-                    // own tap as soon as the finger pans, so the two no longer
-                    // compete for the same swipe. Vertical drags still belong
-                    // to the card scroll.
+                    // not just a narrow edge strip: the card tap is suppressed
+                    // via sawHorizontalPan as soon as the finger pans, so the
+                    // two no longer compete for the same swipe. Vertical drags
+                    // still belong to the card scroll.
                     //
                     // Direction decides intent — the drawer opens on a leftward
                     // pull and closes on the reverse, so a swipe the other way
@@ -674,6 +692,12 @@ struct DesignerHomeView: View {
                 }
             }
             .onEnded { value in
+                if sawHorizontalPan {
+                    // The card's button action fires synchronously with this
+                    // same touch-up; clearing a runloop turn later keeps that
+                    // release suppressed without racing it.
+                    DispatchQueue.main.async { sawHorizontalPan = false }
+                }
                 guard isMenuGestureActive else { return }
                 isMenuGestureActive = false
                 let predicted = isMenuOpen
