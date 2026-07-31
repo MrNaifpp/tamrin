@@ -340,7 +340,7 @@ private struct PaymentMethodDetailsEditor: View {
     @FocusState private var focusedField: Field?
 
     private enum Field: Hashable {
-        case phoneNumber, iban, accountNumber
+        case iban, accountNumber
     }
 
     init(
@@ -382,7 +382,11 @@ private struct PaymentMethodDetailsEditor: View {
             Text("لن تظهر هذه الوسيلة للاعب ضمن خيارات الدفع لهذا التمرين.")
         }
         .onAppear {
-            focusedField = provider.requiresPhone ? .phoneNumber : .iban
+            // The phone editor's UIKit field focuses itself in makeUIView; only
+            // the bank branch still drives focus through FocusState.
+            if !provider.requiresPhone {
+                focusedField = .iban
+            }
         }
     }
 
@@ -406,14 +410,23 @@ private struct PaymentMethodDetailsEditor: View {
     @ViewBuilder
     private var fields: some View {
         if provider.requiresPhone {
-            PaymentEditorField(
-                title: "رقم الجوال",
-                placeholder: "05xxxxxxxx",
-                text: $phoneNumber,
-                keyboardType: .phonePad,
-                textContentType: .telephoneNumber
-            )
-            .focused($focusedField, equals: .phoneNumber)
+            // UIKit-backed on purpose: on device, SwiftUI's TextField never drew
+            // digits freshly typed from the numeric keypads (.numberPad and
+            // .phonePad alike) in this sheet — the binding updated, but the field
+            // stayed visually empty until a deletion forced a re-layout. The IBAN
+            // branch escapes only because its keyboard is .asciiCapable.
+            // UITextField renders the same input correctly (verified on device).
+            VStack(alignment: .leading, spacing: 8) {
+                Text("رقم الجوال")
+                    .font(TamrinFont.font(size: 14, weight: .medium))
+                    .foregroundStyle(.secondary)
+
+                PhoneDigitsField(text: $phoneNumber, placeholder: "05xxxxxxxx")
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: 58)
+                    .background(TamrinTheme.glass, in: .rect(cornerRadius: 20, style: .continuous))
+            }
+            .accessibilityElement(children: .contain)
         } else {
             VStack(spacing: 14) {
                 PaymentEditorField(
@@ -510,6 +523,42 @@ private struct PaymentEditorField: View {
                 .background(TamrinTheme.glass, in: .rect(cornerRadius: 20, style: .continuous))
         }
         .accessibilityElement(children: .contain)
+    }
+}
+
+/// The phone-number input, backed by UITextField rather than SwiftUI's TextField.
+/// SwiftUI's field would not display digits as they were typed from numeric
+/// keypads here (the binding received them; the field stayed blank until a
+/// deletion forced a re-layout), so the digits go through UIKit directly.
+private struct PhoneDigitsField: UIViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+
+    func makeUIView(context: Context) -> UITextField {
+        let field = UITextField()
+        field.keyboardType = .numberPad
+        field.placeholder = placeholder
+        field.font = TamrinFont.uiFont(size: 17, weight: .medium)
+        field.textAlignment = .left
+        field.semanticContentAttribute = .forceLeftToRight
+        field.autocorrectionType = .no
+        field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        field.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .editingChanged)
+        // Mirrors the FocusState auto-focus the bank editor gets on push.
+        DispatchQueue.main.async { field.becomeFirstResponder() }
+        return field
+    }
+
+    func updateUIView(_ field: UITextField, context: Context) {
+        if field.text != text { field.text = text }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+
+    final class Coordinator: NSObject {
+        var text: Binding<String>
+        init(text: Binding<String>) { self.text = text }
+        @objc func changed(_ sender: UITextField) { text.wrappedValue = sender.text ?? "" }
     }
 }
 
