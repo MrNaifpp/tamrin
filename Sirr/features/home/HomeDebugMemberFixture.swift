@@ -6,6 +6,13 @@ import Foundation
 /// every interaction with these ids locally so testing it can never mutate
 /// production data.
 enum HomeDebugMemberFixture {
+    /// Opt-in, because the fixture used to appear in every Debug run: a brand
+    /// new account landed on a workspace full of events it had never joined,
+    /// which reads as a data leak rather than a test aid. Enable it from the
+    /// scheme — Product ▸ Scheme ▸ Edit Scheme ▸ Run ▸ Arguments ▸ Arguments
+    /// Passed On Launch — with `-demoMemberFixture`.
+    static let isEnabled = ProcessInfo.processInfo.arguments.contains("-demoMemberFixture")
+
     static let teamID = UUID(uuidString: "D3B00000-0000-4000-8000-000000000001")!
     static let organizerID = UUID(uuidString: "A3B00000-0000-4000-8000-000000000001")!
     static let memberFallbackID = UUID(uuidString: "F3B00000-0000-4000-8000-000000000001")!

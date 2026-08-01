@@ -333,6 +333,9 @@ final class HomeStore {
     /// creating corresponding backend records. Existing local participation is
     /// preserved across refreshes so register/decline/withdraw can be tested.
     private func installDebugMemberFixtureIfNeeded() {
+        // Off unless the scheme asks for it: see HomeDebugMemberFixture.isEnabled.
+        guard HomeDebugMemberFixture.isEnabled else { return }
+
         let teamID = HomeDebugMemberFixture.teamID
         if !teams.contains(where: { $0.id == teamID }) {
             teams.append(HomeDebugMemberFixture.team)
