@@ -551,17 +551,33 @@ struct BrandMark: View {
         .accessibilityHidden(true)
     }
 
-    /// The asset-catalog entry first — that one carries the light/dark/tinted
-    /// variants. `CFBundleIconFiles` is the flattened PNG the launcher uses and
-    /// only stands in when the catalog lookup misses.
+    /// The flattened PNG the launcher uses (`CFBundleIconFiles`), loaded from
+    /// its file rather than by asset name.
+    ///
+    /// `UIImage(named: "AppIcon")` is deliberately never called. Since the icon
+    /// became an Icon Composer document, that name resolves to a layered asset
+    /// carrying no bitmap, and *any* attempt to materialise its contents — even
+    /// reading `cgImage` to check whether it is usable — throws
+    /// `NSInternalInconsistencyException: Need an imageRef` from inside UIKit.
+    /// It cannot be probed defensively, only avoided. This crashed every new
+    /// account, because the one screen showing this mark is the Welcome screen
+    /// for a user with no groups.
     private static let appIcon: UIImage? = {
-        if let named = UIImage(named: "AppIcon") { return named }
         guard let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
               let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
-              let files = primary["CFBundleIconFiles"] as? [String],
-              let last = files.last
+              let files = primary["CFBundleIconFiles"] as? [String]
         else { return nil }
-        return UIImage(named: last)
+
+        // Largest last, and prefer the @2x/@3x file matching this screen.
+        for name in files.reversed() {
+            for suffix in ["@3x", "@2x", ""] {
+                if let path = Bundle.main.path(forResource: name + suffix, ofType: "png"),
+                   let image = UIImage(contentsOfFile: path) {
+                    return image
+                }
+            }
+        }
+        return nil
     }()
 }
 
