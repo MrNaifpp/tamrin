@@ -145,7 +145,7 @@ struct STCPaySheet: View {
             if showCopiedToast {
                 VStack {
                     Spacer()
-                    Text("تم نسخ الرقم")
+                    Text("نُسخ الرقم")
                         .font(TamrinFont.font(size: 14, weight: .bold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 16)

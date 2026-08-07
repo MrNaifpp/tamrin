@@ -41,13 +41,38 @@ struct SirrApp: App {
         UITextField.appearance().font = customFont
         UITextView.appearance().font = customFont
 
+        // The bar's own `titleTextAttributes` is the pre-iOS 13 path and no
+        // longer reaches a SwiftUI navigation bar: the title is drawn from the
+        // `UINavigationBarAppearance` objects, so a font set only on the bar is
+        // silently ignored and the title falls back to the system face. Each
+        // appearance is mutated in place, leaving its background configuration
+        // — and therefore every screen's `toolbarBackground` — untouched.
         let navigationBar = UINavigationBar.appearance()
-        navigationBar.titleTextAttributes = [
+        let titleAttributes: [NSAttributedString.Key: Any] = [
             .font: TamrinFont.uiFont(size: 17, weight: .bold)
         ]
-        navigationBar.largeTitleTextAttributes = [
+        let largeTitleAttributes: [NSAttributedString.Key: Any] = [
             .font: TamrinFont.uiFont(size: 34, weight: .bold)
         ]
+
+        func applyTitleFonts(to appearance: UINavigationBarAppearance) -> UINavigationBarAppearance {
+            appearance.titleTextAttributes = titleAttributes
+            appearance.largeTitleTextAttributes = largeTitleAttributes
+            return appearance
+        }
+
+        navigationBar.standardAppearance = applyTitleFonts(to: navigationBar.standardAppearance)
+        navigationBar.compactAppearance = applyTitleFonts(
+            to: navigationBar.compactAppearance ?? navigationBar.standardAppearance
+        )
+        // Left nil, this one falls back to `standardAppearance`; it is only
+        // styled when a bar already carries its own.
+        if let scrollEdge = navigationBar.scrollEdgeAppearance {
+            navigationBar.scrollEdgeAppearance = applyTitleFonts(to: scrollEdge)
+        }
+        if let compactScrollEdge = navigationBar.compactScrollEdgeAppearance {
+            navigationBar.compactScrollEdgeAppearance = applyTitleFonts(to: compactScrollEdge)
+        }
 
         let barButton = UIBarButtonItem.appearance()
         let barButtonFont: [NSAttributedString.Key: Any] = [

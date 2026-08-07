@@ -102,6 +102,17 @@ struct ProfileSettingsView: View {
                 Group {
                     if let avatarData, let image = UIImage(data: avatarData) {
                         Image(uiImage: image).resizable().scaledToFill()
+                    } else if let url = feed.avatarUrl.flatMap(URL.init(string:)) {
+                        // Nothing picked this session, but a photo is already on
+                        // the profile — show it rather than falling back to the
+                        // initial the user thought they had replaced.
+                        AsyncImage(url: url) { phase in
+                            if case .success(let image) = phase {
+                                image.resizable().scaledToFill()
+                            } else {
+                                Circle().fill(TamrinTheme.secondary)
+                            }
+                        }
                     } else {
                         Circle()
                             .fill(TamrinTheme.secondary)

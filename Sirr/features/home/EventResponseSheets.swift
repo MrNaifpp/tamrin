@@ -64,7 +64,7 @@ struct AdminSkipEventSheet: View {
     var body: some View {
         EventResponseFlow(
             title: "تخطي هذا الموعد",
-            message: "سيتم تخطي هذا الموعد فقط، وتستمر سلسلة التمارين والمواعيد القادمة كالمعتاد. إضافة السبب اختيارية.",
+            message: "يُتخطّى هذا الموعد وحده، وتستمر سلسلة التمارين والمواعيد القادمة كالمعتاد. إضافة السبب اختيارية.",
             confirmationTitle: "متابعة",
             reasonTitle: "سبب التخطي",
             reasonPrompt: "تحب تضيف سبب التخطي؟ اختياري، ويوصل للأعضاء مع الإشعار.",
@@ -72,6 +72,96 @@ struct AdminSkipEventSheet: View {
             reasons: Self.reasons,
             onConfirm: onConfirm
         )
+    }
+}
+
+/// Lets an administrator publish an event to the group. Publishing is the
+/// moment the members are notified, so it asks for the same deliberate slide
+/// the decline flow does — tinted blue, since nothing is being given up here.
+/// There is no reason to attach, so this single screen is the whole flow.
+struct AdminPublishEventSheet: View {
+    let eventTitle: String
+    let dayText: String
+    let onConfirm: @MainActor () async throws -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var isSubmitting = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 18) {
+                Label {
+                    Text("سيظهر «\(eventTitle)» لأعضاء المجموعة، ويصلهم إشعار يدعوهم إلى تمرين \(dayText).")
+                        .font(TamrinFont.body)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "megaphone.fill")
+                        .foregroundStyle(.blue)
+                        .symbolEffect(.pulse)
+                }
+                .labelStyle(.titleAndIcon)
+
+                if let errorMessage {
+                    Label(errorMessage, systemImage: "exclamationmark.circle.fill")
+                        .font(TamrinFont.footnote)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .transition(.blurReplace)
+                        .accessibilityAddTraits(.isStaticText)
+                }
+
+                SlideToConfirmButton(title: "اسحب لنشر التمرين", tint: .blue) {
+                    Task { await submit() }
+                }
+                .disabled(isSubmitting)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 18)
+            .padding(.bottom, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .sheetContentHeight()
+            .frame(maxHeight: .infinity, alignment: .top)
+            .animation(.smooth(duration: 0.28), value: errorMessage)
+            .navigationTitle("نشر التمرين")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("إلغاء", role: .cancel) { dismiss() }
+                        .disabled(isSubmitting)
+                }
+            }
+            .overlay {
+                if isSubmitting {
+                    ProgressView()
+                        .controlSize(.large)
+                        .padding(20)
+                        .background(.regularMaterial, in: .rect(cornerRadius: 20, style: .continuous))
+                        .transition(.blurReplace)
+                }
+            }
+            .animation(.smooth(duration: 0.2), value: isSubmitting)
+        }
+        .environment(\.layoutDirection, .rightToLeft)
+        .fittedSheet(minHeight: 180, includesNavigationBar: true)
+        .interactiveDismissDisabled(isSubmitting)
+    }
+
+    @MainActor
+    private func submit() async {
+        guard !isSubmitting else { return }
+        isSubmitting = true
+        errorMessage = nil
+
+        do {
+            try await onConfirm()
+            dismiss()
+        } catch {
+            let description = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+            errorMessage = description.isEmpty ? "تعذر نشر التمرين. حاول مرة أخرى." : description
+            isSubmitting = false
+        }
     }
 }
 
@@ -303,9 +393,11 @@ private struct EventReasonSheet: View {
 /// Slide-to-confirm, restored from the original decline experience: nothing
 /// happens until the knob is dragged most of the way across, so an accidental
 /// tap can never give up a seat. `leading` is the physical right edge in the
-/// app's RTL environment, so the drag runs right-to-left.
+/// app's RTL environment, so the drag runs right-to-left. The tint carries the
+/// weight of the action: red where something is given up, blue where it isn't.
 private struct SlideToConfirmButton: View {
     let title: String
+    var tint: Color = .red
     let confirm: () -> Void
 
     @State private var progress: CGFloat = 0
@@ -320,15 +412,15 @@ private struct SlideToConfirmButton: View {
             let travel = max(proxy.size.width - knob - 8, 1)
 
             ZStack(alignment: .leading) {
-                Capsule().fill(Color.red.opacity(0.16))
+                Capsule().fill(tint.opacity(0.16))
 
                 Text(title)
                     .font(TamrinFont.font(size: 14, weight: .bold))
-                    .foregroundStyle(.red.opacity(0.92 - Double(progress) * 0.65))
+                    .foregroundStyle(tint.opacity(0.92 - Double(progress) * 0.65))
                     .frame(maxWidth: .infinity)
 
                 Circle()
-                    .fill(.red)
+                    .fill(tint)
                     .frame(width: knob, height: knob)
                     .overlay {
                         Image(systemName: progress > 0.78 ? "checkmark" : "chevron.left.2")

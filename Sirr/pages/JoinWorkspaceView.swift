@@ -45,7 +45,7 @@ struct JoinWorkspaceView: View {
                         .font(.appBody)
                         .foregroundStyle(.white.opacity(0.9))
                     if preview.memberCount > 0 {
-                        Text("\(preview.memberCount) أعضاء")
+                        Text(preview.memberCount.counted(.member))
                             .font(.appCaption)
                             .foregroundStyle(.white.opacity(0.7))
                     }
@@ -122,7 +122,7 @@ struct JoinWorkspaceView: View {
         do {
             preview = try await WorkspaceService.shared.getInvitePreview(code: code)
         } catch {
-            loadError = "رابط الدعوة غير صالح أو تم إبطاله.\nاطلب رابطًا جديدًا من صاحب المجموعة."
+            loadError = "رابط الدعوة غير صالح أو مُبطَل.\nاطلب رابطًا جديدًا من صاحب المجموعة."
         }
     }
 

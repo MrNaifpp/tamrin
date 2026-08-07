@@ -55,6 +55,7 @@ struct WorkspaceSettingsSheet: View {
             }
         }
         .environment(\.layoutDirection, .rightToLeft)
+        .sheetPresentationHaptic()
         .task { await loadDetail() }
         .alert("إعادة تسمية المجموعة", isPresented: $showRename) {
             TextField("الاسم", text: $renameText)
@@ -70,7 +71,7 @@ struct WorkspaceSettingsSheet: View {
             Button("إلغاء", role: .cancel) {}
         } message: {
             Text(isOwner
-                 ? "سيتم حذف المجموعة وجميع تمارينها ومشاركيها نهائيًا. لا يمكن التراجع."
+                 ? "تُحذف المجموعة وجميع تمارينها ومشاركيها نهائيًا. لا يمكن التراجع."
                  : "ستفقد الوصول إلى تمارين هذه المجموعة وستُزال من التمارين القادمة.")
         }
         .confirmationDialog(
@@ -122,7 +123,7 @@ struct WorkspaceSettingsSheet: View {
             Text(detail?.workspace.name ?? workspace.name)
                 .font(.appSubheadline)
                 .foregroundStyle(.white)
-            Text("\(detail?.members.count ?? workspace.memberCount ?? 0) أعضاء" + (isOwner ? " · أنت المالك" : ""))
+            Text((detail?.members.count ?? workspace.memberCount ?? 0).counted(.member) + (isOwner ? " · أنت المالك" : ""))
                 .font(.appCaption)
                 .foregroundStyle(Color(white: 0.55))
             if isOwner {

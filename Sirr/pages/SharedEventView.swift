@@ -196,7 +196,7 @@ struct SharedEventView: View {
                         HStack(spacing: 10) {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundStyle(.green)
-                            Text("تم التسجيل بنجاح")
+                            Text("سُجّلت بنجاح")
                                 .font(.appBodySemibold)
                                 .foregroundStyle(.white)
                         }

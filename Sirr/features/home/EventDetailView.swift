@@ -13,8 +13,19 @@ struct EventDetailView: View {
     @State private var showPaymentReview = false
     @State private var paymentActionInFlight: UUID?
     @State private var memberAwaitingRejection: FeedMember?
-    @State private var paymentActionError: String?
+    @State private var actionErrorMessage: String?
     @State private var handledInitialRegistration = false
+    @State private var showManualAdd = false
+    @State private var showMemberReminder = false
+    @State private var reminderToast: String?
+    @State private var memberAwaitingRemoval: FeedMember?
+    @State private var memberInDetails: FeedMember?
+    @State private var removalInFlight: UUID?
+    @State private var showDeclinedResponses = false
+    /// Live top edge of the content panel, in screen coordinates. The blurred
+    /// artwork is revealed from here down, so the frost follows the panel
+    /// through every scroll and every added row.
+    @State private var panelTop: CGFloat = .greatestFiniteMagnitude
 
     private var roster: [FeedMember] { feed.roster(for: occurrence) }
     private var myRegistration: FeedMember? { feed.myRegistration(for: occurrence) }
@@ -24,66 +35,65 @@ struct EventDetailView: View {
         feed.declinedResponses(for: occurrence)
     }
 
+    /// My own photo can still be only in memory — the upload lags the pick,
+    /// and the roster's copy of it arrives a refresh later — so my row reads
+    /// it straight from the profile rather than waiting for a URL.
+    private func avatarData(for member: FeedMember) -> Data? {
+        member.userId == feed.currentUserID ? feed.avatarData : nil
+    }
+
+    /// Where this player sits in the order people registered — the roster
+    /// already arrives sorted by `joined_at`.
+    private func seatNumber(of member: FeedMember) -> Int? {
+        roster.firstIndex { $0.id == member.id }.map { $0 + 1 }
+    }
+
     var body: some View {
         ZStack {
             GeometryReader { proxy in
-                ZStack {
+                ZStack(alignment: .top) {
                     Image(artName)
                         .resizable().aspectRatio(contentMode: .fill)
                         .frame(width: proxy.size.width, height: proxy.size.height).clipped()
+
+                    // The same artwork, blurred, revealed only where the panel
+                    // is. Because both layers are the one photograph, the panel
+                    // edge dissolves as a change in focus rather than a veil
+                    // laid over the picture — and the mask is measured from the
+                    // panel's live position, so the frost travels with it.
                     Image(artName)
                         .resizable().aspectRatio(contentMode: .fill)
                         .frame(width: proxy.size.width, height: proxy.size.height).clipped()
                         .blur(radius: 26, opaque: true)
-                        .mask {
-                            LinearGradient(stops: [
-                                .init(color: .clear, location: 0),
-                                .init(color: .clear, location: 0.33),
-                                .init(color: .black, location: 0.46),
-                                .init(color: .black, location: 1)
-                            ], startPoint: .top, endPoint: .bottom)
+                        .mask(alignment: .top) { panelMask }
+
+                    LinearGradient(stops: [
+                        .init(color: .black.opacity(0.32), location: 0),
+                        .init(color: .black.opacity(0.06), location: 0.26),
+                        .init(color: .black.opacity(0.30), location: 0.55),
+                        .init(color: .black.opacity(0.58), location: 1)
+                    ], startPoint: .top, endPoint: .bottom)
+
+                    ScrollView(showsIndicators: false) {
+                        VStack(spacing: 0) {
+                            // The window onto the untouched artwork. Everything
+                            // after it travels with the panel.
+                            Color.clear
+                                .frame(height: Self.artworkWindow)
+
+                            contentPanel
+                                .frame(
+                                    minHeight: proxy.size.height - Self.artworkWindow,
+                                    alignment: .top
+                                )
+                                .onGeometryChange(for: CGFloat.self) {
+                                    $0.frame(in: .global).minY
+                                } action: { panelTop = $0 }
                         }
+                    }
                 }
             }
             .ignoresSafeArea()
-
-            LinearGradient(stops: [
-                .init(color: .black.opacity(0.32), location: 0),
-                .init(color: .black.opacity(0.06), location: 0.26),
-                .init(color: .black.opacity(0.30), location: 0.55),
-                .init(color: .black.opacity(0.58), location: 1)
-            ], startPoint: .top, endPoint: .bottom)
-            .ignoresSafeArea()
-
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 14) {
-                    heroTitle
-                        .padding(.top, 264)
-                        .padding(.bottom, 6)
-
-                    if occurrence.isCancelled {
-                        cancellationPanel
-                    } else if !feed.isCurrentTeamOwner {
-                        participationCTA
-                    }
-
-                    progressPanel
-
-                    if feed.isCurrentTeamOwner, !declinedResponses.isEmpty {
-                        declinedResponsesPanel
-                    }
-
-                    Text("القائمة")
-                        .font(TamrinFont.font(size: 15, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.75))
-                        .padding(.top, 8)
-                        .padding(.horizontal, 4)
-
-                    rosterRows
-                }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 40)
-            }
         }
         .overlay(alignment: .topLeading) {
             Button {
@@ -100,6 +110,19 @@ struct EventDetailView: View {
             .padding(.horizontal, 20)
             .padding(.top, 6)
             .accessibilityLabel("إغلاق")
+        }
+        .overlay(alignment: .top) {
+            if let reminderToast {
+                Label(reminderToast, systemImage: "checkmark.circle.fill")
+                    .font(TamrinFont.font(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: 44)
+                    .background(TamrinTheme.floatingChrome.opacity(0.92), in: .capsule)
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(20)
+            }
         }
         .environment(\.layoutDirection, .rightToLeft)
         .colorScheme(.dark)
@@ -159,21 +182,170 @@ struct EventDetailView: View {
         } message: {
             Text("سيُلغى حجز اللاعب وكل الضيوف المسجلين معه وتتحرر مقاعدهم.")
         }
-        .alert("تعذر تحديث الدفعة", isPresented: Binding(
-            get: { paymentActionError != nil },
-            set: { if !$0 { paymentActionError = nil } }
+        .fullScreenCover(isPresented: $showDeclinedResponses) {
+            DeclinedResponsesPage(
+                responses: declinedResponses,
+                reasonDisplay: declineReasonDisplay(for:)
+            )
+            // A cover is opaque by default. Clearing it is what lets the page
+            // sit over the exercise artwork as a blurred, dimmed overlay.
+            //
+            // The material must be resolved in the dark scheme: a presentation
+            // background does not inherit the detail screen's `.colorScheme`,
+            // and the light variant turns the blur into a near-white sheet that
+            // the page's white text disappears into.
+            .presentationBackground {
+                ZStack {
+                    Rectangle().fill(.ultraThinMaterial)
+                    Color.black.opacity(0.3)
+                }
+                .environment(\.colorScheme, .dark)
+            }
+        }
+        .sheet(isPresented: $showMemberReminder) {
+            MemberReminderSheet { kind in
+                let outcome = await feed.remindMembers(kind, on: occurrence)
+                switch outcome {
+                case .sent(let message):
+                    showReminderToast(message)
+                    return message
+                case .failure(let message):
+                    throw NSError(
+                        domain: "EventDetailView.MemberReminder",
+                        code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: message]
+                    )
+                }
+            }
+        }
+        .sheet(isPresented: $showManualAdd) {
+            ManualParticipantSheet(isPaid: occurrence.price > 0) { name in
+                let outcome = await feed.addManualParticipant(named: name, to: occurrence)
+                if case .failure(let message) = outcome { return message }
+                return nil
+            }
+        }
+        .sheet(item: $memberInDetails) { member in
+            PlayerDetailsSheet(
+                member: member,
+                avatarImageData: avatarData(for: member),
+                share: occurrence.price,
+                seatNumber: seatNumber(of: member),
+                // A free exercise has nothing to chase, a guest or a manually
+                // seated player has no account to notify, and nobody needs to
+                // be reminded of their own share.
+                onRemind: feed.isCurrentTeamOwner
+                    && occurrence.price > 0
+                    && member.userId != nil
+                    && member.userId != feed.currentUserID
+                    ? { await feed.remindPayment(member, on: occurrence) }
+                    : nil,
+                onRemove: feed.isCurrentTeamOwner
+                    ? { memberAwaitingRemoval = member }
+                    : nil
+            )
+        }
+        .alert("إزالة اللاعب؟", isPresented: Binding(
+            get: { memberAwaitingRemoval != nil },
+            set: { if !$0 { memberAwaitingRemoval = nil } }
         )) {
-            Button("حسنًا", role: .cancel) { paymentActionError = nil }
+            Button("إزالة", role: .destructive) {
+                if let member = memberAwaitingRemoval {
+                    removeParticipant(member)
+                }
+                memberAwaitingRemoval = nil
+            }
+            Button("تراجع", role: .cancel) { memberAwaitingRemoval = nil }
         } message: {
-            Text(paymentActionError ?? "")
+            Text("سيُزال \(memberAwaitingRemoval?.name ?? "اللاعب") من قائمة «\(occurrence.title)» ويتحرر مقعده.")
+        }
+        .alert("تعذر إكمال العملية", isPresented: Binding(
+            get: { actionErrorMessage != nil },
+            set: { if !$0 { actionErrorMessage = nil } }
+        )) {
+            Button("حسنًا", role: .cancel) { actionErrorMessage = nil }
+        } message: {
+            Text(actionErrorMessage ?? "")
                 .font(TamrinFont.body)
+        }
+    }
+
+    /// How much artwork stays sharp above the panel.
+    private static let artworkWindow: CGFloat = 300
+    /// The stretch over which the panel's frost dissolves in from the artwork.
+    private static let panelFadeHeight: CGFloat = 150
+    /// How far above the panel's edge that dissolve begins.
+    private static let panelFadeLead: CGFloat = 60
+
+    /// Everything the organizer reads or acts on lives in one container, and
+    /// the blur is that container's own background rather than a band painted
+    /// on the screen. Add rows or scroll and the frosted surface travels with
+    /// them, so no card is ever left sitting on bare artwork.
+    private var contentPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            heroTitle
+                .padding(.bottom, 6)
+
+            if occurrence.isCancelled {
+                cancellationPanel
+            } else if !feed.isCurrentTeamOwner {
+                participationCTA
+            }
+
+            // One row of square tiles rather than a wall of full-width rows.
+            // Whichever tiles apply share the width between them.
+            if !declinedResponses.isEmpty || canRemindMembers || hasDirections {
+                HStack(spacing: 10) {
+                    if !declinedResponses.isEmpty { declinedResponsesButton }
+                    if canRemindMembers { remindMembersButton }
+                    if hasDirections { directionsButton }
+                }
+            }
+
+            progressPanel
+
+            Text("القائمة")
+                .font(TamrinFont.font(size: 15, weight: .medium))
+                .foregroundStyle(.white.opacity(0.75))
+                .padding(.top, 8)
+                .padding(.horizontal, 4)
+
+            // Above the names, not after them: the organizer reaches it
+            // without scrolling past a full roster.
+            if canRegisterManually {
+                manualAddButton
+            }
+
+            rosterRows
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 26)
+        .padding(.bottom, 40)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Transparent above the panel, then a long dissolve into full frost. The
+    /// ramp starts a little before the panel's top edge so the title is already
+    /// sitting on softened artwork, exactly as it did when the mask was pinned
+    /// to the screen.
+    private var panelMask: some View {
+        VStack(spacing: 0) {
+            Color.clear
+                .frame(height: max(panelTop - Self.panelFadeLead, 0))
+            LinearGradient(
+                colors: [.black.opacity(0), .black],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: Self.panelFadeHeight)
+            Color.black
         }
     }
 
     private var heroTitle: some View {
         VStack(spacing: 7) {
             if occurrence.isCancelled {
-                Text("تم تخطي هذا الموعد")
+                Text("هذا الموعد متخطّى")
                     .font(TamrinFont.font(size: 13, weight: .bold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 13).padding(.vertical, 6)
@@ -207,14 +379,14 @@ struct EventDetailView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
-            .background(.white.opacity(0.12), in: .rect(cornerRadius: 18, style: .continuous))
+            .tamrinGlassCard()
         } else {
-            Text("تم تخطي تمرين هذا الأسبوع، وتستمر المواعيد القادمة كالمعتاد.")
+            Text("تمرين هذا الأسبوع متخطّى، وتستمر المواعيد القادمة كالمعتاد.")
                 .font(TamrinFont.font(size: 14, weight: .medium))
                 .foregroundStyle(.white.opacity(0.76))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(16)
-                .background(.white.opacity(0.12), in: .rect(cornerRadius: 18, style: .continuous))
+                .tamrinGlassCard()
         }
     }
 
@@ -288,7 +460,7 @@ struct EventDetailView: View {
                     }
                 }
                 .padding(16)
-                .background(.white.opacity(0.12), in: .rect(cornerRadius: 20, style: .continuous))
+                .tamrinGlassCard()
             } else {
                 Button { showWithdrawConfirm = true } label: {
                     HStack(spacing: 10) {
@@ -331,6 +503,12 @@ struct EventDetailView: View {
         }
     }
 
+    /// Clamped so an over-subscribed list cannot draw past the track.
+    private var filledFraction: CGFloat {
+        guard occurrence.capacity > 0 else { return 0 }
+        return min(CGFloat(confirmedCount) / CGFloat(occurrence.capacity), 1)
+    }
+
     private var progressPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -345,8 +523,22 @@ struct EventDetailView: View {
                     .foregroundStyle(.white)
                     .contentTransition(.numericText())
             }
-            ProgressView(value: Double(confirmedCount), total: Double(max(occurrence.capacity, 1)))
-                .tint(TamrinTheme.lime)
+            // Drawn rather than tinted: a `ProgressView` owns its 4pt height,
+            // and scaling it up stretches the caps with it. `.leading` is the
+            // right edge here, so the fill grows the way the page reads.
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.24))
+                    Capsule()
+                        .fill(.white)
+                        .frame(width: proxy.size.width * filledFraction)
+                }
+            }
+            .frame(height: 7)
+            .animation(.smooth(duration: 0.3), value: filledFraction)
+            .accessibilityElement()
+            .accessibilityLabel("المسجلون")
+            .accessibilityValue("\(confirmedCount.formatted()) من \(occurrence.capacity.formatted())")
             if waitingCount > 0 {
                 Text("\(waitingCount.formatted()) في قائمة الانتظار")
                     .font(TamrinFont.font(size: 12, weight: .medium))
@@ -354,39 +546,28 @@ struct EventDetailView: View {
             }
         }
         .padding(16)
-        .background(.white.opacity(0.12), in: .rect(cornerRadius: 18, style: .continuous))
+        .tamrinGlassCard()
     }
 
-    private var declinedResponsesPanel: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("المعتذرون")
-                .font(TamrinFont.font(size: 15, weight: .bold))
-                .foregroundStyle(.white)
-
-            VStack(alignment: .leading, spacing: 14) {
-                ForEach(declinedResponses) { response in
-                    HStack(alignment: .top, spacing: 12) {
-                        MemberAvatar(name: response.displayName, size: 32)
-
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(response.displayName)
-                                .font(TamrinFont.font(size: 14, weight: .medium))
-                                .foregroundStyle(.white)
-                            Text(declineReasonDisplay(for: response))
-                                .font(TamrinFont.font(size: 13, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.66))
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-
-                        Spacer(minLength: 0)
-                    }
-                    .accessibilityElement(children: .combine)
-                }
+    /// The list itself moved to its own page, so the detail screen keeps one
+    /// row per section: name, how many, and a chevron that says it opens.
+    private var declinedResponsesButton: some View {
+        Button {
+            showDeclinedResponses = true
+        } label: {
+            EventActionTile(symbol: "person.crop.circle.badge.xmark", title: "المعتذرون") {
+                Text(declinedResponses.count.formatted())
+                    .font(TamrinFont.font(size: 11, weight: .bold))
+                    .foregroundStyle(.white)
+                    .contentTransition(.numericText())
+                    .padding(.horizontal, 6)
+                    .frame(minWidth: 20, minHeight: 20)
+                    .background(.white.opacity(0.22), in: .capsule)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(.white.opacity(0.12), in: .rect(cornerRadius: 18, style: .continuous))
+        .buttonStyle(.plain)
+        .accessibilityLabel("المعتذرون، \(declinedResponses.count.formatted())")
+        .accessibilityHint("يفتح قائمة المعتذرين وأسبابهم")
     }
 
     private func declineReasonDisplay(for response: EventMemberResponseRecord) -> String {
@@ -412,38 +593,197 @@ struct EventDetailView: View {
                 .foregroundStyle(.white.opacity(0.65))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 22)
-                .background(.white.opacity(0.1), in: .rect(cornerRadius: 16, style: .continuous))
+                .tamrinGlassCard()
         } else {
+            // Tighter than the 14 the page uses between its sections, so the
+            // roster reads as one block of names rather than separate cards —
+            // while the manual-registration row above keeps that wider gap and
+            // stays visibly apart from the people.
             VStack(spacing: 8) {
                 ForEach(roster) { person in
-                    HStack(spacing: 12) {
-                        MemberAvatar(name: person.name)
-                        Text(person.name)
-                            .font(TamrinFont.font(size: 15, weight: .medium))
-                            .foregroundStyle(.white)
-                        Spacer()
-                        if person.status == .waitlisted {
-                            Image(systemName: "clock")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(.orange)
-                        } else if person.status == .paymentPending {
-                            if feed.isCurrentTeamOwner, person.userId != nil {
-                                paymentReviewActions(for: person)
-                            } else {
-                                Image(systemName: "creditcard.fill")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(.orange)
-                                    .accessibilityLabel("بانتظار تأكيد الدفع")
+                    MemberRowCard(
+                        name: person.name,
+                        subtitle: person.isManual ? "سجّله المشرف" : nil,
+                        avatarImageData: avatarData(for: person),
+                        avatarImageUrl: person.avatarUrl
+                    ) {
+                        HStack(spacing: 6) {
+                            rosterStatusAccessory(for: person)
+                            if feed.isCurrentTeamOwner {
+                                rosterMenu(for: person)
                             }
-                        } else {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(TamrinTheme.lime)
                         }
                     }
-                    .padding(.horizontal, 14).padding(.vertical, 11)
-                    .background(.white.opacity(0.1), in: .rect(cornerRadius: 16, style: .continuous))
+                    // A tap gesture rather than a Button: the card holds its own
+                    // menu, and a button inside a button swallows it.
+                    .contentShape(.rect)
+                    .onTapGesture { memberInDetails = person }
                 }
+            }
+        }
+    }
+
+    /// Only the states that need acting on carry a mark. A confirmed seat is
+    /// the norm on this list, so it shows nothing — being in the list is
+    /// already what says it.
+    @ViewBuilder
+    private func rosterStatusAccessory(for person: FeedMember) -> some View {
+        if person.status == .waitlisted {
+            Image(systemName: "clock")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.orange)
+        } else if person.status == .paymentPending {
+            if feed.isCurrentTeamOwner, person.userId != nil {
+                paymentReviewActions(for: person)
+            } else {
+                Image(systemName: "creditcard.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .accessibilityLabel("بانتظار تأكيد الدفع")
+            }
+        }
+    }
+
+    /// Manual registration is a real seat, so it follows the same rules as a
+    /// member's own: the exercise must be live and its list still open.
+    private var canRegisterManually: Bool {
+        feed.isCurrentTeamOwner && occurrence.isPublished && !occurrence.isCancelled
+    }
+
+    private func showReminderToast(_ message: String) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.86)) {
+            reminderToast = message
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2.4))
+            guard reminderToast == message else { return }
+            withAnimation(.easeOut(duration: 0.2)) { reminderToast = nil }
+        }
+    }
+
+    /// Directions need somewhere to go: a pin, or failing that a place name a
+    /// maps app can search for.
+    private var hasDirections: Bool {
+        (occurrence.latitude != nil && occurrence.longitude != nil)
+            || !occurrence.locationName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// A plain menu, not a popover: the choice is two labelled destinations,
+    /// which is exactly what the platform's own dropdown is for.
+    private var directionsButton: some View {
+        Menu {
+            // Each row carries the app's own mark rather than a generic
+            // symbol — a menu of destinations reads as the apps themselves.
+            // The catalogue images are template-rendered, so the menu tints
+            // them like any system glyph.
+            Button {
+                openDirections(.hudhud)
+            } label: {
+                Label { Text("هدهد") } icon: { Image("MapAppHudhud") }
+            }
+
+            Button {
+                openDirections(.googleMaps)
+            } label: {
+                Label { Text("خرائط قوقل") } icon: { Image("MapAppGoogleMaps") }
+            }
+        } label: {
+            EventActionTile(symbol: "arrow.triangle.turn.up.right.diamond.fill", title: "الاتجاهات")
+        }
+        .accessibilityLabel("الاتجاهات")
+        .accessibilityHint("يفتح قائمة تطبيقات الخرائط")
+    }
+
+    private func openDirections(_ provider: EventDirectionsProvider) {
+        let destination = EventDirectionsDestination(
+            latitude: occurrence.latitude,
+            longitude: occurrence.longitude,
+            name: occurrence.locationName
+        )
+        guard let url = provider.url(for: destination) else { return }
+        Haptics.impact(.light)
+        UIApplication.shared.open(url)
+    }
+
+    /// A reminder is only meaningful once the exercise is out and still live.
+    private var canRemindMembers: Bool {
+        feed.isCurrentTeamOwner && occurrence.isPublished && !occurrence.isCancelled
+    }
+
+    private var remindMembersButton: some View {
+        Button {
+            showMemberReminder = true
+        } label: {
+            EventActionTile(symbol: "bell.badge.fill", title: "إشعار الأعضاء")
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("إشعار الأعضاء")
+        .accessibilityHint("يفتح خيارات تذكير الأعضاء بالتسجيل أو بدفع القطة")
+    }
+
+    private var manualAddButton: some View {
+        Button {
+            showManualAdd = true
+        } label: {
+            // Centred label with a bare plus beside it: this row is an action,
+            // not a person, so it deliberately drops the avatar column the
+            // member cards above it line up on.
+            HStack(spacing: 8) {
+                Image(systemName: "plus")
+                    .font(.system(size: 15, weight: .semibold))
+                Text("تسجيل لاعب يدويًا")
+                    .font(TamrinFont.font(size: 15, weight: .medium))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, minHeight: 56)
+            .padding(.horizontal, 14)
+            .tamrinGlassCard()
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("تسجيل لاعب يدويًا")
+    }
+
+    @ViewBuilder
+    private func rosterMenu(for member: FeedMember) -> some View {
+        if removalInFlight == member.id {
+            ProgressView()
+                .tint(.white)
+                .frame(width: TamrinControlMetrics.touchTarget, height: TamrinControlMetrics.touchTarget)
+        } else {
+            Menu {
+                Button("تفاصيل اللاعب", systemImage: "info.circle") {
+                    memberInDetails = member
+                }
+                Button("إزالة اللاعب من التمرين", systemImage: "person.badge.minus", role: .destructive) {
+                    memberAwaitingRemoval = member
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .frame(
+                        width: TamrinControlMetrics.touchTarget,
+                        height: TamrinControlMetrics.touchTarget
+                    )
+                    .contentShape(.rect)
+            }
+            .accessibilityLabel("خيارات \(member.name)")
+        }
+    }
+
+    private func removeParticipant(_ member: FeedMember) {
+        guard removalInFlight == nil else { return }
+        removalInFlight = member.id
+        Task {
+            let outcome = await feed.removeParticipant(member, from: occurrence)
+            removalInFlight = nil
+            switch outcome {
+            case .success:
+                Haptics.success()
+            case .failure(let message):
+                actionErrorMessage = message
+                Haptics.error()
             }
         }
     }
@@ -496,7 +836,7 @@ struct EventDetailView: View {
             case .success:
                 Haptics.success()
             case .failure(let message):
-                paymentActionError = message
+                actionErrorMessage = message
                 Haptics.error()
             }
         }
@@ -512,26 +852,96 @@ struct EventDetailView: View {
             case .success:
                 Haptics.success()
             case .failure(let message):
-                paymentActionError = message
+                actionErrorMessage = message
                 Haptics.error()
             }
         }
     }
 }
 
-private struct MemberAvatar: View {
-    let name: String
-    var size: CGFloat = 34
+/// Who apologised and why, on its own page: a full-screen cover that rises from
+/// the bottom over the blurred, dimmed exercise artwork. The bar is a centred
+/// title with a single light circular Done button on the far side, and each
+/// person is one wide, softly rounded card — name over reason, avatar leading.
+private struct DeclinedResponsesPage: View {
+    let responses: [EventMemberResponseRecord]
+    let reasonDisplay: (EventMemberResponseRecord) -> String
+
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
-        Circle()
-            .fill(.white.opacity(0.28))
-            .frame(width: size, height: size)
-            .overlay {
-                Text(String(name.prefix(1)))
-                    .font(TamrinFont.font(size: size * 0.44, weight: .bold))
-                    .foregroundStyle(.white)
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 12) {
+                sectionHeader
+
+                VStack(spacing: 8) {
+                    ForEach(responses) { response in
+                        row(for: response)
+                    }
+                }
             }
-            .accessibilityHidden(true)
+            .padding(.horizontal, 20)
+            .padding(.top, 10)
+            .padding(.bottom, 40)
+        }
+        .safeAreaInset(edge: .top) { topBar }
+        .environment(\.layoutDirection, .rightToLeft)
+        .colorScheme(.dark)
+    }
+
+    private var topBar: some View {
+        ZStack {
+            Text("المعتذرون")
+                .font(TamrinFont.font(size: 17, weight: .bold))
+                .foregroundStyle(.white)
+
+            HStack {
+                Spacer(minLength: 0)
+
+                Button {
+                    dismiss()
+                } label: {
+                    Label("إغلاق", systemImage: "xmark")
+                        .labelStyle(.iconOnly)
+                        .font(.system(size: 17, weight: .semibold))
+                        .frame(
+                            width: TamrinControlMetrics.glassIconContent,
+                            height: TamrinControlMetrics.glassIconContent
+                        )
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .controlSize(.regular)
+                .accessibilityLabel("إغلاق")
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 4)
+        .padding(.bottom, 16)
+    }
+
+    private var sectionHeader: some View {
+        HStack(spacing: 8) {
+            Text("اعتذروا")
+                .font(TamrinFont.font(size: 15, weight: .medium))
+                .foregroundStyle(.white.opacity(0.55))
+
+            Spacer(minLength: 0)
+
+            Text("الإجمالي: \(responses.count.formatted())")
+                .font(TamrinFont.font(size: 14, weight: .regular))
+                .foregroundStyle(.white.opacity(0.45))
+        }
+        .padding(.horizontal, 4)
+    }
+
+    private func row(for response: EventMemberResponseRecord) -> some View {
+        MemberRowCard(
+            name: response.displayName,
+            subtitle: reasonDisplay(response),
+            avatarImageUrl: response.avatarUrl
+        )
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -720,10 +1130,14 @@ struct RegistrationFlowSheet: View {
                         Spacer(minLength: 0)
                     }
                     .padding(12)
-                    .background(.white.opacity(0.08), in: .rect(cornerRadius: 18, style: .continuous))
+                    .tamrinGlassCard()
 
                     HStack(spacing: 12) {
-                        MemberAvatar(name: feed.profileName)
+                        MemberAvatar(
+                            name: feed.profileName,
+                            imageData: feed.avatarData,
+                            imageUrl: feed.avatarUrl
+                        )
                         VStack(alignment: .leading, spacing: 2) {
                             Text(feed.profileName.isEmpty ? "أنا" : feed.profileName)
                                 .font(TamrinFont.font(size: 15, weight: .bold))
@@ -753,7 +1167,9 @@ struct RegistrationFlowSheet: View {
                                         .focused($focusedGuest, equals: index)
                                         .padding(.horizontal, 14)
                                         .frame(height: 48)
-                                        .background(.white.opacity(0.08), in: .rect(cornerRadius: 16, style: .continuous))
+                                        // A text field, not a card: it keeps the
+                                        // app's capsule input shape.
+                                        .background(.white.opacity(0.08), in: .capsule)
 
                                     Button {
                                         guestNames.remove(at: index)
@@ -855,7 +1271,7 @@ struct RegistrationFlowSheet: View {
                                     .foregroundStyle(.white)
                             }
                             .padding(15)
-                            .background(.white.opacity(0.07), in: .rect(cornerRadius: 18, style: .continuous))
+                            .tamrinGlassCard()
                         }
                     }
                     .padding(.horizontal, 20)
@@ -891,7 +1307,7 @@ struct RegistrationFlowSheet: View {
                                 .font(TamrinFont.font(size: 27, weight: .bold))
                                 .foregroundStyle(.white)
                             if displayedGroupSize > 1 {
-                                Text("لعدد \(displayedGroupSize.formatted()) لاعبين")
+                                Text("لعدد \(displayedGroupSize.counted(.player))")
                                     .font(TamrinFont.font(size: 12, weight: .medium))
                                     .foregroundStyle(.white.opacity(0.48))
                             }
@@ -937,7 +1353,7 @@ struct RegistrationFlowSheet: View {
                     primaryButton(
                         title: destination.status == .free
                             ? "تأكيد التسجيل"
-                            : (destination.provider == .cash ? "سأسدد في الملعب" : "تم التحويل"),
+                            : (destination.provider == .cash ? "سأسدد في الملعب" : "حوّلت المبلغ"),
                         color: destination.provider?.brandColor ?? Color(red: 0.20, green: 0.47, blue: 0.96),
                         isLoading: submitting,
                         isEnabled: !submitting
@@ -962,8 +1378,8 @@ struct RegistrationFlowSheet: View {
             .frame(width: 76, height: 76)
 
             Text(destination?.status == .free || destination?.provider == .cash
-                 ? "تم تسجيلك"
-                 : "تم تسجيل التحويل")
+                 ? "سُجّلت في التمرين"
+                 : "سُجّل تحويلك")
                 .font(TamrinFont.font(size: 24, weight: .bold))
                 .foregroundStyle(.white)
 
@@ -1031,7 +1447,7 @@ struct RegistrationFlowSheet: View {
                 title: "رقم الجوال",
                 displayedValue: STCPay.displayForm(mobileNumber),
                 copiedValue: mobileNumber,
-                copiedLabel: "تم نسخ رقم الجوال"
+                copiedLabel: "نُسخ رقم الجوال"
             )
         } else if let provider = destination.provider, provider.requiresIBAN {
             if let iban = destination.iban, !iban.isEmpty {
@@ -1039,7 +1455,7 @@ struct RegistrationFlowSheet: View {
                     title: "IBAN",
                     displayedValue: groupedIBAN(iban),
                     copiedValue: iban.replacingOccurrences(of: " ", with: "").uppercased(),
-                    copiedLabel: "تم نسخ الآيبان"
+                    copiedLabel: "نُسخ الآيبان"
                 )
             }
             if let accountNumber = destination.accountNumber, !accountNumber.isEmpty {
@@ -1047,7 +1463,7 @@ struct RegistrationFlowSheet: View {
                     title: "رقم الحساب",
                     displayedValue: accountNumber,
                     copiedValue: accountNumber,
-                    copiedLabel: "تم نسخ رقم الحساب"
+                    copiedLabel: "نُسخ رقم الحساب"
                 )
             }
         } else if destination.provider == .cash {
@@ -1056,7 +1472,7 @@ struct RegistrationFlowSheet: View {
                 .foregroundStyle(.white.opacity(0.78))
                 .padding(15)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.white.opacity(0.08), in: .rect(cornerRadius: 18, style: .continuous))
+                .tamrinGlassCard()
         }
     }
 
@@ -1096,7 +1512,7 @@ struct RegistrationFlowSheet: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white.opacity(0.08), in: .rect(cornerRadius: 18, style: .continuous))
+        .tamrinGlassCard()
     }
 
     private func primaryButton(
@@ -1122,30 +1538,21 @@ struct RegistrationFlowSheet: View {
             destination = loadedDestination.selecting(method)
             step = .details
         } label: {
-            HStack(spacing: 14) {
-                PaymentProviderLogo(provider: method.provider, size: 52)
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(method.provider.displayName)
-                        .font(TamrinFont.font(size: 17, weight: .bold))
-                        .foregroundStyle(.white)
-                    Text(paymentMethodSubtitle(method))
-                        .font(TamrinFont.font(size: 12, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.52))
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 8)
-
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 14, weight: .bold))
+            TamrinRowCard(
+                title: method.provider.displayName,
+                subtitle: paymentMethodSubtitle(method)
+            ) {
+                PaymentProviderLogo(
+                    provider: method.provider,
+                    size: TamrinRowCard<EmptyView, EmptyView>.leadingSize
+                )
+                .accessibilityHidden(true)
+            } accessory: {
+                Image(systemName: "chevron.forward")
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.55))
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, minHeight: 78)
-            .background(method.provider.brandSurfaceColor, in: .rect(cornerRadius: 22, style: .continuous))
-            .contentShape(.rect(cornerRadius: 22, style: .continuous))
+            .contentShape(.rect(cornerRadius: TamrinCard.cornerRadius, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(method.provider.displayName)
@@ -1271,4 +1678,41 @@ struct RegistrationFlowSheet: View {
 #Preview {
     let feed = HomeStore.preview
     return EventDetailView(feed: feed, occurrence: feed.occurrences[0], artName: "ExerciseArt1")
+}
+
+
+/// One square action above the roster: the symbol on top, the label under it,
+/// and an optional badge beside the symbol. Three of these share a row, so the
+/// shape is fixed here rather than at each call site.
+struct EventActionTile<Badge: View>: View {
+    let symbol: String
+    let title: String
+    @ViewBuilder var badge: Badge
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: symbol)
+                .font(.system(size: 19, weight: .semibold))
+                .frame(height: 24)
+
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(TamrinFont.font(size: 13, weight: .medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                badge
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 8)
+        .frame(maxWidth: .infinity, minHeight: 88)
+        .tamrinGlassCard()
+        .contentShape(.rect)
+    }
+}
+
+extension EventActionTile where Badge == EmptyView {
+    init(symbol: String, title: String) {
+        self.init(symbol: symbol, title: title) { EmptyView() }
+    }
 }

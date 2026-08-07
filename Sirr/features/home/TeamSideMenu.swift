@@ -167,7 +167,7 @@ struct TeamSideMenu: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(team.name)
-                    .accessibilityValue(isSelected ? "المجموعة الحالية" : "\(team.memberCount) عضو")
+                    .accessibilityValue(isSelected ? "المجموعة الحالية" : team.memberCount.counted(.member))
                     .accessibilityHint(isSelected ? "المجموعة محددة حاليًا" : "التبديل إلى هذه المجموعة")
                     .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
@@ -221,7 +221,11 @@ struct TeamSideMenu: View {
     private func profileButton(width: CGFloat) -> some View {
         Button(action: openSettings) {
             HStack(spacing: 11) {
-                MenuProfileAvatar(name: feed.profileName, avatarData: feed.avatarData)
+                MenuProfileAvatar(
+                    name: feed.profileName,
+                    avatarData: feed.avatarData,
+                    avatarUrl: feed.avatarUrl
+                )
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(feed.profileName.isEmpty ? "حسابي" : feed.profileName)
@@ -288,7 +292,7 @@ private struct TeamSideMenuRow: View {
                     .font(TamrinFont.font(size: 16, weight: isSelected ? .bold : .medium))
                     .foregroundStyle(.white)
                     .lineLimit(1)
-                Text("\(team.memberCount.formatted(.number.locale(.tamrin).grouping(.never))) عضو")
+                Text(team.memberCount.counted(.member))
                     .font(TamrinFont.font(size: 11, weight: .regular))
                     .foregroundStyle(.white.opacity(0.52))
                     .lineLimit(1)
@@ -309,30 +313,43 @@ private struct TeamSideMenuRow: View {
 private struct MenuProfileAvatar: View {
     let name: String
     var avatarData: Data?
+    var avatarUrl: String?
 
     var body: some View {
         Group {
             if let avatarData, let image = UIImage(data: avatarData) {
                 Image(uiImage: image).resizable().scaledToFill()
-            } else {
-                Circle()
-                    .fill(.white.opacity(0.18))
-                    .overlay {
-                        if name.isEmpty {
-                            Image(systemName: "person.fill")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.82))
-                        } else {
-                            Text(String(name.prefix(1)))
-                                .font(TamrinFont.font(size: 16, weight: .bold))
-                                .foregroundStyle(.white)
-                        }
+            } else if let avatarUrl, let url = URL(string: avatarUrl) {
+                AsyncImage(url: url) { phase in
+                    if case .success(let image) = phase {
+                        image.resizable().scaledToFill()
+                    } else {
+                        initialDisc
                     }
+                }
+            } else {
+                initialDisc
             }
         }
         .frame(width: 38, height: 38)
         .clipShape(.circle)
         .accessibilityHidden(true)
+    }
+
+    private var initialDisc: some View {
+        Circle()
+            .fill(.white.opacity(0.18))
+            .overlay {
+                if name.isEmpty {
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.82))
+                } else {
+                    Text(String(name.prefix(1)))
+                        .font(TamrinFont.font(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+            }
     }
 }
 

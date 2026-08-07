@@ -44,6 +44,22 @@ struct PaymentMethodSelectionSheet: View {
                     Button("إغلاق") { dismiss() }
                         .font(TamrinFont.font(size: 16, weight: .medium))
                 }
+                // Selections already write straight through to the plan, so
+                // this confirms rather than commits — and it stays closed until
+                // there is at least one way for a player to pay.
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("إضافة") {
+                        Haptics.impact(.light)
+                        dismiss()
+                    }
+                    .font(TamrinFont.font(size: 16, weight: .bold))
+                    .disabled(selections.isEmpty)
+                    .accessibilityHint(
+                        selections.isEmpty
+                            ? "اختر وسيلة دفع واحدة على الأقل أولًا"
+                            : "يعتمد وسائل الدفع المحددة ويغلق الصفحة"
+                    )
+                }
             }
             .navigationDestination(isPresented: $isEditorPresented) {
                 let provider = editorProvider
@@ -57,14 +73,14 @@ struct PaymentMethodSelectionSheet: View {
                         upsert(method)
                         isEditorPresented = false
                         showToast(
-                            wasExisting ? "تم حفظ تعديلات \(provider.displayName)" : "تمت إضافة \(provider.displayName)",
+                            wasExisting ? "حُفظت تعديلات \(provider.displayName)" : "أضفت \(provider.displayName)",
                             symbol: "checkmark.circle.fill"
                         )
                     },
                     onRemove: {
                         remove(provider)
                         isEditorPresented = false
-                        showToast("تمت إزالة \(provider.displayName)", symbol: "trash.fill")
+                        showToast("أزلت \(provider.displayName)", symbol: "trash.fill")
                     }
                 )
             }
@@ -117,10 +133,10 @@ struct PaymentMethodSelectionSheet: View {
             Haptics.selection()
             if isSelected {
                 remove(.cash)
-                showToast("تمت إزالة الدفع كاش", symbol: "trash.fill")
+                showToast("أزلت الدفع كاش", symbol: "trash.fill")
             } else {
                 upsert(PaymentMethodDraft(provider: .cash))
-                showToast("تمت إضافة الدفع كاش", symbol: "checkmark.circle.fill")
+                showToast("أضفت الدفع كاش", symbol: "checkmark.circle.fill")
             }
         } label: {
             HStack(spacing: 14) {

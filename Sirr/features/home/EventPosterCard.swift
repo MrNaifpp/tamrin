@@ -35,22 +35,33 @@ struct EventPosterCardAction: Identifiable {
     }
 }
 
+/// Publish state of an event, shown as a tag at the top of its card. Only
+/// organizers ever see it: members are shown published events alone.
+enum EventPosterPublishTag {
+    case published
+    case unpublished
+}
+
 /// Poster-style event card with an optional owner action bar. The details
-/// button and action buttons are siblings so SwiftUI never nests buttons.
+/// button, the publish tag and the action buttons are siblings so SwiftUI
+/// never nests buttons.
 struct EventPosterCard: View {
     let occurrence: FeedOccurrence
     let registeredCount: Int
+    let publishTag: EventPosterPublishTag?
     let actions: [EventPosterCardAction]
     let action: () -> Void
 
     init(
         occurrence: FeedOccurrence,
         registeredCount: Int,
+        publishTag: EventPosterPublishTag? = nil,
         actions: [EventPosterCardAction] = [],
         action: @escaping () -> Void
     ) {
         self.occurrence = occurrence
         self.registeredCount = registeredCount
+        self.publishTag = publishTag
         self.actions = actions
         self.action = action
     }
@@ -78,6 +89,15 @@ struct EventPosterCard: View {
                     .padding(16)
             }
         }
+        // `.trailing` is the physical left edge: the card lives inside the
+        // app's RTL environment, so the tag sits opposite the reading edge.
+        .overlay(alignment: .topTrailing) {
+            if let publishTag {
+                EventPosterPublishTagView(state: publishTag)
+                    .padding(.top, 20)
+                    .padding(.trailing, 20)
+            }
+        }
         .clipShape(.rect(cornerRadius: 36, style: .continuous))
         .contentShape(.rect(cornerRadius: 36, style: .continuous))
     }
@@ -93,17 +113,11 @@ struct EventPosterCard: View {
 
             VStack(spacing: 7) {
                 if occurrence.isCancelled {
-                    Text("تم التخطي")
+                    Text("متخطّى")
                         .font(TamrinFont.font(size: 13, weight: .bold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 13).padding(.vertical, 6)
                         .background(.red.opacity(0.85), in: .capsule)
-                } else if occurrence.isRecurring {
-                    Label("أسبوعيًا", systemImage: "repeat")
-                        .font(TamrinFont.font(size: 12, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.92))
-                        .padding(.horizontal, 12).padding(.vertical, 6)
-                        .background(.white.opacity(0.18), in: .capsule)
                 }
 
                 Text(occurrence.title)
@@ -162,6 +176,60 @@ struct EventPosterCard: View {
         }
         .colorScheme(.dark)
         .accessibilityElement(children: .contain)
+    }
+}
+
+/// Tinted glass capsule telling the organizer whether members can see this
+/// event yet. Tapping it explains what the state means, anchored to the tag
+/// itself so the answer arrives where the question was asked.
+private struct EventPosterPublishTagView: View {
+    let state: EventPosterPublishTag
+
+    @State private var isExplanationPresented = false
+
+    private var isPublished: Bool { state == .published }
+    private var title: String { isPublished ? "منشور" : "غير منشور" }
+    private var tint: Color { isPublished ? TamrinTheme.brandGreen : Color(white: 0.92) }
+    /// Both labels are the capsule's own colour taken darker: a deep green on
+    /// the green tag, and plain ink at half strength on the near-white one.
+    private var labelColor: Color {
+        isPublished ? Color(red: 0.16, green: 0.47, blue: 0.28) : .black.opacity(0.5)
+    }
+
+    private var explanation: String {
+        isPublished
+            ? "هذا التمرين ظاهر لأعضاء المجموعة وتصلهم إشعاراته."
+            : "هذا التمرين غير ظاهر للأعضاء وسيظهر لهم اذا نشرته."
+    }
+
+    var body: some View {
+        Button {
+            Haptics.impact(.light)
+            isExplanationPresented = true
+        } label: {
+            Text(title)
+                .font(TamrinFont.font(size: 14, weight: .bold))
+                .foregroundStyle(labelColor)
+                .padding(.horizontal, 18)
+                .frame(height: 44)
+                .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.tint(tint.opacity(0.55)).interactive(), in: .capsule)
+        .popover(isPresented: $isExplanationPresented, arrowEdge: .bottom) {
+            Text(explanation)
+                .font(TamrinFont.subheadline)
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 16)
+                .frame(width: 260)
+                .environment(\.layoutDirection, .rightToLeft)
+                .presentationCompactAdaptation(.popover)
+        }
+        .accessibilityLabel("حالة التمرين: \(title)")
+        .accessibilityHint("يعرض شرحًا لحالة النشر")
     }
 }
 
@@ -286,7 +354,7 @@ struct EmptyScheduleCard: View {
     let occ = FeedOccurrence(id: UUID(), title: "كورة الثلاثاء", startAt: Date(),
                              locationName: "ملعب النخيل", capacity: 14,
                              price: 25, isCancelled: false, artIndex: 0)
-    return EventPosterCard(occurrence: occ, registeredCount: 9, action: {})
+    return EventPosterCard(occurrence: occ, registeredCount: 9, publishTag: .unpublished, action: {})
         .frame(height: 420).padding()
         .environment(\.layoutDirection, .rightToLeft)
 }

@@ -115,7 +115,7 @@ struct JoinTeamView: View {
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(preview.name).font(TamrinFont.font(size: 16, weight: .bold))
-                        Text("\(preview.memberCount) عضو" + (preview.ownerName.map { " · \($0)" } ?? ""))
+                        Text(preview.memberCount.counted(.member) + (preview.ownerName.map { " · \($0)" } ?? ""))
                             .font(TamrinFont.font(size: 12, weight: .regular))
                             .foregroundStyle(.secondary)
                     }
