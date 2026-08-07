@@ -11,13 +11,23 @@ export function copyFor(
       };
     case "payment_confirmed":
       return {
-        title: "تم تأكيد اشتراكك 🎉",
-        body: `تم تأكيد دفعتك لـ ${eventName} — نراك هناك! 🙌`,
+        title: "اشتراكك مؤكد 🎉",
+        body: `دفعتك لـ ${eventName} مؤكدة — نراك هناك! 🙌`,
       };
     case "payment_rejected":
       return {
         title: "تحديث بخصوص دفعتك",
         body: `لم يتمكّن المنظّم من تأكيد دفعتك لـ ${eventName}. تواصل معه لمعرفة التفاصيل.`,
+      };
+    case "registration_reminder":
+      return {
+        title: "باقي مكانك ⚽",
+        body: `ما سجّلت في ${eventName} بعد — احجز مكانك قبل ما تكتمل المقاعد.`,
+      };
+    case "payment_reminder":
+      return {
+        title: "تذكير بالقطة 💸",
+        body: `المشرف يذكّرك بقطة ${eventName}. سدّدها قبل الموعد 🙏`,
       };
     case "event_reminder":
       return {
@@ -36,7 +46,7 @@ export function copyFor(
       };
     case "event_cancelled":
       return {
-        title: "تم تخطي تمرين هذا الأسبوع",
+        title: "تمرين هذا الأسبوع متخطّى",
         body: `أُلغي ${eventName}. افتح التمرين لمعرفة السبب والتفاصيل.`,
       };
     default:

@@ -70,6 +70,7 @@ struct CreateWorkspaceSheet: View {
             }
         }
         .environment(\.layoutDirection, .rightToLeft)
+        .sheetPresentationHaptic()
         .onAppear { nameFocused = true }
     }
 

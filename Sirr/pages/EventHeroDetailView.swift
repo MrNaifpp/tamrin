@@ -87,7 +87,7 @@ struct EventHeroDetailView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "forward.end.fill")
                             .font(.system(size: 12, weight: .semibold))
-                        Text("سيتم تخطّي الأسبوع القادم")
+                        Text("يُتخطّى الأسبوع القادم")
                             .font(.appCaption)
                     }
                     .foregroundStyle(.yellow)
@@ -1121,7 +1121,7 @@ struct EnrollmentSheetView: View {
                         switch status {
                         case .confirmed: paymentError = "أنت مسجل بالفعل في هذه الفعالية"
                         case .pending: paymentError = "لديك طلب دفع قيد التأكيد"
-                        case .rejected: paymentError = "تم رفض طلبك سابقاً"
+                        case .rejected: paymentError = "رُفض طلبك سابقًا"
                         }
                     case .creatorMissingNumber:
                         paymentError = "صاحب الفعالية لم يضف رقم STC Pay بعد"

@@ -235,17 +235,28 @@ final class AuthService {
         }
     }
 
-    // Upload avatar image to storage bucket tamrin-stg; returns public URL or nil on failure.
+    /// Upload avatar image to storage bucket tamrin-stg; returns public URL or nil on failure.
+    ///
+    /// The path is the user's id, so every photo after the first is a
+    /// replacement: without `upsert` the storage API rejects it as a duplicate
+    /// and the new picture silently never leaves the device. And because the
+    /// URL never changes either, the stored one carries a version stamp — the
+    /// caches downstream (AsyncImage, URLCache) key on it, and would otherwise
+    /// keep serving the picture the user just replaced.
     func uploadAvatar(userId: UUID, imageData: Data) async -> String? {
         let bucketName = "tamrin-stg"
         let path = "\(userId.uuidString).jpg"
         do {
             try await client.storage
                 .from(bucketName)
-                .upload(path, data: imageData, options: FileOptions(contentType: "image/jpeg"))
+                .upload(
+                    path,
+                    data: imageData,
+                    options: FileOptions(contentType: "image/jpeg", upsert: true)
+                )
             let url = try? client.storage.from(bucketName).getPublicURL(path: path).absoluteString
             authLogger.info("API uploadAvatar succeeded")
-            return url
+            return url.map { "\($0)?v=\(Int(Date().timeIntervalSince1970))" }
         } catch {
             authLogger.error("API uploadAvatar failed: \(error.localizedDescription)")
             if let e = error as? URLError { authLogger.error("URLError: \(String(describing: e))") }

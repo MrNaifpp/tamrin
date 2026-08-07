@@ -82,7 +82,7 @@ struct STCPayWaitlistSheet: View {
                         if isJoining {
                             ProgressView().tint(.black)
                         }
-                        Text(didJoin ? "تم — حسناً" : "انضم لقائمة الانتظار")
+                        Text(didJoin ? "انضممت — حسنًا" : "انضم لقائمة الانتظار")
                             .font(TamrinFont.font(size: 17, weight: .bold))
                             .foregroundStyle(.black)
                     }
