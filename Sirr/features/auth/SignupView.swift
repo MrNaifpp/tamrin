@@ -183,6 +183,20 @@ struct SignupView: View {
                     .padding(.horizontal, 24)
                     .padding(.top, 8)
 
+                    // A failure here used to leave the button looking inert:
+                    // completeProfile records the reason on the view model and
+                    // nothing rendered it, so a missing session or a rejected
+                    // write read to the user as "التالي does nothing".
+                    if let error = vm.errorMessage {
+                        Text(error)
+                            .font(.appCaption)
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 24)
+                            .padding(.top, 4)
+                    }
+
                     // Back to login link
                     Button(action: {
                         if let onBack {

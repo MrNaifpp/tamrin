@@ -63,6 +63,7 @@ struct EventSettingsSheet: View {
             }
         }
         .environment(\.layoutDirection, .rightToLeft)
+        .sheetPresentationHaptic()
         .task {
             guard let templateId = event.templateId else { return }
             if let template = try? await EventService.shared.getEventTemplate(templateId: templateId) {
@@ -78,7 +79,7 @@ struct EventSettingsSheet: View {
             Button("حذف", role: .destructive) { handleDelete() }
             Button("إلغاء", role: .cancel) {}
         } message: {
-            Text("سيتم حذف المناسبة وجميع المشاركين نهائيًا. لا يمكن التراجع عن هذا الإجراء.")
+            Text("تُحذف المناسبة وجميع المشاركين نهائيًا. لا يمكن التراجع عن هذا الإجراء.")
         }
         .confirmationDialog(
             "إنهاء التكرار",

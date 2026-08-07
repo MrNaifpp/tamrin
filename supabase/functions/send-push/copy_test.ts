@@ -12,8 +12,8 @@ Deno.test("payment_submitted copy interpolates the event name", () => {
 Deno.test("payment_confirmed copy interpolates the event name", () => {
   const c = copyFor("payment_confirmed", "تمرين كرة قدم");
   assertEquals(c, {
-    title: "تم تأكيد اشتراكك 🎉",
-    body: "تم تأكيد دفعتك لـ تمرين كرة قدم — نراك هناك! 🙌",
+    title: "اشتراكك مؤكد 🎉",
+    body: "دفعتك لـ تمرين كرة قدم مؤكدة — نراك هناك! 🙌",
   });
 });
 
@@ -52,8 +52,24 @@ Deno.test("event_invited copy interpolates the event name", () => {
 Deno.test("event_cancelled copy interpolates the event name", () => {
   const c = copyFor("event_cancelled", "تمرين الخميس");
   assertEquals(c, {
-    title: "تم تخطي تمرين هذا الأسبوع",
+    title: "تمرين هذا الأسبوع متخطّى",
     body: "أُلغي تمرين الخميس. افتح التمرين لمعرفة السبب والتفاصيل.",
+  });
+});
+
+Deno.test("payment_reminder copy interpolates the event name", () => {
+  const c = copyFor("payment_reminder", "تمرين الخميس");
+  assertEquals(c, {
+    title: "تذكير بالقطة 💸",
+    body: "المشرف يذكّرك بقطة تمرين الخميس. سدّدها قبل الموعد 🙏",
+  });
+});
+
+Deno.test("registration_reminder copy interpolates the event name", () => {
+  const c = copyFor("registration_reminder", "تمرين الخميس");
+  assertEquals(c, {
+    title: "باقي مكانك ⚽",
+    body: "ما سجّلت في تمرين الخميس بعد — احجز مكانك قبل ما تكتمل المقاعد.",
   });
 });
 

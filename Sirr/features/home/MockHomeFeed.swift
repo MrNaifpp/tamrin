@@ -64,9 +64,40 @@ enum EventEditScope {
 
 // MARK: - Create-team drafts (mutable UI state for the CreateTeamFlow wizard)
 
+/// The tint behind a group's symbol. Stored by `rawValue` so the choice can be
+/// persisted as a string the day the workspace record carries one.
+enum TeamColor: String, CaseIterable, Identifiable {
+    /// Declaration order is display order, and the first is what a new group
+    /// starts as.
+    case blue, lime, red, orange, yellow, purple, pink
+
+    var id: String { rawValue }
+
+    var color: Color {
+        switch self {
+        case .lime: return TamrinTheme.lime
+        case .blue: return Color(red: 0.0, green: 0.48, blue: 1.0)
+        case .red: return Color(red: 1.0, green: 0.23, blue: 0.19)
+        case .orange: return Color(red: 1.0, green: 0.58, blue: 0.0)
+        case .yellow: return Color(red: 1.0, green: 0.8, blue: 0.0)
+        case .purple: return Color(red: 0.58, green: 0.44, blue: 0.86)
+        case .pink: return Color(red: 1.0, green: 0.25, blue: 0.45)
+        }
+    }
+
+    /// Lime and yellow are too bright to carry white; the rest are not.
+    var symbolColor: Color {
+        switch self {
+        case .lime, .yellow: return TamrinTheme.ink
+        default: return .white
+        }
+    }
+}
+
 struct TeamDraft {
     var teamName = ""
     var teamSymbol = "figure.soccer"
+    var teamColor: TeamColor = TeamColor.allCases[0]
     var avatarData: Data?
     var plans: [PlanDraft] = []
     var startDate = Date.now
@@ -167,6 +198,16 @@ struct FeedMember: Identifiable {
     var status: FeedRegStatus
     var userId: UUID? = nil
     var addedBy: UUID? = nil
+    /// Seated by the organizer typing a name. Such a person has no account and
+    /// cannot withdraw themselves, so only the organizer can free the seat.
+    var isManual: Bool = false
+    /// When they took the seat, for the player's detail sheet.
+    var joinedAt: Date? = nil
+    /// Profile photo, shown large at the top of the player's detail sheet.
+    var avatarUrl: String? = nil
+    /// Last payment nudge the organizer sent them, which the sheet's reminder
+    /// button counts an hour from. Only the organizer's roster carries it.
+    var paymentReminderSentAt: Date? = nil
 
     var paymentOwnerId: UUID? { userId ?? addedBy }
     var isGuest: Bool { userId == nil }
@@ -181,6 +222,10 @@ struct FeedOccurrence: Identifiable {
     let price: Double        // 0 == free
     var isCancelled: Bool
     let artIndex: Int        // cycles ExerciseArt1..3
+    /// The pitch on the map, when the organizer picked one — what the
+    /// directions button hands to a maps app.
+    var latitude: Double? = nil
+    var longitude: Double? = nil
     /// Weekly-series flags (rolling model: one upcoming occurrence at a time).
     var isRecurring: Bool = false
     var templateId: UUID? = nil
@@ -235,7 +280,9 @@ final class HomeStore {
     // Backend context / derived caches.
     private(set) var currentUserID: UUID?
     private var ownerByTeam: [UUID: UUID] = [:]
-    private var avatarUrlRemote: String?
+    /// The stored profile photo, so every avatar in the app can show it
+    /// without each screen re-fetching the profile row.
+    private(set) var avatarUrl: String?
     /// Mapped roster + my status per event id (source for the detail page).
     private var rosterCache: [UUID: [FeedMember]] = [:]
     private var myEventStatus: [UUID: FeedRegStatus] = [:]
@@ -372,7 +419,7 @@ final class HomeStore {
             profileName = profile.name
             playerPosition = profile.position
             stcPayNumber = profile.stcPayNumber
-            avatarUrlRemote = profile.avatarUrl
+            avatarUrl = profile.avatarUrl
         }
     }
 
@@ -525,7 +572,14 @@ final class HomeStore {
                        name: $0.displayName ?? $0.guestName ?? "—",
                        status: $0.isPending ? .paymentPending : .registered,
                        userId: $0.userId,
-                       addedBy: $0.addedBy)
+                       addedBy: $0.addedBy,
+                       isManual: $0.isManual,
+                       joinedAt: $0.joinedAtDate,
+                       // My own photo is already loaded with my profile, so my
+                       // row shows it without waiting on the roster's copy.
+                       avatarUrl: $0.avatarUrl
+                           ?? ($0.userId == currentUserID ? avatarUrl : nil),
+                       paymentReminderSentAt: $0.paymentReminderSentAtDate)
         }
         if let mine = parts.first(where: { $0.userId == currentUserID && $0.guestName == nil }) {
             myEventStatus[eventId] = mine.isPending ? .paymentPending : .registered
@@ -968,6 +1022,186 @@ final class HomeStore {
         }
     }
 
+    /// Seats someone who does not use the app: the organizer types the name and
+    /// the server creates a confirmed registration for them. On a paid exercise
+    /// the money is settled with the organizer outside the app, so no payment
+    /// request is raised.
+    func addManualParticipant(named rawName: String, to occurrence: FeedOccurrence) async -> RegistrationOutcome {
+        guard isCurrentTeamOwner else { return .failure("هذا الإجراء متاح لمشرف المجموعة فقط.") }
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return .failure("اكتب اسم اللاعب أولًا.") }
+
+        if isPreview || isDebugMemberFixtureEvent(occurrence.id) {
+            appendManualParticipant(named: name, to: occurrence.id)
+            return .success
+        }
+
+        do {
+            let result = try await EventService.shared.addManualParticipant(
+                eventId: occurrence.id,
+                name: name
+            )
+            await reloadRoster(occurrence.id)
+            switch result {
+            case .added:
+                return .success
+            case .seatsFull:
+                return .failure("اكتملت المقاعد لهذا التمرين.")
+            case .duplicateName:
+                return .failure("فيه لاعب مسجل بنفس الاسم. ميّزه باسم العائلة أو رقم.")
+            case .registrationClosed:
+                return .failure("التسجيل مقفل لهذا التمرين. افتحه من إعدادات التمرين ثم أضفه.")
+            case .notPublished:
+                return .failure("أرسل التمرين للمجموعة أولًا، بعدها تقدر تسجل لاعبين يدويًا.")
+            case .cancelled:
+                return .failure("هذا الموعد متخطى.")
+            case .emptyName:
+                return .failure("اكتب اسم اللاعب أولًا.")
+            }
+        } catch {
+            await reloadRoster(occurrence.id)
+            return .failure(error.localizedDescription)
+        }
+    }
+
+    /// Frees any seat on this exercise. Removing a member who paid for guests
+    /// takes those seats too — the server owns that rule.
+    func removeParticipant(_ member: FeedMember, from occurrence: FeedOccurrence) async -> RegistrationOutcome {
+        guard isCurrentTeamOwner else {
+            return .failure("هذا الإجراء متاح لمشرف المجموعة فقط.")
+        }
+
+        if isPreview || isDebugMemberFixtureEvent(occurrence.id) {
+            rosterCache[occurrence.id]?.removeAll { $0.id == member.id }
+            return .success
+        }
+
+        do {
+            let result = try await EventService.shared.removeParticipant(participantId: member.id)
+            await reloadRoster(occurrence.id)
+            switch result {
+            case .removed:
+                return .success
+            case .isCreator:
+                return .failure("لا يمكن إزالة منظّم التمرين من قائمته.")
+            case .notFound:
+                return .success
+            }
+        } catch {
+            await reloadRoster(occurrence.id)
+            return .failure("تعذر إزالة اللاعب. حاول مرة أخرى.")
+        }
+    }
+
+    /// Result of nudging one player about their share. On success the caller
+    /// gets the moment the button may be pressed again.
+    enum PaymentReminderOutcome {
+        case sent(nextAllowedAt: Date)
+        case tooSoon(nextAllowedAt: Date)
+        case failure(String)
+    }
+
+    /// Sends the player a push reminding them to pay. The hour-long cooldown is
+    /// the server's, and the refreshed roster carries it back so the button
+    /// stays disabled across reopenings of the sheet and across devices.
+    func remindPayment(_ member: FeedMember, on occurrence: FeedOccurrence) async -> PaymentReminderOutcome {
+        guard isCurrentTeamOwner else {
+            return .failure("هذا الإجراء متاح لمشرف المجموعة فقط.")
+        }
+
+        if isPreview || isDebugMemberFixtureEvent(occurrence.id) {
+            let nextAllowed = Date().addingTimeInterval(3600)
+            updateRosterMember(member.id, on: occurrence.id) { $0.paymentReminderSentAt = Date() }
+            return .sent(nextAllowedAt: nextAllowed)
+        }
+
+        do {
+            let result = try await EventService.shared.remindParticipantPayment(
+                eventId: occurrence.id,
+                participantId: member.id
+            )
+            switch result {
+            case .sent(let nextAllowedAt):
+                updateRosterMember(member.id, on: occurrence.id) { $0.paymentReminderSentAt = Date() }
+                return .sent(nextAllowedAt: nextAllowedAt)
+            case .tooSoon(let nextAllowedAt):
+                updateRosterMember(member.id, on: occurrence.id) {
+                    $0.paymentReminderSentAt = nextAllowedAt.addingTimeInterval(-3600)
+                }
+                return .tooSoon(nextAllowedAt: nextAllowedAt)
+            case .noAccount:
+                return .failure("هذا اللاعب ما عنده حساب في التطبيق، فما يوصله تذكير.")
+            case .isSelf:
+                return .failure("هذا مقعدك أنت.")
+            case .notFound:
+                await reloadRoster(occurrence.id)
+                return .failure("هذا اللاعب ما عاد مسجل في التمرين.")
+            case .cancelled:
+                return .failure("هذا الموعد متخطى.")
+            }
+        } catch {
+            return .failure("تعذر إرسال التذكير. تحقق من اتصالك وحاول مرة أخرى.")
+        }
+    }
+
+    /// Result of reminding the whole group, worded for a toast.
+    enum MemberReminderOutcome {
+        case sent(message: String)
+        case failure(String)
+    }
+
+    /// One push to every member the reminder applies to. Recipients and the
+    /// hour-long cooldown are the server's call.
+    func remindMembers(
+        _ kind: MemberReminderKind,
+        on occurrence: FeedOccurrence
+    ) async -> MemberReminderOutcome {
+        guard isCurrentTeamOwner else {
+            return .failure("هذا الإجراء متاح لمشرف المجموعة فقط.")
+        }
+
+        if isPreview || isDebugMemberFixtureEvent(occurrence.id) {
+            return .sent(message: "أُرسل التذكير إلى الأعضاء")
+        }
+
+        do {
+            let result = try await EventService.shared.remindEventMembers(
+                eventId: occurrence.id,
+                kind: kind
+            )
+            switch result {
+            case .sent(let recipients, _):
+                return .sent(message: "أُرسل التذكير إلى \(recipients.counted(.player))")
+            case .tooSoon(let nextAllowedAt):
+                let minutes = max(Int(nextAllowedAt.timeIntervalSinceNow / 60), 1)
+                return .failure("أرسلت تذكيرًا قبل قليل. تقدر ترسل غيره بعد \(minutes) دقيقة.")
+            case .noRecipients:
+                return .failure(
+                    kind == .register
+                        ? "كل الأعضاء مسجلين في التمرين."
+                        : "ما فيه لاعبين مسجلين لتذكيرهم."
+                )
+            case .notPublished:
+                return .failure("انشر التمرين أولًا، بعدها تقدر تذكّر الأعضاء.")
+            case .cancelled:
+                return .failure("هذا الموعد متخطى.")
+            }
+        } catch {
+            return .failure("تعذر إرسال التذكير. تحقق من اتصالك وحاول مرة أخرى.")
+        }
+    }
+
+    private func updateRosterMember(
+        _ memberID: UUID,
+        on eventID: UUID,
+        _ change: (inout FeedMember) -> Void
+    ) {
+        guard var list = rosterCache[eventID],
+              let index = list.firstIndex(where: { $0.id == memberID }) else { return }
+        change(&list[index])
+        rosterCache[eventID] = list
+    }
+
     func paymentDestination(for occurrence: FeedOccurrence) async throws -> PaymentDestination {
         #if DEBUG
         if isDebugMemberFixtureEvent(occurrence.id) {
@@ -1081,6 +1315,22 @@ final class HomeStore {
         rosterCache[eventId] = list
     }
 
+    /// Local-only echo of `add_manual_participant`, for previews and the debug
+    /// member fixture, which never reach the backend.
+    private func appendManualParticipant(named name: String, to eventId: UUID) {
+        var list = rosterCache[eventId] ?? []
+        list.append(
+            FeedMember(
+                id: UUID(),
+                name: name,
+                status: .registered,
+                addedBy: currentUserID,
+                isManual: true
+            )
+        )
+        rosterCache[eventId] = list
+    }
+
     private func removeMe(from occurrence: FeedOccurrence) {
         myEventStatus[occurrence.id] = nil
         if var list = rosterCache[occurrence.id] {
@@ -1176,11 +1426,11 @@ final class HomeStore {
         if let avatarData { self.avatarData = avatarData }
         guard !isPreview else { return }
         Task {
-            var newUrl: String? = avatarUrlRemote
+            var newUrl: String? = avatarUrl
             if let data = avatarData, let uid = currentUserID,
                let uploaded = await AuthService.shared.uploadAvatar(userId: uid, imageData: data) {
                 newUrl = uploaded
-                avatarUrlRemote = uploaded
+                avatarUrl = uploaded
             }
             try? await AuthService.shared.updateProfile(name: name, position: playerPosition, avatarUrl: newUrl)
         }
@@ -1206,6 +1456,7 @@ final class HomeStore {
                               locationName: ev.location, capacity: ev.maxParticipants ?? 0,
                               price: ev.pricePerPerson ?? Double(ev.totalPrice ?? 0),
                               isCancelled: ev.cancelledAt != nil, artIndex: Self.stableIndex(ev.id),
+                              latitude: ev.latitude, longitude: ev.longitude,
                               isRecurring: ev.isRecurring ?? false, templateId: ev.templateId,
                               paymentMethodIds: methodIDs,
                               publishedAt: ev.publishedAt,

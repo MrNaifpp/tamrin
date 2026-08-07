@@ -221,6 +221,7 @@ private struct FittedSheetDetent: ViewModifier {
     /// Slack added to the measured height. Use it where a step's content can
     /// change while the sheet is open and it should breathe rather than clip.
     var extraHeight: CGFloat
+    var dragIndicator: Visibility
 
     @State private var measuredRoot: CGFloat = 0
     @State private var measuredContent: CGFloat = 0
@@ -284,12 +285,23 @@ private struct FittedSheetDetent: ViewModifier {
             // content itself cannot reach.
             .presentationBackground(background)
             .presentationDetents(detents)
-            .presentationDragIndicator(.visible)
+            .presentationDragIndicator(dragIndicator)
             .presentationContentInteraction(.scrolls)
     }
 }
 
 extension View {
+    /// The soft click a sheet arrives with.
+    ///
+    /// Put this on a sheet's own root view, not on the call site that presents
+    /// it: a sheet is usually shown from several places, and the feedback then
+    /// comes with the sheet itself rather than being remembered at each one.
+    /// `fittedSheet` already applies it, so only sheets that size themselves
+    /// some other way need to ask.
+    func sheetPresentationHaptic() -> some View {
+        onAppear { Haptics.impact(.light) }
+    }
+
     /// Makes a sheet exactly as tall as its content. See `FittedSheetDetent`.
     /// - Parameters:
     ///   - minHeight: floor for very short sheets, so the grabber has room.
@@ -297,13 +309,16 @@ extension View {
     ///   - allowsExpansion: also offers a full-height detent the user can drag to.
     ///   - includesNavigationBar: pass `true` when the sheet's root is a
     ///     `NavigationStack`, so the bar is counted in the detent.
+    ///   - dragIndicator: hide it on a sheet the user is not allowed to dismiss,
+    ///     where a grabber would promise a swipe that does nothing.
     func fittedSheet(
         minHeight: CGFloat = 200,
         maxFraction: CGFloat = 0.92,
         allowsExpansion: Bool = false,
         includesNavigationBar: Bool = false,
         background: some ShapeStyle = TamrinTheme.sheet,
-        extraHeight: CGFloat = 0
+        extraHeight: CGFloat = 0,
+        dragIndicator: Visibility = .visible
     ) -> some View {
         modifier(FittedSheetDetent(
             minHeight: minHeight,
@@ -311,8 +326,39 @@ extension View {
             allowsExpansion: allowsExpansion,
             includesNavigationBar: includesNavigationBar,
             background: AnyShapeStyle(background),
-            extraHeight: extraHeight
+            extraHeight: extraHeight,
+            dragIndicator: dragIndicator
         ))
+        .sheetPresentationHaptic()
+    }
+}
+
+// MARK: - Glass card
+
+/// The app's one card shape, for every panel and row that floats over artwork:
+/// a softly rounded rectangle filled with a thin white veil, so the photograph
+/// beneath stays legible through it.
+///
+/// The radius is deliberately large — a row of this height reads as a rounded
+/// tile rather than a boxed list item — and it is the same on a full-width
+/// panel as on a single member row, which is what makes the surfaces feel like
+/// one family rather than several.
+enum TamrinCard {
+    static let cornerRadius: CGFloat = 26
+    /// Thin enough to keep artwork readable, opaque enough to carry white text.
+    static let fill = Color.white.opacity(0.1)
+
+    static var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+    }
+}
+
+extension View {
+    /// Paints the standard translucent card behind this content.
+    /// - Parameter fill: override only when a card must read as selected or
+    ///   disabled against its neighbours; plain cards take the default.
+    func tamrinGlassCard(fill: Color = TamrinCard.fill) -> some View {
+        background(fill, in: .rect(cornerRadius: TamrinCard.cornerRadius, style: .continuous))
     }
 }
 
@@ -389,6 +435,11 @@ struct TamrinActionButton: View {
     var isLoading = false
     var prominent = true
     var tint: Color = .accentColor
+    /// Overrides the label colour the button style picks for itself. Needed
+    /// only when the tint is the foreground colour: `.glassProminent` keeps its
+    /// label white, which disappears on the white capsule a `.primary` tint
+    /// produces in dark mode.
+    var labelColor: Color?
     let action: () -> Void
 
     var body: some View {
@@ -399,6 +450,7 @@ struct TamrinActionButton: View {
                 .font(TamrinFont.headline)
                 .frame(maxWidth: .infinity)
         }
+        .modifier(OverriddenLabelColor(color: labelColor))
         .modifier(NativeActionStyle(prominent: prominent, tint: tint))
         .disabled(isLoading)
         .animation(.smooth(duration: 0.25), value: isLoading)
@@ -412,6 +464,21 @@ struct TamrinActionButton: View {
             Label(title, systemImage: systemImage)
         } else {
             Text(title)
+        }
+    }
+}
+
+/// Tints the label only when a colour was asked for, so every button that
+/// doesn't ask keeps the colour its stock style picks — including the red a
+/// destructive role gives it.
+private struct OverriddenLabelColor: ViewModifier {
+    let color: Color?
+
+    func body(content: Content) -> some View {
+        if let color {
+            content.foregroundStyle(color)
+        } else {
+            content
         }
     }
 }

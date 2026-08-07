@@ -1285,7 +1285,7 @@ struct LocationInputDialogView: View {
                 .padding(.bottom, 8)
 
                 // Hint
-                Text(selectedCoordinate == nil ? "اضغط على الخريطة لتحديد الموقع" : "تم تحديد الموقع على الخريطة")
+                Text(selectedCoordinate == nil ? "اضغط على الخريطة لتحديد الموقع" : "الموقع محدّد على الخريطة")
                     .font(.appBody)
                     .foregroundStyle(.white.opacity(0.6))
                     .padding(.bottom, 16)

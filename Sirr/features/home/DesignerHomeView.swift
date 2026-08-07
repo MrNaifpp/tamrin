@@ -3,7 +3,6 @@ import Combine
 
 private enum HomeQuickAddDestination {
     case createTeam
-    case createEvent
     case joinTeam
 }
 
@@ -41,7 +40,6 @@ struct DesignerHomeView: View {
     @State private var showCreateTeam = false
     @State private var showQuickAdd = false
     @State private var pendingQuickAddDestination: HomeQuickAddDestination?
-    @State private var showCreateEvent = false
     @State private var showJoinTeam = false
     @State private var publishConfirmation: FeedOccurrence?
     @State private var declineOccurrence: FeedOccurrence?
@@ -65,6 +63,15 @@ struct DesignerHomeView: View {
     }
 
     private func artName(_ index: Int) -> String { "ExerciseArt\((index % 3) + 1)" }
+
+    /// The blurred backdrop has to be the artwork of the card in front of it.
+    /// `artIndex` is derived from the event's own id, not from its place in the
+    /// feed, so feeding the backdrop the scroll position painted it with a
+    /// different picture than the card was showing.
+    private var currentArtName: String {
+        guard feed.occurrences.indices.contains(currentIndex) else { return artName(0) }
+        return artName(feed.occurrences[currentIndex].artIndex)
+    }
 
     var body: some View {
         Group {
@@ -123,21 +130,6 @@ struct DesignerHomeView: View {
                     .padding(.top, 8)
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .zIndex(20)
-            }
-        }
-        .alert("إرسال التمرين للأعضاء؟", isPresented: Binding(
-            get: { publishConfirmation != nil },
-            set: { if !$0 { publishConfirmation = nil } }
-        )) {
-            Button("إرسال الآن") {
-                guard let occurrence = publishConfirmation else { return }
-                publishConfirmation = nil
-                publish(occurrence)
-            }
-            Button("تراجع", role: .cancel) { publishConfirmation = nil }
-        } message: {
-            if let occurrence = publishConfirmation {
-                Text("سيصل إشعار لأعضاء المجموعة يدعوهم إلى «\(occurrence.title)» يوم \(occurrence.startAt.arabicDay).")
             }
         }
         .alert("تعذر إكمال الإجراء", isPresented: Binding(
@@ -236,7 +228,7 @@ struct DesignerHomeView: View {
             // tappable, and the page backdrop fills the system-space strips.
             NavigationStack {
                 ZStack(alignment: .topTrailing) {
-                    HomeArtBackdrop(artName: artName(currentIndex), hasArt: !feed.occurrences.isEmpty)
+                    HomeArtBackdrop(artName: currentArtName, hasArt: !feed.occurrences.isEmpty)
 
                     Group {
                         if feed.occurrences.isEmpty {
@@ -256,6 +248,7 @@ struct DesignerHomeView: View {
                                 EventPosterCard(
                                     occurrence: occurrence,
                                     registeredCount: feed.registeredCount(for: occurrence),
+                                    publishTag: publishTag(for: occurrence),
                                     actions: cardActions(for: occurrence)
                                 ) {
                                     guard !sawHorizontalPan else { return }
@@ -279,6 +272,7 @@ struct DesignerHomeView: View {
                                         EventPosterCard(
                                             occurrence: occurrence,
                                             registeredCount: feed.registeredCount(for: occurrence),
+                                            publishTag: publishTag(for: occurrence),
                                             actions: cardActions(for: occurrence)
                                         ) {
                                             guard !sawHorizontalPan else { return }
@@ -294,6 +288,14 @@ struct DesignerHomeView: View {
                                 }
                                 .scrollTargetLayout()
                                 .padding(.horizontal, 20)
+                                // Every card is container−64 tall, so the first
+                                // one rests with 64 of page showing beneath it.
+                                // Without the same 64 at the end, the scroll
+                                // runs out exactly that much short of the last
+                                // card's snap point: it could never reach the
+                                // top, and stopped mid-way with the previous
+                                // card still hanging above it.
+                                .padding(.bottom, 64)
                             }
                             // .alwaysByOne, not .always: cards are container−64
                             // tall with 110 of spacing, so the next snap point
@@ -318,6 +320,8 @@ struct DesignerHomeView: View {
                         StickyHomeHeader(
                             team: feed.currentTeam,
                             profileName: feed.profileName,
+                            profileImageData: feed.avatarData,
+                            profileImageUrl: feed.avatarUrl,
                             isOnArtwork: !feed.occurrences.isEmpty,
                             sectionTitle: feed.occurrences.isEmpty
                                 ? nil
@@ -360,7 +364,18 @@ struct DesignerHomeView: View {
                                 reasonText: reasonText
                             )
                         )
-                        showActionToast("تم تسجيل اعتذارك عن التمرين")
+                        showActionToast("سُجّل اعتذارك عن التمرين")
+                    }
+                }
+                .sheet(item: $publishConfirmation) { occurrence in
+                    AdminPublishEventSheet(
+                        eventTitle: occurrence.title,
+                        dayText: occurrence.startAt.arabicDay
+                    ) {
+                        try await performEventAction(.publishing, for: occurrence.id) {
+                            await feed.publish(occurrence)
+                        }
+                        showActionToast("نُشر التمرين ووصل الأعضاء إشعار")
                     }
                 }
                 .sheet(item: $skipOccurrence) { occurrence in
@@ -372,7 +387,7 @@ struct DesignerHomeView: View {
                                 reasonText: reasonText
                             )
                         }
-                        showActionToast("تم تخطي تمرين هذا الأسبوع وإبلاغ الأعضاء")
+                        showActionToast("تمرين هذا الأسبوع متخطّى، وأُبلغ الأعضاء")
                     }
                 }
                 .sheet(item: $editingOccurrence) { occurrence in
@@ -400,13 +415,10 @@ struct DesignerHomeView: View {
                     isPresented: $showQuickAdd,
                     onDismiss: presentPendingQuickAddDestination
                 ) {
-                    HomeQuickAddSheet(isOwner: feed.isCurrentTeamOwner) { destination in
+                    HomeQuickAddSheet { destination in
                         pendingQuickAddDestination = destination
                         showQuickAdd = false
                     }
-                }
-                .sheet(isPresented: $showCreateEvent) {
-                    AddSessionSheet(feed: feed, isPresented: $showCreateEvent)
                 }
                 .sheet(isPresented: $showJoinTeam) {
                     JoinTeamView(feed: feed, isPresented: $showJoinTeam)
@@ -418,12 +430,20 @@ struct DesignerHomeView: View {
         }
     }
 
+    /// Members only ever receive published events, and a skipped one has its
+    /// own badge already — so the publish tag belongs to the organizer's
+    /// upcoming cards alone.
+    private func publishTag(for occurrence: FeedOccurrence) -> EventPosterPublishTag? {
+        guard feed.isCurrentTeamOwner, !occurrence.isCancelled else { return nil }
+        return occurrence.isPublished ? .published : .unpublished
+    }
+
     private func cardActions(for occurrence: FeedOccurrence) -> [EventPosterCardAction] {
         if occurrence.isCancelled {
             return [
                 EventPosterCardAction(
                     id: "cancelled",
-                    title: occurrence.hasCancellationReason ? "معرفة سبب التخطي" : "تم تخطي الموعد",
+                    title: occurrence.hasCancellationReason ? "معرفة سبب التخطي" : "الموعد متخطّى",
                     systemImage: occurrence.hasCancellationReason ? "info.circle.fill" : "forward.end.fill",
                     kind: occurrence.hasCancellationReason ? .secondary : .status,
                     isEnabled: occurrence.hasCancellationReason
@@ -441,7 +461,7 @@ struct DesignerHomeView: View {
             return [
                 EventPosterCardAction(
                     id: "send",
-                    title: occurrence.isPublished ? "تم الإرسال" : "إرسال التمرين",
+                    title: occurrence.isPublished ? "منشور" : "نشر التمرين",
                     systemImage: occurrence.isPublished ? "checkmark.circle.fill" : "paperplane.fill",
                     kind: occurrence.isPublished ? .status : .primary,
                     isEnabled: !occurrence.isPublished && actionsEnabled,
@@ -499,7 +519,7 @@ struct DesignerHomeView: View {
         case .registered:
             primary = EventPosterCardAction(
                 id: "registered",
-                title: "تم التسجيل",
+                title: "مسجّل",
                 systemImage: "checkmark.circle.fill",
                 kind: .status,
                 isEnabled: false,
@@ -539,7 +559,7 @@ struct DesignerHomeView: View {
         let alreadyDeclined = state == .declined
         let decline = EventPosterCardAction(
             id: "decline",
-            title: alreadyDeclined ? "تم الاعتذار" : "اعتذار",
+            title: alreadyDeclined ? "معتذر" : "اعتذار",
             systemImage: alreadyDeclined ? "checkmark" : "xmark.circle.fill",
             kind: alreadyDeclined ? .status : .destructive,
             isEnabled: !alreadyDeclined
@@ -547,23 +567,6 @@ struct DesignerHomeView: View {
             declineOccurrence = occurrence
         }
         return [primary, decline]
-    }
-
-    private func publish(_ occurrence: FeedOccurrence) {
-        guard eventActionsInFlight[occurrence.id] == nil else { return }
-        eventActionsInFlight[occurrence.id] = .publishing
-        Task {
-            let outcome = await feed.publish(occurrence)
-            eventActionsInFlight[occurrence.id] = nil
-            switch outcome {
-            case .success:
-                Haptics.success()
-                showActionToast("تم إرسال الدعوة إلى أعضاء المجموعة")
-            case .failure(let message):
-                Haptics.error()
-                actionError = message
-            }
-        }
     }
 
     @MainActor
@@ -616,9 +619,6 @@ struct DesignerHomeView: View {
             switch destination {
             case .createTeam:
                 showCreateTeam = true
-            case .createEvent:
-                guard feed.isCurrentTeamOwner else { return }
-                showCreateEvent = true
             case .joinTeam:
                 showJoinTeam = true
             }
@@ -768,6 +768,8 @@ private struct ScrollHintChevron: View {
 private struct StickyHomeHeader: View {
     let team: FeedTeam?
     let profileName: String
+    var profileImageData: Data?
+    var profileImageUrl: String?
     let isOnArtwork: Bool
     let sectionTitle: String?
     let openMenu: () -> Void
@@ -777,8 +779,10 @@ private struct StickyHomeHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            GlassEffectContainer(spacing: 14) {
+            GlassEffectContainer(spacing: 8) {
                 HomeTopBar(team: team, profileName: profileName,
+                           profileImageData: profileImageData,
+                           profileImageUrl: profileImageUrl,
                            isOnArtwork: isOnArtwork,
                            openMenu: openMenu, openPlan: openPlan, openProfile: openProfile)
             }
@@ -800,13 +804,17 @@ private struct StickyHomeHeader: View {
 private struct HomeTopBar: View {
     let team: FeedTeam?
     let profileName: String
+    var profileImageData: Data?
+    var profileImageUrl: String?
     let isOnArtwork: Bool
     let openMenu: () -> Void
     let openPlan: () -> Void
     let openProfile: () -> Void
 
     var body: some View {
-        HStack(spacing: 14) {
+        // The groups button and the group pill are one control pair, so they sit
+        // close together; the profile button is pushed away by the spacer.
+        HStack(spacing: 8) {
             Button(action: openMenu) {
                 Label("المجموعات", systemImage: "line.3.horizontal")
                     .labelStyle(.iconOnly)
@@ -841,24 +849,35 @@ private struct HomeTopBar: View {
             Spacer(minLength: 0)
 
             Button(action: openProfile) {
-                Circle()
-                    .fill(
-                        isOnArtwork
-                            ? Color.white.opacity(0.92)
-                            : Color(uiColor: .secondarySystemBackground)
-                    )
-                    .frame(width: 44, height: 44)
-                    .overlay {
-                        if profileName.isEmpty {
-                            Image(systemName: "person.fill")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundStyle(TamrinTheme.ink.opacity(0.7))
-                        } else {
-                            Text(String(profileName.prefix(1)))
-                                .font(TamrinFont.font(size: 18, weight: .bold))
-                                .foregroundStyle(TamrinTheme.ink)
-                        }
+                Group {
+                    if profileImageData != nil || profileImageUrl != nil {
+                        MemberAvatar(
+                            name: profileName,
+                            size: 44,
+                            imageData: profileImageData,
+                            imageUrl: profileImageUrl
+                        )
+                    } else {
+                        Circle()
+                            .fill(
+                                isOnArtwork
+                                    ? Color.white.opacity(0.92)
+                                    : Color(uiColor: .secondarySystemBackground)
+                            )
+                            .frame(width: 44, height: 44)
+                            .overlay {
+                                if profileName.isEmpty {
+                                    Image(systemName: "person.fill")
+                                        .font(.system(size: 18, weight: .semibold))
+                                        .foregroundStyle(TamrinTheme.ink.opacity(0.7))
+                                } else {
+                                    Text(String(profileName.prefix(1)))
+                                        .font(TamrinFont.font(size: 18, weight: .bold))
+                                        .foregroundStyle(TamrinTheme.ink)
+                                }
+                            }
                     }
+                }
             }
             .buttonStyle(.plain)
             .accessibilityLabel("الملف الشخصي والإعدادات")
@@ -866,33 +885,24 @@ private struct HomeTopBar: View {
     }
 }
 
-/// The `+` menu. Two or three destinations only, so they get real cards on a
-/// content-sized sheet rather than a full-page `Form` stranded in a half detent.
+/// The drawer's `+`: the two ways to end up in another group. Both are offered
+/// to everyone — this menu is about groups, not about what you may do inside
+/// one, so it does not change with your role. Creating an exercise is an
+/// organizer's action and lives on the home header instead.
 private struct HomeQuickAddSheet: View {
-    let isOwner: Bool
     let onSelect: (HomeQuickAddDestination) -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 10) {
-                if isOwner {
-                    optionCard(
-                        title: "تمرين جديد",
-                        subtitle: "حدد اليوم والملعب والقطة، وأرسله للأعضاء",
-                        systemImage: "figure.run",
-                        isPrimary: true,
-                        destination: .createEvent
-                    )
-                } else {
-                    optionCard(
-                        title: "انضم إلى مجموعة",
-                        subtitle: "أدخل رمز الدعوة الذي وصلك من المشرف",
-                        systemImage: "link",
-                        isPrimary: true,
-                        destination: .joinTeam
-                    )
-                }
+                optionCard(
+                    title: "انضم إلى مجموعة",
+                    subtitle: "أدخل رمز الدعوة الذي وصلك من المشرف",
+                    systemImage: "link",
+                    isPrimary: true,
+                    destination: .joinTeam
+                )
 
                 optionCard(
                     title: "مجموعة جديدة",

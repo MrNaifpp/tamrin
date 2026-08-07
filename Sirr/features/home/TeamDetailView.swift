@@ -13,6 +13,7 @@ struct TeamDetailView: View {
     @State private var didCopyCode = false
     @State private var showDeleteConfirm = false
     @State private var showAddSession = false
+    @State private var showNewSession = false
 
     // Read from `teams` directly (not `currentTeam`, which force-indexes) so the
     // delete → pop transition on the last team can't touch an empty array.
@@ -37,19 +38,6 @@ struct TeamDetailView: View {
     /// The group has members, but this screen failed to load them.
     private var rosterUnavailable: Bool {
         members.isEmpty && (team?.memberCount ?? 0) > 0
-    }
-
-    /// Arabic counted-noun agreement: أعضاء for 3–10, عضوًا for 11–99, عضو otherwise.
-    private func membersLabel(_ count: Int) -> String {
-        let n = count % 100
-        switch count {
-        case 1: return "عضو واحد"
-        case 2: return "عضوان"
-        default:
-            if (3...10).contains(n) { return "\(count.formatted()) أعضاء" }
-            if (11...99).contains(n) { return "\(count.formatted()) عضوًا" }
-            return "\(count.formatted()) عضو"
-        }
     }
 
     private var dayText: String {
@@ -93,6 +81,11 @@ struct TeamDetailView: View {
                         }
 
                         planSection
+
+                        if feed.isCurrentTeamOwner, plan != nil {
+                            newSessionButton
+                        }
+
                         membersCard
 
                         if feed.isCurrentTeamOwner {
@@ -153,9 +146,10 @@ struct TeamDetailView: View {
                         showDeleteConfirm = true
                     }
                 } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.white)
+                    // Unstyled on purpose: a hand-set size and colour here made
+                    // this button render differently from the system-drawn back
+                    // button beside it. Left alone, both take the same glass.
+                    Label("خيارات المجموعة", systemImage: "ellipsis")
                 }
                 .accessibilityLabel("خيارات المجموعة")
             }
@@ -169,7 +163,7 @@ struct TeamDetailView: View {
             Button("تراجع", role: .cancel) {}
         } message: {
             Text(feed.isCurrentTeamOwner
-                 ? "بيتم حذف المجموعة وكل تمارينها وأعضائها وطرق الدفع من عندك. تقدر تنشئ مجموعة جديدة أي وقت."
+                 ? "بتُحذف المجموعة وكل تمارينها وأعضائها وطرق الدفع من عندك. تقدر تنشئ مجموعة جديدة أي وقت."
                  : "بتغادر المجموعة وتختفي تمارينها من عندك. تقدر ترجع أي وقت برمز الدعوة.")
         }
         .sheet(isPresented: $showAddSession) {
@@ -178,6 +172,11 @@ struct TeamDetailView: View {
                             editingEventID: plan?.sourceEventID,
                             editingTemplateID: plan?.sourceTemplateID,
                             initialPlan: plan.map(draft(from:)) ?? PlanDraft())
+        }
+        // Separate from the sheet above: that one edits the standing session,
+        // this one starts a blank exercise and must not inherit its identifiers.
+        .sheet(isPresented: $showNewSession) {
+            AddSessionSheet(feed: feed, isPresented: $showNewSession)
         }
     }
 
@@ -234,7 +233,7 @@ struct TeamDetailView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
 
-                Text(membersLabel(memberCount))
+                Text(memberCount.counted(.member))
                     .font(TamrinFont.font(size: 14, weight: .medium))
                     .foregroundStyle(.white.opacity(0.6))
             }
@@ -311,7 +310,7 @@ struct TeamDetailView: View {
                     PlanInfoRow(
                         symbol: "person.2.fill",
                         title: "سعة الموعد",
-                        value: "\(plan.capacity.formatted()) لاعب"
+                        value: plan.capacity.counted(.player)
                     )
                 }
             }
@@ -338,6 +337,30 @@ struct TeamDetailView: View {
                 }
             }
         }
+    }
+
+    /// Opening an exercise is the organizer's main act on this page, so it sits
+    /// under the template as a full-width row — the same shape as the roster's
+    /// manual-registration button, since both are "add one of these".
+    private var newSessionButton: some View {
+        Button {
+            showNewSession = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "plus")
+                    .font(.system(size: 15, weight: .semibold))
+                Text("تمرين جديد")
+                    .font(TamrinFont.font(size: 15, weight: .medium))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, minHeight: 56)
+            .padding(.horizontal, 14)
+            .tamrinGlassCard()
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("تمرين جديد")
+        .accessibilityHint("يفتح إنشاء تمرين جديد في هذه المجموعة")
     }
 
     private func venueBlock(_ plan: FeedPlan) -> some View {
@@ -380,7 +403,7 @@ struct TeamDetailView: View {
             }
             .padding(14)
         }
-        .background(.white.opacity(0.07), in: .rect(cornerRadius: 20, style: .continuous))
+        .tamrinGlassCard()
         .clipShape(.rect(cornerRadius: 20, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("الملعب: \(plan.locationName)")
@@ -391,7 +414,7 @@ struct TeamDetailView: View {
     private var membersCard: some View {
         PlanGlassSection(
             title: "الأعضاء",
-            caption: memberCount == 0 ? nil : membersLabel(memberCount)
+            caption: memberCount == 0 ? nil : memberCount.counted(.member)
         ) {
             if members.isEmpty {
                 Text(rosterUnavailable
@@ -402,29 +425,20 @@ struct TeamDetailView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
+                // Same gap the exercise roster uses, so a list of people reads
+                // identically wherever it appears.
                 VStack(spacing: 8) {
                     ForEach(members) { member in
-                        HStack(spacing: 12) {
-                            PlanMemberAvatar(
-                                name: member.displayName,
-                                size: 40,
-                                tint: member.role == .admin ? TamrinTheme.lime : Color.white.opacity(0.24)
-                            )
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(member.displayName)
-                                    .font(TamrinFont.font(size: 16, weight: .medium))
-                                    .foregroundStyle(.white)
-                                    .lineLimit(1)
-                                Text(member.isPending
-                                     ? "بانتظار الانضمام"
-                                     : (member.role == .admin ? "مشرف المجموعة" : "عضو"))
-                                    .font(TamrinFont.font(size: 12, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.5))
-                            }
-
-                            Spacer(minLength: 6)
-
+                        MemberRowCard(
+                            name: member.displayName,
+                            subtitle: member.isPending
+                                ? "بانتظار الانضمام"
+                                : (member.role == .admin ? "مشرف المجموعة" : "عضو"),
+                            avatarTint: member.role == .admin
+                                ? TamrinTheme.lime
+                                : .white.opacity(0.28),
+                            avatarForeground: member.role == .admin ? TamrinTheme.ink : .white
+                        ) {
                             if member.role == .admin {
                                 Image(systemName: "crown.fill")
                                     .font(.system(size: 13))
@@ -435,9 +449,6 @@ struct TeamDetailView: View {
                                     .foregroundStyle(.orange)
                             }
                         }
-                        .padding(.horizontal, 12)
-                        .frame(minHeight: 58)
-                        .background(.white.opacity(0.06), in: .rect(cornerRadius: 18, style: .continuous))
                         .accessibilityElement(children: .combine)
                     }
                 }
@@ -509,7 +520,7 @@ struct TeamDetailView: View {
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
-                    .background(.white.opacity(0.07), in: .rect(cornerRadius: 18, style: .continuous))
+                    .tamrinGlassCard()
                 }
             }
         }
@@ -527,23 +538,18 @@ struct TeamDetailView: View {
             } else {
                 VStack(spacing: 8) {
                     ForEach(methods) { method in
-                        HStack(spacing: 12) {
-                            PaymentProviderLogo(provider: method.provider, size: 38)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(method.provider.displayName)
-                                    .font(TamrinFont.font(size: 15, weight: .medium))
-                                    .foregroundStyle(.white)
-                                Text(method.provider == .cash ? "الدفع في الملعب" : method.maskedSummary)
-                                    .font(TamrinFont.font(size: 12, weight: .regular))
-                                    .foregroundStyle(.white.opacity(0.5))
-                            }
-
-                            Spacer(minLength: 0)
+                        TamrinRowCard(
+                            title: method.provider.displayName,
+                            subtitle: method.provider == .cash
+                                ? "الدفع في الملعب"
+                                : method.maskedSummary
+                        ) {
+                            PaymentProviderLogo(
+                                provider: method.provider,
+                                size: TamrinRowCard<EmptyView, EmptyView>.leadingSize
+                            )
                         }
-                        .padding(.horizontal, 12)
-                        .frame(minHeight: 56)
-                        .background(.white.opacity(0.06), in: .rect(cornerRadius: 18, style: .continuous))
+                        .accessibilityElement(children: .combine)
                     }
                 }
             }
@@ -582,7 +588,7 @@ private struct PlanInfoRow: View {
         }
         .padding(.horizontal, 12)
         .frame(minHeight: 56)
-        .background(.white.opacity(0.06), in: .rect(cornerRadius: 18, style: .continuous))
+        .tamrinGlassCard()
     }
 }
 
@@ -612,7 +618,7 @@ private struct PlanGlassSection<Content: View>: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(.white.opacity(0.09), in: .rect(cornerRadius: 26, style: .continuous))
+        .tamrinGlassCard()
     }
 }
 
@@ -655,18 +661,3 @@ private struct PlanGlassStat: View {
     }
 }
 
-private struct PlanMemberAvatar: View {
-    let name: String
-    let size: CGFloat
-    var tint: Color
-    var body: some View {
-        Circle()
-            .fill(tint)
-            .frame(width: size, height: size)
-            .overlay(
-                Text(String(name.prefix(1)))
-                    .font(TamrinFont.font(size: size * 0.38, weight: .bold))
-                    .foregroundStyle(TamrinTheme.ink)
-            )
-    }
-}

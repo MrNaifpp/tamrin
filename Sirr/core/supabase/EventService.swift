@@ -128,11 +128,38 @@ struct ParticipantRecord: Codable, Identifiable {
     let paidToNumber: String?
     let guestName: String?
     let addedBy: UUID?
+    /// Nil on a server that predates manual registration.
+    let addedManually: Bool?
+    /// Only the organizer receives this; it is what the payment-reminder
+    /// cooldown is measured from. Nil on a server that predates reminders.
+    let paymentReminderSentAt: String?
 
     var id: UUID { participantId }
 
     /// True if this row is a guest (no account) added by a paying joiner.
     var isGuest: Bool { userId == nil }
+
+    /// True if the organizer seated this person by name rather than the person
+    /// registering themselves. Only these rows are removable by the organizer.
+    var isManual: Bool { addedManually == true }
+
+    /// Postgres timestamps arrive as strings; the roster decoder keeps them raw
+    /// so these fields can stay optional without a custom init.
+    static func timestamp(_ raw: String?) -> Date? {
+        guard let raw else { return nil }
+        if let date = ISO8601DateFormatter().date(from: raw) { return date }
+        for format in ["yyyy-MM-dd'T'HH:mm:ss.SSSSSSZZZZZ", "yyyy-MM-dd'T'HH:mm:ssZZZZZ"] {
+            let formatter = DateFormatter()
+            formatter.dateFormat = format
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            if let date = formatter.date(from: raw) { return date }
+        }
+        return nil
+    }
+
+    var joinedAtDate: Date? { Self.timestamp(joinedAt) }
+
+    var paymentReminderSentAtDate: Date? { Self.timestamp(paymentReminderSentAt) }
 
     /// True if the row represents a confirmed seat.
     var isConfirmed: Bool { (paymentStatus ?? .confirmed) == .confirmed }
@@ -150,7 +177,70 @@ struct ParticipantRecord: Codable, Identifiable {
         case paidToNumber = "paid_to_number"
         case guestName = "guest_name"
         case addedBy = "added_by"
+        case addedManually = "added_manually"
+        case paymentReminderSentAt = "payment_reminder_sent_at"
     }
+}
+
+/// Result of `add_manual_participant`. The RPC reports refusals as a status
+/// string so the organizer gets a specific reason instead of a thrown error.
+enum AddManualParticipantResult {
+    case added(participantId: UUID, name: String)
+    /// The seat cap is already reached (pending seats included).
+    case seatsFull
+    /// Someone with that exact name was already registered manually here.
+    case duplicateName
+    /// The organizer locked registration.
+    case registrationClosed
+    /// The exercise has not been sent to the group yet.
+    case notPublished
+    /// The occurrence was skipped.
+    case cancelled
+    /// The name was blank once trimmed.
+    case emptyName
+}
+
+/// Result of `remove_event_participant`.
+enum RemoveParticipantResult {
+    case removed
+    /// The organizer's own seat, which this operation refuses to free.
+    case isCreator
+    /// Already gone — someone else removed it, or the roster was stale.
+    case notFound
+}
+
+/// Result of `remind_participant_payment`. The server owns the cooldown, so
+/// every outcome carries whatever the organizer needs to be told.
+enum PaymentReminderResult {
+    /// Sent, and the next one may go out at this time.
+    case sent(nextAllowedAt: Date)
+    /// One went out recently; this is when the next is allowed.
+    case tooSoon(nextAllowedAt: Date)
+    /// A guest or a manually seated player: no account, so no device to reach.
+    case noAccount
+    /// The organizer's own seat.
+    case isSelf
+    /// The seat is gone, or the occurrence was skipped.
+    case notFound
+    case cancelled
+}
+
+/// What a group-wide reminder is about.
+enum MemberReminderKind: String {
+    /// Members who have not taken a seat yet.
+    case register
+    /// Everyone already on the list.
+    case payment
+}
+
+/// Result of `remind_event_members`.
+enum MemberReminderResult {
+    case sent(recipients: Int, nextAllowedAt: Date)
+    case tooSoon(nextAllowedAt: Date)
+    /// Everyone is already registered, or nobody is on the list yet.
+    case noRecipients
+    case notPublished
+    case cancelled
 }
 
 /// A member invitation response returned by `get_event_member_responses`.
@@ -587,6 +677,202 @@ final class EventService {
         let records = try JSONDecoder().decode([ParticipantRecord].self, from: response.data)
         eventLogger.info("API getEventParticipants succeeded (eventId: \(eventId), count: \(records.count))")
         return records
+    }
+
+    /// Registers a person by name on behalf of the organizer. The seat is real:
+    /// the server applies the same capacity and lifecycle rules a member's own
+    /// registration goes through.
+    func addManualParticipant(eventId: UUID, name: String) async throws -> AddManualParticipantResult {
+        let params: [String: AnyJSON] = [
+            "p_event_id": .string(eventId.uuidString),
+            "p_name": .string(name)
+        ]
+
+        let response = try await client
+            .rpc("add_manual_participant", params: params)
+            .execute()
+
+        guard
+            let payload = try JSONSerialization.jsonObject(with: response.data) as? [String: Any],
+            let status = payload["status"] as? String
+        else {
+            throw NSError(
+                domain: "EventService",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "تعذر قراءة رد الخادم."]
+            )
+        }
+
+        switch status {
+        case "added":
+            guard
+                let idString = payload["participant_id"] as? String,
+                let participantId = UUID(uuidString: idString)
+            else {
+                throw NSError(
+                    domain: "EventService",
+                    code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "تعذر قراءة رد الخادم."]
+                )
+            }
+            let storedName = (payload["name"] as? String) ?? name
+            eventLogger.info("API addManualParticipant succeeded (eventId: \(eventId))")
+            return .added(participantId: participantId, name: storedName)
+        case "seats_full": return .seatsFull
+        case "duplicate_name": return .duplicateName
+        case "registration_closed": return .registrationClosed
+        case "not_published": return .notPublished
+        case "cancelled": return .cancelled
+        case "empty_name": return .emptyName
+        default:
+            throw NSError(
+                domain: "EventService",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "رد غير متوقع من الخادم: \(status)"]
+            )
+        }
+    }
+
+    /// Nudges one player to pay their share. The RPC owns the one-hour
+    /// cooldown and reports a refusal as a status rather than an error.
+    func remindParticipantPayment(
+        eventId: UUID,
+        participantId: UUID
+    ) async throws -> PaymentReminderResult {
+        let params: [String: String] = [
+            "p_event_id": eventId.uuidString,
+            "p_participant_id": participantId.uuidString
+        ]
+
+        let response = try await client
+            .rpc("remind_participant_payment", params: params)
+            .execute()
+
+        guard
+            let payload = try JSONSerialization.jsonObject(with: response.data) as? [String: Any],
+            let status = payload["status"] as? String
+        else {
+            throw NSError(
+                domain: "EventService",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "تعذر قراءة رد الخادم."]
+            )
+        }
+
+        // Falls back to a locally computed hour so a server that returns an
+        // unparseable timestamp still leaves the button disabled.
+        let nextAllowed = ParticipantRecord.timestamp(payload["next_allowed_at"] as? String)
+            ?? Date().addingTimeInterval(3600)
+
+        switch status {
+        case "sent":
+            eventLogger.info("API remindParticipantPayment sent (eventId: \(eventId))")
+            return .sent(nextAllowedAt: nextAllowed)
+        case "too_soon": return .tooSoon(nextAllowedAt: nextAllowed)
+        case "no_account": return .noAccount
+        case "is_self": return .isSelf
+        case "not_found": return .notFound
+        case "cancelled": return .cancelled
+        default:
+            throw NSError(
+                domain: "EventService",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "رد غير متوقع من الخادم: \(status)"]
+            )
+        }
+    }
+
+    /// Sends one reminder push to every member the kind applies to. The RPC
+    /// picks the recipients and owns the one-hour cooldown.
+    func remindEventMembers(
+        eventId: UUID,
+        kind: MemberReminderKind
+    ) async throws -> MemberReminderResult {
+        let params: [String: String] = [
+            "p_event_id": eventId.uuidString,
+            "p_kind": kind.rawValue
+        ]
+
+        let response = try await client
+            .rpc("remind_event_members", params: params)
+            .execute()
+
+        guard
+            let payload = try JSONSerialization.jsonObject(with: response.data) as? [String: Any],
+            let status = payload["status"] as? String
+        else {
+            throw NSError(
+                domain: "EventService",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "تعذر قراءة رد الخادم."]
+            )
+        }
+
+        let nextAllowed = ParticipantRecord.timestamp(payload["next_allowed_at"] as? String)
+            ?? Date().addingTimeInterval(3600)
+
+        switch status {
+        case "sent":
+            let recipients = (payload["recipients"] as? Int) ?? 0
+            eventLogger.info("API remindEventMembers sent (eventId: \(eventId), kind: \(kind.rawValue))")
+            return .sent(recipients: recipients, nextAllowedAt: nextAllowed)
+        case "too_soon": return .tooSoon(nextAllowedAt: nextAllowed)
+        case "no_recipients": return .noRecipients
+        case "not_published": return .notPublished
+        case "cancelled": return .cancelled
+        default:
+            throw NSError(
+                domain: "EventService",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "رد غير متوقع من الخادم: \(status)"]
+            )
+        }
+    }
+
+    /// Frees a manually registered seat. Rows belonging to real accounts, and
+    /// the guests a member paid for, are rejected server-side.
+    func removeManualParticipant(participantId: UUID) async throws {
+        let params: [String: String] = ["p_participant_id": participantId.uuidString]
+
+        try await client
+            .rpc("remove_manual_participant", params: params)
+            .execute()
+
+        eventLogger.info("API removeManualParticipant succeeded (participantId: \(participantId))")
+    }
+
+    /// Organizer removes anyone from one exercise. Removing a member takes the
+    /// guests they paid for with them; the organizer's own seat is refused.
+    func removeParticipant(participantId: UUID) async throws -> RemoveParticipantResult {
+        let params: [String: String] = ["p_participant_id": participantId.uuidString]
+
+        let response = try await client
+            .rpc("remove_event_participant", params: params)
+            .execute()
+
+        guard
+            let payload = try JSONSerialization.jsonObject(with: response.data) as? [String: Any],
+            let status = payload["status"] as? String
+        else {
+            throw NSError(
+                domain: "EventService",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "تعذر قراءة رد الخادم."]
+            )
+        }
+
+        eventLogger.info("API removeParticipant: \(status)")
+        switch status {
+        case "removed": return .removed
+        case "is_creator": return .isCreator
+        case "not_found": return .notFound
+        default:
+            throw NSError(
+                domain: "EventService",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "رد غير متوقع من الخادم: \(status)"]
+            )
+        }
     }
 
     /// Fetches invitation responses for an event. The server limits organizers

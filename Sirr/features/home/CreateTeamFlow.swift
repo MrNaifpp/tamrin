@@ -2,6 +2,7 @@ import SwiftUI
 import MapKit
 import PhotosUI
 import Observation
+import Combine
 
 @MainActor @Observable
 final class LocationSearchService {
@@ -308,91 +309,65 @@ private struct IdentityStepPage: View {
     @State private var photoItem: PhotosPickerItem?
     @FocusState private var nameFocused: Bool
 
-    private let symbols = ["figure.soccer", "figure.run", "figure.strengthtraining.traditional", "figure.basketball", "figure.hiking", "figure.pool.swim", "figure.volleyball", "figure.badminton"]
+    /// Every sport SF Symbols draws a figure for, filtered at runtime against
+    /// what this OS actually ships: `Image(systemName:)` renders nothing for a
+    /// name the system does not know, so a hardcoded list would quietly leave
+    /// holes in the grid on an older iOS.
+    private static let sportSymbols: [String] = [
+        "figure.soccer", "figure.basketball", "figure.american.football",
+        "figure.australian.football", "figure.rugby", "figure.baseball",
+        "figure.softball", "figure.cricket", "figure.volleyball",
+        "figure.handball", "figure.tennis", "figure.badminton",
+        "figure.table.tennis", "figure.racquetball", "figure.squash",
+        "figure.golf", "figure.bowling", "figure.archery",
+        "figure.run", "figure.walk", "figure.hiking", "figure.track.and.field",
+        "figure.outdoor.cycle", "figure.indoor.cycle", "figure.rolling",
+        "figure.pool.swim", "figure.open.water.swim", "figure.water.fitness",
+        "figure.surfing", "figure.sailing", "figure.rowing", "figure.fishing",
+        "figure.strengthtraining.traditional", "figure.strengthtraining.functional",
+        "figure.core.training", "figure.highintensity.intervaltraining",
+        "figure.cross.training", "figure.mixed.cardio", "figure.elliptical",
+        "figure.stair.stepper", "figure.jumprope", "figure.flexibility",
+        "figure.cooldown", "figure.yoga", "figure.pilates", "figure.mind.and.body",
+        "figure.boxing", "figure.kickboxing", "figure.martial.arts",
+        "figure.wrestling", "figure.fencing", "figure.climbing",
+        "figure.skiing.downhill", "figure.skiing.crosscountry",
+        "figure.snowboarding", "figure.curling", "figure.ice.skating",
+        "figure.ice.hockey", "figure.field.hockey", "figure.lacrosse",
+        "figure.disc.sports", "figure.equestrian.sports", "figure.gymnastics",
+        "figure.dance", "figure.socialdance", "figure.play", "figure.step.training"
+    ].filter { UIImage(systemName: $0) != nil }
+
+    private let symbolColumns = Array(
+        repeating: GridItem(.flexible(), spacing: 12),
+        count: 6
+    )
+
+    /// The group as it will be seen everywhere else, shown once at the size a
+    /// choice deserves. The symbol scales with it, so this is the only number
+    /// to touch.
+    private static let identityDiameter: CGFloat = 112
+
+    /// A step lighter than `TamrinTheme.secondary`. That token is tuned to clear
+    /// a sheet background by a visible margin; here the chips sit on `card` —
+    /// plain white in light mode — so they can be softer without disappearing,
+    /// and a wall of sixty icon discs is calmer for it.
+    private static let chipFill = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 0.28, alpha: 1)
+            : UIColor(white: 0.945, alpha: 1)
+    })
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 0) {
-                Spacer(minLength: 18)
-
-                PhotosPicker(selection: $photoItem, matching: .images) {
-                    ZStack(alignment: .bottomTrailing) {
-                        Group {
-                            if let data = draft.avatarData, let image = UIImage(data: data) {
-                                Image(uiImage: image)
-                                    .resizable()
-                                    .scaledToFill()
-                            } else {
-                                ZStack {
-                                    TamrinTheme.secondary
-                                    Image(systemName: draft.teamSymbol)
-                                        .font(.system(size: 52, weight: .semibold))
-                                        .foregroundStyle(TamrinTheme.ink.opacity(0.72))
-                                }
-                            }
-                        }
-                        .frame(width: 138, height: 138)
-                        .clipShape(.rect(cornerRadius: 42, style: .continuous))
-                        .shadow(color: .black.opacity(0.09), radius: 26, y: 12)
-
-                        Image(systemName: "camera.fill")
-                            .font(.subheadline)
-                            .foregroundStyle(.white)
-                            .frame(width: 38, height: 38)
-                            .background(TamrinTheme.ink, in: .circle)
-                            .offset(x: -6, y: 8)
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("صورة المجموعة")
-
-                Text(draft.avatarData == nil ? "أضف صورة للمجموعة" : "اضغط لتغيير الصورة")
-                    .font(TamrinFont.footnote)
-                    .foregroundStyle(.tertiary)
-                    .padding(.top, 14)
-
-                TextField("اسم المجموعة", text: $draft.teamName)
-                    .font(TamrinFont.title)
-                    .multilineTextAlignment(.center)
-                    .focused($nameFocused)
-                    .submitLabel(.continue)
-                    .onSubmit(advance)
-                    .padding(.vertical, 18)
-                    .padding(.horizontal, 42)
-                    .padding(.top, 26)
-
-                VStack(spacing: 14) {
-                    Text("أو اختر رمزًا يعبر عنكم")
-                        .font(TamrinFont.footnote)
-                        .foregroundStyle(.tertiary)
-                    ScrollView(.horizontal) {
-                        HStack(spacing: 10) {
-                            ForEach(symbols, id: \.self) { symbol in
-                                Button {
-                                    draft.teamSymbol = symbol
-                                    draft.avatarData = nil
-                                    photoItem = nil
-                                    Haptics.selection()
-                                } label: {
-                                    Image(systemName: symbol)
-                                        .font(.system(size: TamrinControlMetrics.symbolSize, weight: .semibold))
-                                        .foregroundStyle(isSymbolSelected(symbol) ? .white : .secondary)
-                                        .frame(width: TamrinControlMetrics.roundButton, height: TamrinControlMetrics.roundButton)
-                                        .background(isSymbolSelected(symbol) ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(TamrinTheme.glass), in: .circle)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityAddTraits(isSymbolSelected(symbol) ? .isSelected : [])
-                            }
-                        }
-                        .padding(.horizontal, 22)
-                        .padding(.vertical, 6)
-                    }
-                    .scrollIndicators(.hidden)
-                }
-                .padding(.top, 34)
-
-                Spacer(minLength: 40)
+            VStack(spacing: 16) {
+                identityCard
+                colorRow
+                symbolGrid
+                Spacer(minLength: 24)
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
             .frame(maxWidth: .infinity)
         }
         .scrollDismissesKeyboard(.interactively)
@@ -408,6 +383,108 @@ private struct IdentityStepPage: View {
             }
         }
         .onAppear { if draft.teamName.isEmpty { nameFocused = true } }
+    }
+
+    /// The group as it will look, over the field that names it.
+    private var identityCard: some View {
+        VStack(spacing: 18) {
+            PhotosPicker(selection: $photoItem, matching: .images) {
+                Group {
+                    if let data = draft.avatarData, let image = UIImage(data: data) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        ZStack {
+                            draft.teamColor.color
+                            Image(systemName: draft.teamSymbol)
+                                .font(.system(size: Self.identityDiameter * 0.48, weight: .semibold))
+                                .foregroundStyle(draft.teamColor.symbolColor)
+                        }
+                    }
+                }
+                .frame(width: Self.identityDiameter, height: Self.identityDiameter)
+                .clipShape(.circle)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("صورة المجموعة")
+
+            TextField("اسم المجموعة", text: $draft.teamName)
+                .font(TamrinFont.font(size: 20, weight: .medium))
+                .multilineTextAlignment(.center)
+                .focused($nameFocused)
+                .submitLabel(.continue)
+                .onSubmit(advance)
+                .padding(.vertical, 15)
+                .padding(.horizontal, 18)
+                .background(Self.chipFill, in: .capsule)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity)
+        .background(TamrinTheme.card, in: .rect(cornerRadius: 26, style: .continuous))
+    }
+
+    /// One row, no scrolling: these are the colours worth a tap, and a group's
+    /// tint is not a decision worth paging through.
+    private var colorRow: some View {
+        HStack(spacing: 0) {
+            ForEach(TeamColor.allCases) { option in
+                Button {
+                    draft.teamColor = option
+                    Haptics.selection()
+                } label: {
+                    Circle()
+                        .fill(option.color)
+                        .frame(width: 34, height: 34)
+                        .overlay {
+                            Circle()
+                                .strokeBorder(Color.primary.opacity(0.45), lineWidth: 2)
+                                .padding(-4)
+                                .opacity(draft.teamColor == option ? 1 : 0)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: TamrinControlMetrics.touchTarget)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(option.rawValue)
+                .accessibilityAddTraits(draft.teamColor == option ? .isSelected : [])
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(TamrinTheme.card, in: .rect(cornerRadius: 26, style: .continuous))
+        .animation(.smooth(duration: 0.2), value: draft.teamColor)
+    }
+
+    private var symbolGrid: some View {
+        LazyVGrid(columns: symbolColumns, spacing: 12) {
+            ForEach(Self.sportSymbols, id: \.self) { symbol in
+                Button {
+                    draft.teamSymbol = symbol
+                    draft.avatarData = nil
+                    photoItem = nil
+                    Haptics.selection()
+                } label: {
+                    Image(systemName: symbol)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(
+                            isSymbolSelected(symbol) ? draft.teamColor.symbolColor : Color.primary
+                        )
+                        .frame(width: 44, height: 44)
+                        .background(
+                            isSymbolSelected(symbol)
+                                ? AnyShapeStyle(draft.teamColor.color)
+                                : AnyShapeStyle(Self.chipFill),
+                            in: .circle
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isSymbolSelected(symbol) ? .isSelected : [])
+            }
+        }
+        .padding(16)
+        .background(TamrinTheme.card, in: .rect(cornerRadius: 26, style: .continuous))
     }
 
     private func isSymbolSelected(_ symbol: String) -> Bool {
@@ -508,7 +585,7 @@ private struct TemplateCard: View {
                 }
                 HStack(spacing: 8) {
                     TemplateTag(symbol: "mappin", text: plan.locationName)
-                    TemplateTag(symbol: "person.2", text: "\(plan.capacity.appDigits) لاعب")
+                    TemplateTag(symbol: "person.2", text: plan.capacity.counted(.player))
                     TemplateTag(
                         symbol: "banknote",
                         text: plan.totalVenueCost == 0
@@ -1139,7 +1216,16 @@ private struct CustomVenueForm: View {
     @State private var name = ""
     @State private var address = ""
     @State private var mapsLink = ""
+    @State private var linkSourceIndex = 0
     @FocusState private var nameFocused: Bool
+
+    /// The map apps people around here actually share a pin from.
+    private static let linkSources = ["هدهد", "خرائط قوقل", "بلدي", "خرائط أبل"]
+    private static let linkSourceInterval: TimeInterval = 2
+
+    private let linkSourceTimer = Timer
+        .publish(every: linkSourceInterval, on: .main, in: .common)
+        .autoconnect()
 
     private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var trimmedLink: String { mapsLink.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -1164,18 +1250,38 @@ private struct CustomVenueForm: View {
                         .lineLimit(1...3)
                 }
 
-                VenueField(title: "رابط قوقل مابز (اختياري)", caption: mapsCaption) {
-                    TextField(
-                        "رابط قوقل مابز",
-                        text: $mapsLink,
-                        prompt: Text(verbatim: "https://maps.app.goo.gl/…").foregroundStyle(.tertiary)
-                    )
+                VenueField(title: "رابط الموقع", caption: mapsCaption) {
+                    TextField("", text: $mapsLink)
                         .font(TamrinFont.body)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .environment(\.layoutDirection, .leftToRight)
                         .multilineTextAlignment(.leading)
+                        // The placeholder names the map apps a link may come
+                        // from, cycling through them, so it answers "from
+                        // where?" rather than showing one vendor's URL shape.
+                        // It is drawn as an overlay because a `prompt` cannot
+                        // animate between values.
+                        .overlay {
+                            if trimmedLink.isEmpty {
+                                // Pinned right the explicit way: the field runs
+                                // left-to-right for the URL, so a `.trailing`
+                                // alignment here would resolve against the
+                                // wrong direction. The spacer settles it.
+                                HStack(spacing: 0) {
+                                    Spacer(minLength: 0)
+                                    Text(Self.linkSources[linkSourceIndex])
+                                        .font(TamrinFont.body)
+                                        .foregroundStyle(.tertiary)
+                                        .id(linkSourceIndex)
+                                        .transition(.blurReplace)
+                                }
+                                .environment(\.layoutDirection, .leftToRight)
+                                .allowsHitTesting(false)
+                                .accessibilityHidden(true)
+                            }
+                        }
                 }
 
                 Spacer(minLength: 24)
@@ -1194,6 +1300,12 @@ private struct CustomVenueForm: View {
                 Button("تم", action: save)
                     .fontWeight(.semibold)
                     .disabled(trimmedName.isEmpty || !isLinkValid)
+            }
+        }
+        .onReceive(linkSourceTimer) { _ in
+            guard trimmedLink.isEmpty else { return }
+            withAnimation(.smooth(duration: 0.35)) {
+                linkSourceIndex = (linkSourceIndex + 1) % Self.linkSources.count
             }
         }
         .onAppear {
@@ -1439,7 +1551,7 @@ private struct VenueCostSheet: View {
                         .contentTransition(.numericText())
                 }
                 Spacer()
-                Text("على \(plan.capacity.appDigits) لاعب")
+                Text("على \(plan.capacity.counted(.player))")
                     .font(TamrinFont.caption)
                     .foregroundStyle(.secondary)
             }
@@ -1624,7 +1736,7 @@ private struct InviteStepPage: View {
                 withAnimation(.snappy) { didCopy = false }
             }
         } label: {
-            Label(didCopy ? "تم نسخ الرابط" : "انسخ الرابط",
+            Label(didCopy ? "نُسخ الرابط" : "انسخ الرابط",
                   systemImage: didCopy ? "checkmark" : "doc.on.doc")
                 .contentTransition(.symbolEffect(.replace))
                 .frame(maxWidth: .infinity)
@@ -1773,6 +1885,7 @@ struct AddSessionSheet: View {
             }
         }
         .environment(\.layoutDirection, .rightToLeft)
+        .sheetPresentationHaptic()
         .interactiveDismissDisabled(saving)
         .confirmationDialog(
             "أين تريد حفظ التعديل؟",
