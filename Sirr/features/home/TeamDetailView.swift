@@ -381,32 +381,65 @@ struct TeamDetailView: View {
             ))
             .allowsHitTesting(false)
 
-            HStack(spacing: 11) {
-                Image(systemName: "mappin.and.ellipse")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(TamrinTheme.lime)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(plan.locationName.isEmpty ? "الملعب غير محدد" : plan.locationName)
-                        .font(TamrinFont.font(size: 16, weight: .bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                    if !plan.locationAddress.isEmpty {
-                        Text(plan.locationAddress)
-                            .font(TamrinFont.font(size: 12, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.55))
-                            .lineLimit(1)
-                    }
+            // The map preview above is static, so this row is the only way to
+            // reach directions — same two destinations EventDetailView offers,
+            // via the same EventDirectionsProvider.
+            Menu {
+                Button {
+                    openDirections(.hudhud, plan: plan)
+                } label: {
+                    Label { Text("هدهد") } icon: { Image("MapAppHudhud") }
                 }
 
-                Spacer(minLength: 0)
+                Button {
+                    openDirections(.googleMaps, plan: plan)
+                } label: {
+                    Label { Text("خرائط قوقل") } icon: { Image("MapAppGoogleMaps") }
+                }
+            } label: {
+                HStack(spacing: 11) {
+                    Image(systemName: "mappin.and.ellipse")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(TamrinTheme.lime)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(plan.locationName.isEmpty ? "الملعب غير محدد" : plan.locationName)
+                            .font(TamrinFont.font(size: 16, weight: .bold))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        if !plan.locationAddress.isEmpty {
+                            Text(plan.locationAddress)
+                                .font(TamrinFont.font(size: 12, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.55))
+                                .lineLimit(1)
+                        }
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.4))
+                }
+                .padding(14)
+                .contentShape(.rect)
             }
-            .padding(14)
+            .accessibilityLabel("الملعب: \(plan.locationName)")
+            .accessibilityHint("يفتح قائمة تطبيقات الخرائط")
         }
         .tamrinGlassCard()
         .clipShape(.rect(cornerRadius: 20, style: .continuous))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("الملعب: \(plan.locationName)")
+    }
+
+    private func openDirections(_ provider: EventDirectionsProvider, plan: FeedPlan) {
+        let destination = EventDirectionsDestination(
+            latitude: plan.latitude,
+            longitude: plan.longitude,
+            name: plan.locationName
+        )
+        guard let url = provider.url(for: destination) else { return }
+        Haptics.impact(.light)
+        UIApplication.shared.open(url)
     }
 
     // MARK: - Members
