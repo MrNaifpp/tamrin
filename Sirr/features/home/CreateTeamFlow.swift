@@ -1220,7 +1220,7 @@ private struct CustomVenueForm: View {
     @FocusState private var nameFocused: Bool
 
     /// The map apps people around here actually share a pin from.
-    private static let linkSources = ["هدهد", "خرائط قوقل", "بلدي", "خرائط أبل"]
+    private static let linkSources = ["هدهد", "خرائط قوقل", "بلدي"]
     private static let linkSourceInterval: TimeInterval = 2
 
     private let linkSourceTimer = Timer
