@@ -14,7 +14,7 @@
 // another build to 1.1 fails with "Invalid Pre-Release Train" — so the first
 // production-backed build is a new version, not a new build number.
 MARKETING_VERSION = 1.3
-CURRENT_PROJECT_VERSION = 5
+CURRENT_PROJECT_VERSION = 6
 
 // Here rather than in the target so Staging.xcconfig can override it — a
 // staging build on the home screen has to be tellable from a real one.
