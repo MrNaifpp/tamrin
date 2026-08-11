@@ -1523,7 +1523,7 @@ struct RegistrationFlowSheet: View {
         isEnabled: Bool = true,
         action: @escaping () -> Void
     ) -> some View {
-        TamrinActionButton(title: title, isLoading: isLoading, tint: color, action: action)
+        TamrinActionButton(title: title, isLoading: isLoading, tint: color, labelColor: foregroundColor, action: action)
             .disabled(!isEnabled)
             .padding(.horizontal, 20)
             .padding(.top, 4)
