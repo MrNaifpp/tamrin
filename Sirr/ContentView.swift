@@ -14,6 +14,8 @@ enum AuthScreen: Hashable {
 
 struct ContentView: View {
     @StateObject private var appState = AppState()
+    @StateObject private var updateGate = AppUpdateGate()
+    @Environment(\.scenePhase) private var scenePhase
     @State private var authPath = NavigationPath()
     /// Event the user was trying to join when prompted to log in. Held across
     /// the login flow so we can route to it once authenticated.
@@ -119,6 +121,18 @@ struct ContentView: View {
             guard let url else { return }
             appState.handleDeepLink(url)
             DeepLinkRouter.shared.clear()
+        }
+        // Outermost on purpose: the gate has to cover the deep-link overlays
+        // above as well, or an invite link would be a way around it.
+        .sheet(item: updateGate.presentation) { config in
+            ForceUpdateSheet(storeURL: URL(string: config.updateUrl))
+        }
+        .task { await updateGate.refresh() }
+        .onChange(of: scenePhase) { _, phase in
+            // Re-check on foreground too. Without this, a session left open
+            // for days never sees the floor move.
+            guard phase == .active else { return }
+            Task { await updateGate.refresh() }
         }
     }
 }

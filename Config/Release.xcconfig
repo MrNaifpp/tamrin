@@ -1,0 +1,14 @@
+#include "Base.xcconfig"
+
+// Production. Reached by Archive, TestFlight and the App Store.
+//
+// Host only, never a full URL: `//` starts a comment in xcconfig, so
+// `https://x.supabase.co` would silently truncate to `https:`. SupabaseEnvironment
+// prepends the scheme.
+SUPABASE_HOST = hzsxwnmbdkrmipjtfzlp.supabase.co
+
+// Legacy JWT anon key, not the newer sb_publishable_ format — that one makes
+// auth.uid() return NULL inside RLS (supabase#42235), which would break every
+// policy in the migration set. Anon keys are public by design; they ship in the
+// app binary and RLS is what protects the data.
+SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6c3h3bm1iZGtybWlwanRmemxwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU2NTcwOTksImV4cCI6MjEwMTIzMzA5OX0.Opjcn6HMOWdw07RPDEXGaytKziAsnvvJSzpzuw8NiPY

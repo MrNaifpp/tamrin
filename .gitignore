@@ -9,6 +9,9 @@ genetare-apple.js
 .env
 .env.*
 
+## Per-developer signing (see Config/Local.xcconfig.example)
+Config/Local.xcconfig
+
 ## User settings
 xcuserdata/
 
