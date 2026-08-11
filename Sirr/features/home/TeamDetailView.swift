@@ -307,6 +307,14 @@ struct TeamDetailView: View {
 
                     venueBlock(plan)
 
+                    // Same tile, same wrapping HStack as EventDetailView's own
+                    // directions row — with only one action here it stretches
+                    // to fill the row, exactly as that row does when it too
+                    // has nothing else to sit beside it.
+                    HStack(spacing: 10) {
+                        directionsTile(plan)
+                    }
+
                     PlanInfoRow(
                         symbol: "person.2.fill",
                         title: "سعة الموعد",
@@ -381,54 +389,55 @@ struct TeamDetailView: View {
             ))
             .allowsHitTesting(false)
 
-            // The map preview above is static, so this row is the only way to
-            // reach directions — same two destinations EventDetailView offers,
-            // via the same EventDirectionsProvider.
-            Menu {
-                Button {
-                    openDirections(.hudhud, plan: plan)
-                } label: {
-                    Label { Text("هدهد") } icon: { Image("MapAppHudhud") }
-                }
+            HStack(spacing: 11) {
+                Image(systemName: "mappin.and.ellipse")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(TamrinTheme.lime)
 
-                Button {
-                    openDirections(.googleMaps, plan: plan)
-                } label: {
-                    Label { Text("خرائط قوقل") } icon: { Image("MapAppGoogleMaps") }
-                }
-            } label: {
-                HStack(spacing: 11) {
-                    Image(systemName: "mappin.and.ellipse")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(TamrinTheme.lime)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(plan.locationName.isEmpty ? "الملعب غير محدد" : plan.locationName)
-                            .font(TamrinFont.font(size: 16, weight: .bold))
-                            .foregroundStyle(.white)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(plan.locationName.isEmpty ? "الملعب غير محدد" : plan.locationName)
+                        .font(TamrinFont.font(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    if !plan.locationAddress.isEmpty {
+                        Text(plan.locationAddress)
+                            .font(TamrinFont.font(size: 12, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.55))
                             .lineLimit(1)
-                        if !plan.locationAddress.isEmpty {
-                            Text(plan.locationAddress)
-                                .font(TamrinFont.font(size: 12, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.55))
-                                .lineLimit(1)
-                        }
                     }
-
-                    Spacer(minLength: 0)
-
-                    Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.4))
                 }
-                .padding(14)
-                .contentShape(.rect)
+
+                Spacer(minLength: 0)
             }
-            .accessibilityLabel("الملعب: \(plan.locationName)")
-            .accessibilityHint("يفتح قائمة تطبيقات الخرائط")
+            .padding(14)
         }
         .tamrinGlassCard()
         .clipShape(.rect(cornerRadius: 20, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("الملعب: \(plan.locationName)")
+    }
+
+    /// Same tile EventDetailView uses for its own directions action, and the
+    /// same two destinations — a group's exercises and its standing venue
+    /// should offer identical ways to get there.
+    private func directionsTile(_ plan: FeedPlan) -> some View {
+        Menu {
+            Button {
+                openDirections(.hudhud, plan: plan)
+            } label: {
+                Label { Text("هدهد") } icon: { Image("MapAppHudhud") }
+            }
+
+            Button {
+                openDirections(.googleMaps, plan: plan)
+            } label: {
+                Label { Text("خرائط قوقل") } icon: { Image("MapAppGoogleMaps") }
+            }
+        } label: {
+            EventActionTile(symbol: "arrow.triangle.turn.up.right.diamond.fill", title: "الاتجاهات")
+        }
+        .accessibilityLabel("الاتجاهات")
+        .accessibilityHint("يفتح قائمة تطبيقات الخرائط")
     }
 
     private func openDirections(_ provider: EventDirectionsProvider, plan: FeedPlan) {
