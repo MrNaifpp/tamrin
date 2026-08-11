@@ -31,7 +31,7 @@ shape as the sandbox with nothing left as undocumented dashboard state.
 | Ref | `kpcdinxusxycenfnitjc` | `hzsxwnmbdkrmipjtfzlp` |
 | Used by | Debug builds | Release builds — Archive, TestFlight, App Store |
 | APNs host | sandbox (default) | `https://api.push.apple.com` |
-| Plan | Free is fine | Pro — free projects pause after about a week idle |
+| Plan | Free | Free — Pro declined 2 August 2026 (see below) |
 
 Both projects issue **legacy JWT `anon` keys**, confirmed on the new one (decodes to
 `role: anon`, `ref: hzsxwnmbdkrmipjtfzlp`, expiry 2036). This matters: the newer
@@ -59,6 +59,12 @@ Config/Local.xcconfig.example    committed — template
 // Per-developer signing lives in Local.xcconfig, which is gitignored. The `?`
 // makes the include non-fatal, so a fresh clone builds before that file exists.
 #include? "Local.xcconfig"
+
+// Version lives here, not in the target, so a bump is tracked in git. Until now
+// the 1.1 (2) bump existed only in Naif's working copy of project.pbxproj, so an
+// archive from any other machine would have silently shipped 1.0 (1).
+MARKETING_VERSION = 1.1
+CURRENT_PROJECT_VERSION = 2
 ```
 
 `Debug.xcconfig`:
@@ -68,7 +74,6 @@ Config/Local.xcconfig.example    committed — template
 
 SUPABASE_HOST = kpcdinxusxycenfnitjc.supabase.co
 SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtwY2Rpbnh1c3h5Y2VuZm5pdGpjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk3ODc0MTUsImV4cCI6MjA4NTM2MzQxNX0.yKbHhYVZbvgU8QdCyYNrvG8rC7KtX5cqXPGpedHMJ_g
-SUPABASE_AVATAR_BUCKET = avatars
 ```
 
 `Release.xcconfig`:
@@ -78,7 +83,6 @@ SUPABASE_AVATAR_BUCKET = avatars
 
 SUPABASE_HOST = hzsxwnmbdkrmipjtfzlp.supabase.co
 SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6c3h3bm1iZGtybWlwanRmemxwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU2NTcwOTksImV4cCI6MjEwMTIzMzA5OX0.Opjcn6HMOWdw07RPDEXGaytKziAsnvvJSzpzuw8NiPY
-SUPABASE_AVATAR_BUCKET = avatars
 ```
 
 Anon keys are public by design — they ship inside the app binary, and RLS is what protects the
@@ -89,7 +93,7 @@ each developer to fill in with their own team and bundle id.
 
 ### Value flow
 
-xcconfig → build setting → `Sirr/Info.plist` → Swift. Three keys are added to the existing
+xcconfig → build setting → `Sirr/Info.plist` → Swift. Two keys are added to the existing
 committed `Sirr/Info.plist`:
 
 ```xml
@@ -97,8 +101,6 @@ committed `Sirr/Info.plist`:
 <string>$(SUPABASE_HOST)</string>
 <key>SUPABASE_ANON_KEY</key>
 <string>$(SUPABASE_ANON_KEY)</string>
-<key>SUPABASE_AVATAR_BUCKET</key>
-<string>$(SUPABASE_AVATAR_BUCKET)</string>
 ```
 
 A new `Sirr/core/supabase/SupabaseEnvironment.swift` reads them:
@@ -107,7 +109,6 @@ A new `Sirr/core/supabase/SupabaseEnvironment.swift` reads them:
 enum SupabaseEnvironment {
     static let host = value("SUPABASE_HOST")
     static let anonKey = value("SUPABASE_ANON_KEY")
-    static let avatarBucket = value("SUPABASE_AVATAR_BUCKET")
 
     static var url: URL { URL(string: "https://\(host)")! }
 
@@ -122,10 +123,8 @@ enum SupabaseEnvironment {
 }
 ```
 
-`SupabaseClientManager` then constructs its client from `SupabaseEnvironment`, and
-`AuthService.uploadAvatar`'s hardcoded `"tamrin-stg"`
-([`AuthService.swift:240`](../../../Sirr/core/supabase/AuthService.swift#L240)) reads
-`SupabaseEnvironment.avatarBucket`.
+`SupabaseClientManager` then constructs its client from `SupabaseEnvironment`. Nothing else in
+the app changes.
 
 ### Two gotchas this design works around
 
@@ -154,11 +153,16 @@ Reaching it needs **one coordinated `project.pbxproj` commit**:
    `Release.xcconfig` need to be added to the project navigator — `Base.xcconfig` and
    `Local.xcconfig` are pulled in by `#include` and must **not** be added, which is what lets
    the gitignored one stay invisible to the project file.
-2. **Delete** `DEVELOPMENT_TEAM` and `PRODUCT_BUNDLE_IDENTIFIER` from the target's Debug *and*
-   Release build settings. A setting present in the pbxproj overrides the xcconfig, so leaving
-   them there makes the whole exercise a no-op.
-3. `grep` the file to prove neither name survives anywhere.
-4. Tell Faris before pushing. He pulls, copies the example to `Local.xcconfig`, fills in his
+2. **Delete** `DEVELOPMENT_TEAM`, `PRODUCT_BUNDLE_IDENTIFIER`, `MARKETING_VERSION` and
+   `CURRENT_PROJECT_VERSION` from the target's Debug *and* Release build settings. A setting
+   present in the pbxproj overrides the xcconfig, so leaving them there makes the whole exercise
+   a no-op.
+3. `grep` the file to prove none of those names survive anywhere.
+4. **Share the scheme.** Run→Debug and Archive→Release currently lives in gitignored
+   `xcuserdata`, so the guarantee this whole design rests on is per-machine and absent from git.
+   Ticking "Shared" in Manage Schemes writes
+   `Sirr.xcodeproj/xcshareddata/xcschemes/Sirr.xcscheme`, which is committed.
+5. Tell Faris before pushing. He pulls, copies the example to `Local.xcconfig`, fills in his
    team and bundle id, and builds.
 
 Blast radius if it goes wrong: Faris cannot sign until he creates that one file. Recoverable in
@@ -208,50 +212,38 @@ Then, in order:
 8. **Upgrade to Pro.** Free projects pause after roughly a week of inactivity, which for
    production means the app dies during any quiet stretch.
 
-## Storage bucket as a migration
+## Storage: deliberately unchanged
 
-The avatar bucket and its policies currently exist only as dashboard clicks, documented nowhere
-— precisely the state that gets forgotten when standing up a second project.
+The avatar bucket is **not** part of this work, by decision on 2 August 2026.
 
-New migration `supabase/migrations/20260802100000_avatar_bucket.sql` creates a bucket named
-`avatars` and its policies, matching the real upload path of `<uid>.jpg` at bucket root
-([`AuthService.swift:241`](../../../Sirr/core/supabase/AuthService.swift#L241)):
+The upload path is fully wired — `PhotosPicker` in
+[`SignupView`](../../../Sirr/features/auth/SignupView.swift#L214),
+[`EditProfileSheet`](../../../Sirr/features/profile/EditProfileSheet.swift#L170) and
+[`ProfileSettingsView`](../../../Sirr/features/home/ProfileSettingsView.swift#L100), all reaching
+`AuthService.uploadAvatar` and its hardcoded `tamrin-stg` bucket. But
+[`uploadAvatar`](../../../Sirr/core/supabase/AuthService.swift#L239) catches every error and
+returns nil, and each caller silently falls back to the previous URL, so a missing bucket and a
+working upload look identical from the app.
 
-```sql
-insert into storage.buckets (id, name, public)
-values ('avatars', 'avatars', true)
-on conflict (id) do nothing;
+Naif's call is to carry that behaviour forward untouched rather than fix it as part of standing
+up production. `AuthService.swift` is therefore left alone, and no `SUPABASE_AVATAR_BUCKET` key
+goes into the xcconfigs — adding per-environment plumbing for a code path that does not work
+would be machinery with nothing behind it.
 
-drop policy if exists "Avatars are publicly readable" on storage.objects;
-create policy "Avatars are publicly readable"
-  on storage.objects for select
-  using (bucket_id = 'avatars');
-
-drop policy if exists "Users upload their own avatar" on storage.objects;
-create policy "Users upload their own avatar"
-  on storage.objects for insert to authenticated
-  with check (bucket_id = 'avatars' and name = auth.uid()::text || '.jpg');
-
-drop policy if exists "Users replace their own avatar" on storage.objects;
-create policy "Users replace their own avatar"
-  on storage.objects for update to authenticated
-  using (bucket_id = 'avatars' and name = auth.uid()::text || '.jpg');
-```
-
-`drop policy if exists` before each `create` keeps the migration replayable; Postgres has no
-`create policy if not exists`.
-
-Both xcconfigs name the bucket `avatars`. The sandbox's old `tamrin-stg` bucket stays untouched
-and existing avatars keep loading, because `users.avatar_url` stores an absolute URL
-([`AuthService.swift:246`](../../../Sirr/core/supabase/AuthService.swift#L246)) — no data
-migration needed.
+**Known consequence:** the production project comes up with no storage bucket, so choosing a
+profile photo there does nothing, exactly as today. Whenever avatars are picked up properly, the
+work is a bucket plus its RLS policies in a migration, applied to both projects, and making the
+failure visible instead of swallowed.
 
 ## Landing page
 
-`~/Documents/tamrin-landing-page` is a separate repo deployed to Netlify. If its `/join/<code>`
-page queries Supabase to render an invite preview, it needs the production host and anon key. It
-can only point at one project; production is the right choice. Invite links generated by sandbox
-builds then render no preview, which is acceptable for development.
+`~/Documents/tamrin-landing-page` is a **separate repository**, deployed to Netlify, and nothing
+in it lands on this repo's `staging` branch. It is tracked here only so it is not forgotten.
+
+If its `/join/<code>` page queries Supabase to render an invite preview, it needs the production
+host and anon key; if the page is static, there is nothing to do. It can only serve one project,
+and production is the right choice — invite links generated by sandbox builds then render no
+preview, which is fine for development.
 
 ## Verification
 
@@ -262,13 +254,21 @@ builds then render no preview, which is acceptable for development.
 4. A fresh signup from a **Release** build creates its row in production and **not** in the
    sandbox — checked by querying both.
 5. Creating an event writes a `push_outbox` row and the notification arrives on device.
-6. Avatar upload succeeds and the returned URL loads.
-7. An invite link joins a workspace.
-8. `select jobname from cron.job` on production returns the three jobs.
+6. An invite link joins a workspace.
+7. `select jobname from cron.job` on production returns the three jobs.
+
+Avatar upload is deliberately absent from this list — see "Storage: deliberately unchanged".
 
 ## Out of scope
 
 - Hand-copying tester data from the sandbox — Naif does this manually, no tooling.
+- The avatar storage bucket, and therefore avatar upload on production. Decided 2 August 2026;
+  reasoning and consequences in "Storage: deliberately unchanged" above.
+- The landing page repo. Separate repository, separate deploy, tracked here only as a reminder.
+- Upgrading production to Pro. Declined 2 August 2026. Free projects pause after about a week
+  with no API requests, which a live app makes unlikely — but the window between provisioning
+  and App Store approval is exactly such a gap. If production pauses, un-pausing is a dashboard
+  button, and the reminder cron does not run while it is down.
 - Driving `aps-environment` from xcconfig. It is hardcoded to `development` in
   [`Sirr.entitlements`](../../../Sirr/Sirr.entitlements), but `send-push` already falls back to
   the sibling APNs host on `BadDeviceToken`, so tokens from either environment still deliver.

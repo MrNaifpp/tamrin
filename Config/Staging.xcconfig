@@ -1,0 +1,25 @@
+#include "Base.xcconfig"
+
+// A Release-grade build that talks to the development project, so staging can
+// be tested through TestFlight by people who do not have Xcode.
+//
+// Deliberately NOT reachable from the default scheme. Archiving `Sirr` gives
+// production; archiving `Sirr (Staging)` gives this. Keeping them on separate
+// schemes is what stops a staging binary being uploaded by accident.
+SUPABASE_HOST = kpcdinxusxycenfnitjc.supabase.co
+SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtwY2Rpbnh1c3h5Y2VuZm5pdGpjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk3ODc0MTUsImV4cCI6MjA4NTM2MzQxNX0.yKbHhYVZbvgU8QdCyYNrvG8rC7KtX5cqXPGpedHMJ_g
+
+// Same bundle id as production, so this lands in the same App Store Connect
+// app record — which makes the version deliberate rather than cosmetic.
+//
+// App Store Connect requires each upload's build number to exceed the last
+// within a version train. Sharing 1.2 with production would mean a staging
+// upload of build 9001 blocks the real build 1. A version of its own keeps the
+// two numbering sequences independent, and 99.0 is self-evidently not a
+// shippable version.
+//
+// Two further guards: the home-screen name reads STG, and TestFlight lists it
+// under 99.0. Never submit a 99.x build for review.
+INFOPLIST_KEY_CFBundleDisplayName = تمارين STG
+MARKETING_VERSION = 99.0
+CURRENT_PROJECT_VERSION = 1
