@@ -1,5 +1,4 @@
 import SwiftUI
-import MapKit
 
 /// Group details. The page answers three questions in this order, top to
 /// bottom, with nothing between them: what the standing session is (day, time,
@@ -8,7 +7,6 @@ import MapKit
 struct TeamDetailView: View {
     @Bindable var feed: HomeStore
     @Environment(\.dismiss) private var dismiss
-    @State private var mapPosition: MapCameraPosition = .automatic
     @State private var selectedPlanID: UUID?
     @State private var didCopyCode = false
     @State private var showDeleteConfirm = false
@@ -118,8 +116,6 @@ struct TeamDetailView: View {
         .toolbar(.visible, for: .navigationBar)
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
-        .onAppear { centreMap(on: plan) }
-        .onChange(of: plan?.id) { _, _ in centreMap(on: plan) }
         .toolbar {
             // Contextual actions live in an ellipsis menu (the designer's pattern).
             // Deleting the last group is allowed — Home falls back to WelcomeView.
@@ -177,16 +173,6 @@ struct TeamDetailView: View {
         // this one starts a blank exercise and must not inherit its identifiers.
         .sheet(isPresented: $showNewSession) {
             AddSessionSheet(feed: feed, isPresented: $showNewSession)
-        }
-    }
-
-    private func centreMap(on plan: FeedPlan?) {
-        guard let plan else { return }
-        withAnimation(.easeOut(duration: 0.4)) {
-            mapPosition = .region(MKCoordinateRegion(
-                center: CLLocationCoordinate2D(latitude: plan.latitude, longitude: plan.longitude),
-                span: MKCoordinateSpan(latitudeDelta: 0.018, longitudeDelta: 0.018)
-            ))
         }
     }
 
@@ -305,12 +291,12 @@ struct TeamDetailView: View {
                         )
                     }
 
-                    venueBlock(plan)
-
                     // Same tile, same wrapping HStack as EventDetailView's own
                     // directions row — with only one action here it stretches
                     // to fill the row, exactly as that row does when it too
-                    // has nothing else to sit beside it.
+                    // has nothing else to sit beside it. Carries the venue's
+                    // name itself now: the map preview this replaced was the
+                    // only other place that name appeared.
                     HStack(spacing: 10) {
                         directionsTile(plan)
                     }
@@ -371,55 +357,11 @@ struct TeamDetailView: View {
         .accessibilityHint("يفتح إنشاء تمرين جديد في هذه المجموعة")
     }
 
-    private func venueBlock(_ plan: FeedPlan) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Map(position: $mapPosition) {
-                Marker(plan.locationName, coordinate: CLLocationCoordinate2D(latitude: plan.latitude, longitude: plan.longitude))
-                    .tint(TamrinTheme.lime)
-            }
-            .frame(height: 128)
-            // MapKit draws into its own layer, which the enclosing clipShape
-            // does not round — the corners have to be applied here.
-            .clipShape(.rect(
-                topLeadingRadius: 20,
-                bottomLeadingRadius: 0,
-                bottomTrailingRadius: 0,
-                topTrailingRadius: 20,
-                style: .continuous
-            ))
-            .allowsHitTesting(false)
-
-            HStack(spacing: 11) {
-                Image(systemName: "mappin.and.ellipse")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(TamrinTheme.lime)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(plan.locationName.isEmpty ? "الملعب غير محدد" : plan.locationName)
-                        .font(TamrinFont.font(size: 16, weight: .bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                    if !plan.locationAddress.isEmpty {
-                        Text(plan.locationAddress)
-                            .font(TamrinFont.font(size: 12, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.55))
-                            .lineLimit(1)
-                    }
-                }
-
-                Spacer(minLength: 0)
-            }
-            .padding(14)
-        }
-        .tamrinGlassCard()
-        .clipShape(.rect(cornerRadius: 20, style: .continuous))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("الملعب: \(plan.locationName)")
-    }
-
     /// Same tile EventDetailView uses for its own directions action, and the
     /// same two destinations — a group's exercises and its standing venue
-    /// should offer identical ways to get there.
+    /// should offer identical ways to get there. Titled with the venue's own
+    /// name rather than the generic "الاتجاهات": this is the only surface
+    /// left that names the venue at all, now that the map preview is gone.
     private func directionsTile(_ plan: FeedPlan) -> some View {
         Menu {
             Button {
@@ -434,9 +376,12 @@ struct TeamDetailView: View {
                 Label { Text("خرائط قوقل") } icon: { Image("MapAppGoogleMaps") }
             }
         } label: {
-            EventActionTile(symbol: "arrow.triangle.turn.up.right.diamond.fill", title: "الاتجاهات")
+            EventActionTile(
+                symbol: "arrow.triangle.turn.up.right.diamond.fill",
+                title: plan.locationName.isEmpty ? "الاتجاهات" : plan.locationName
+            )
         }
-        .accessibilityLabel("الاتجاهات")
+        .accessibilityLabel(plan.locationName.isEmpty ? "الاتجاهات" : "الاتجاهات إلى \(plan.locationName)")
         .accessibilityHint("يفتح قائمة تطبيقات الخرائط")
     }
 
