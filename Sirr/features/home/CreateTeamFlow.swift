@@ -689,7 +689,14 @@ private struct TemplateComposerPage: View {
                     ComposerTile(
                         symbol: "calendar",
                         title: "الأيام والوقت",
-                        value: plan.weekdays.isEmpty ? nil : "\(plan.daysSummary)\n\(plan.timeSummary)"
+                        // Nothing to summarize only when it's a recurring plan
+                        // with no weekday chosen yet — a one-off plan always
+                        // has a real date and times, even before the sheet is
+                        // opened, so weekdays.isEmpty (which is also true for
+                        // every one-off plan) cannot gate it here.
+                        value: (plan.scheduleKind == .recurring && plan.weekdays.isEmpty)
+                            ? nil
+                            : "\(plan.daysSummary)\n\(plan.timeSummary)"
                     ) { activeSheet = .schedule }
                     ComposerTile(
                         symbol: "mappin.and.ellipse",
