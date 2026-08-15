@@ -20,6 +20,11 @@ struct ProfileSettingsView: View {
     @State private var customPosition = ""
     @State private var photoItem: PhotosPickerItem?
     @State private var avatarData: Data?
+    /// Set by «حذف الصورة». Distinct from `avatarData == nil`, which is also
+    /// true for a profile that simply never had a photo — only this says the
+    /// stored one should go.
+    @State private var avatarRemoved = false
+    @State private var showPhotoPicker = false
     @FocusState private var nameFocused: Bool
 
     private let positions = ["حارس", "دفاع", "وسط", "هجوم", "مخصص"]
@@ -44,14 +49,21 @@ struct ProfileSettingsView: View {
             }
         }
         .environment(\.layoutDirection, .rightToLeft)
+        .photosPicker(isPresented: $showPhotoPicker, selection: $photoItem, matching: .images)
         .task(id: photoItem) {
             if let data = try? await photoItem?.loadTransferable(type: Data.self) {
                 avatarData = data
+                // Picking after removing is a change of mind, not both edits.
+                avatarRemoved = false
             }
         }
         .onAppear {
             name = feed.profileName
             avatarData = feed.avatarData
+            // Dismissing without saving abandons the removal. This view is also
+            // pushed inside the settings stack, where its state outlives a pop,
+            // so a stale flag would delete the photo on an unrelated later save.
+            avatarRemoved = false
             let saved = feed.playerPosition
             if positions.contains(saved) {
                 position = saved
@@ -96,13 +108,50 @@ struct ProfileSettingsView: View {
         }
     }
 
+    /// A photo to act on: one picked this session, or one already on the profile
+    /// and not removed since the sheet opened.
+    private var hasPhoto: Bool {
+        avatarData != nil || (!avatarRemoved && feed.avatarUrl != nil)
+    }
+
+    /// With a photo on screen there are two things to do to it, so the tap opens
+    /// a menu. With none there is only one, and a dropdown of a single item is
+    /// a worse way to say "pick a photo" than the picker itself.
+    @ViewBuilder
     private var avatarPicker: some View {
-        PhotosPicker(selection: $photoItem, matching: .images) {
-            ZStack(alignment: .bottomTrailing) {
+        if hasPhoto {
+            Menu {
+                Button("اختر صورة", systemImage: "photo") { showPhotoPicker = true }
+                Button("حذف الصورة", systemImage: "trash", role: .destructive) {
+                    withAnimation(.snappy(duration: 0.2)) {
+                        avatarData = nil
+                        photoItem = nil
+                        avatarRemoved = true
+                    }
+                }
+            } label: {
+                avatarLabel
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("صورة الحساب")
+            .accessibilityHint("يفتح خيارات تغيير الصورة أو حذفها")
+        } else {
+            Button {
+                showPhotoPicker = true
+            } label: {
+                avatarLabel
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("إضافة صورة الحساب")
+        }
+    }
+
+    private var avatarLabel: some View {
+        ZStack(alignment: .bottomTrailing) {
                 Group {
                     if let avatarData, let image = UIImage(data: avatarData) {
                         Image(uiImage: image).resizable().scaledToFill()
-                    } else if let url = feed.avatarUrl.flatMap(URL.init(string:)) {
+                    } else if !avatarRemoved, let url = feed.avatarUrl.flatMap(URL.init(string:)) {
                         // Nothing picked this session, but a photo is already on
                         // the profile — show it rather than falling back to the
                         // initial the user thought they had replaced.
@@ -139,10 +188,7 @@ struct ProfileSettingsView: View {
                     .frame(width: 30, height: 30)
                     .background(TamrinTheme.ink, in: .circle)
                     .overlay(Circle().strokeBorder(TamrinTheme.page, lineWidth: 2))
-            }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("صورة الحساب")
     }
 
     private var nameField: some View {
@@ -204,10 +250,17 @@ struct ProfileSettingsView: View {
         .animation(.snappy(duration: 0.22), value: position)
     }
 
+    /// `avatarData` alone can't tell "left alone" from "cleared" — it is nil in
+    /// both cases — so the removal flag decides between them.
+    private var avatarEdit: HomeStore.AvatarEdit {
+        if let avatarData { return .replaced(avatarData) }
+        return avatarRemoved ? .removed : .unchanged
+    }
+
     private func save() {
         feed.saveProfile(
             name: trimmedName,
-            avatarData: avatarData,
+            avatar: avatarEdit,
             playerPosition: resolvedPosition
         )
         Haptics.success()
