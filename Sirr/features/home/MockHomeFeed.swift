@@ -656,17 +656,26 @@ final class HomeStore {
         }
     }
 
-    /// Creates a workspace from the wizard draft, then turns each planned session
-    /// into a real event. A failed event rolls the new workspace back, so the UI
-    /// never reports a group as ready without its sessions and payment methods.
+    /// Creates the exercise from the wizard draft, then turns its plan into real
+    /// dates. A failed date rolls the new exercise back, so the UI never reports
+    /// one as ready without its dates and payment methods.
     @discardableResult
     func createTeam(from draft: TeamDraft) async throws -> FeedTeam {
         let name = draft.teamName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty, !isPreview else {
+        guard !name.isEmpty else {
             throw NSError(
                 domain: "HomeStore.CreateTeam",
                 code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "اكتب اسم المجموعة أولًا."]
+                userInfo: [NSLocalizedDescriptionKey: "اكتب اسم التمرين أولًا."]
+            )
+        }
+        // A preview store has no backend behind it. Kept as its own guard so a
+        // named exercise never reports the missing-name error instead.
+        guard !isPreview else {
+            throw NSError(
+                domain: "HomeStore.CreateTeam",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "الإنشاء غير متاح في وضع المعاينة."]
             )
         }
         var createdWorkspace: WorkspaceRecord?
@@ -855,7 +864,7 @@ final class HomeStore {
             throw NSError(
                 domain: "HomeStore.Payment",
                 code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "أضف وسيلة دفع صحيحة واحدة على الأقل قبل حفظ التمرين."]
+                userInfo: [NSLocalizedDescriptionKey: "أضف وسيلة دفع صحيحة واحدة على الأقل قبل الحفظ."]
             )
         }
 
@@ -910,7 +919,7 @@ final class HomeStore {
     /// The server operation is idempotent, so a double tap never duplicates
     /// invitations or push notifications.
     func publish(_ occurrence: FeedOccurrence) async -> RegistrationOutcome {
-        guard isCurrentTeamOwner else { return .failure("هذا الإجراء متاح لمشرف المجموعة فقط.") }
+        guard isCurrentTeamOwner else { return .failure("هذا الإجراء متاح لمشرف التمرين فقط.") }
         if isPreview {
             updateOccurrence(occurrence.id) { $0.publishedAt = .now }
             return .success
@@ -931,7 +940,7 @@ final class HomeStore {
         reasonCode: String?,
         reasonText: String?
     ) async -> RegistrationOutcome {
-        guard isCurrentTeamOwner else { return .failure("هذا الإجراء متاح لمشرف المجموعة فقط.") }
+        guard isCurrentTeamOwner else { return .failure("هذا الإجراء متاح لمشرف التمرين فقط.") }
         if isPreview {
             updateOccurrence(occurrence.id) {
                 $0.cancelledAt = .now
@@ -1027,7 +1036,7 @@ final class HomeStore {
     /// the money is settled with the organizer outside the app, so no payment
     /// request is raised.
     func addManualParticipant(named rawName: String, to occurrence: FeedOccurrence) async -> RegistrationOutcome {
-        guard isCurrentTeamOwner else { return .failure("هذا الإجراء متاح لمشرف المجموعة فقط.") }
+        guard isCurrentTeamOwner else { return .failure("هذا الإجراء متاح لمشرف التمرين فقط.") }
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { return .failure("اكتب اسم اللاعب أولًا.") }
 
@@ -1046,13 +1055,13 @@ final class HomeStore {
             case .added:
                 return .success
             case .seatsFull:
-                return .failure("اكتملت المقاعد لهذا التمرين.")
+                return .failure("اكتملت المقاعد لهذا الموعد.")
             case .duplicateName:
                 return .failure("فيه لاعب مسجل بنفس الاسم. ميّزه باسم العائلة أو رقم.")
             case .registrationClosed:
-                return .failure("التسجيل مقفل لهذا التمرين. افتحه من إعدادات التمرين ثم أضفه.")
+                return .failure("التسجيل مقفل لهذا الموعد. افتحه من إعدادات الموعد ثم أضفه.")
             case .notPublished:
-                return .failure("أرسل التمرين للمجموعة أولًا، بعدها تقدر تسجل لاعبين يدويًا.")
+                return .failure("أرسل الموعد لأعضاء التمرين أولًا، بعدها تقدر تسجل لاعبين يدويًا.")
             case .cancelled:
                 return .failure("هذا الموعد متخطى.")
             case .emptyName:
@@ -1068,7 +1077,7 @@ final class HomeStore {
     /// takes those seats too — the server owns that rule.
     func removeParticipant(_ member: FeedMember, from occurrence: FeedOccurrence) async -> RegistrationOutcome {
         guard isCurrentTeamOwner else {
-            return .failure("هذا الإجراء متاح لمشرف المجموعة فقط.")
+            return .failure("هذا الإجراء متاح لمشرف التمرين فقط.")
         }
 
         if isPreview || isDebugMemberFixtureEvent(occurrence.id) {
@@ -1106,7 +1115,7 @@ final class HomeStore {
     /// stays disabled across reopenings of the sheet and across devices.
     func remindPayment(_ member: FeedMember, on occurrence: FeedOccurrence) async -> PaymentReminderOutcome {
         guard isCurrentTeamOwner else {
-            return .failure("هذا الإجراء متاح لمشرف المجموعة فقط.")
+            return .failure("هذا الإجراء متاح لمشرف التمرين فقط.")
         }
 
         if isPreview || isDebugMemberFixtureEvent(occurrence.id) {
@@ -1135,7 +1144,7 @@ final class HomeStore {
                 return .failure("هذا مقعدك أنت.")
             case .notFound:
                 await reloadRoster(occurrence.id)
-                return .failure("هذا اللاعب ما عاد مسجل في التمرين.")
+                return .failure("هذا اللاعب ما عاد مسجل في الموعد.")
             case .cancelled:
                 return .failure("هذا الموعد متخطى.")
             }
@@ -1157,7 +1166,7 @@ final class HomeStore {
         on occurrence: FeedOccurrence
     ) async -> MemberReminderOutcome {
         guard isCurrentTeamOwner else {
-            return .failure("هذا الإجراء متاح لمشرف المجموعة فقط.")
+            return .failure("هذا الإجراء متاح لمشرف التمرين فقط.")
         }
 
         if isPreview || isDebugMemberFixtureEvent(occurrence.id) {
@@ -1178,11 +1187,11 @@ final class HomeStore {
             case .noRecipients:
                 return .failure(
                     kind == .register
-                        ? "كل الأعضاء مسجلين في التمرين."
+                        ? "كل الأعضاء مسجلين في الموعد."
                         : "ما فيه لاعبين مسجلين لتذكيرهم."
                 )
             case .notPublished:
-                return .failure("انشر التمرين أولًا، بعدها تقدر تذكّر الأعضاء.")
+                return .failure("انشر الموعد أولًا، بعدها تقدر تذكّر الأعضاء.")
             case .cancelled:
                 return .failure("هذا الموعد متخطى.")
             }
@@ -1251,13 +1260,13 @@ final class HomeStore {
                 updateOccurrence(occurrence.id) { $0.memberResponse = nil }
                 return .success
             case .seatsFull:
-                return .failure("اكتملت المقاعد لهذا التمرين.")
+                return .failure("اكتملت المقاعد لهذا الموعد.")
             case .creatorMissingPaymentMethod:
-                return .failure("منظّم المجموعة لم يضف وسيلة دفع لهذا التمرين بعد.")
+                return .failure("منظّم التمرين لم يضف وسيلة دفع لهذا الموعد بعد.")
             case .registrationClosed:
-                return .failure("التسجيل مقفل لهذا التمرين.")
+                return .failure("التسجيل مقفل لهذا الموعد.")
             case .eventTermsChanged:
-                return .failure("غيّر المشرف مبلغ التمرين أو وسيلة الدفع. أغلق النافذة وافتحها مجددًا لمراجعة البيانات الجديدة.")
+                return .failure("غيّر المشرف مبلغ الموعد أو وسيلة الدفع. أغلق النافذة وافتحها مجددًا لمراجعة البيانات الجديدة.")
             }
         } catch {
             await reloadRoster(occurrence.id)

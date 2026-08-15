@@ -47,12 +47,12 @@ final class LocationSearchService {
 }
 
 private enum CreationStep: Int, CaseIterable {
-    case identity, templates, invite
+    case identity, details, invite
 
     var title: String {
         switch self {
-        case .identity: "هوية المجموعة"
-        case .templates: "تمارين المجموعة"
+        case .identity: "هوية التمرين"
+        case .details: "تفاصيل التمرين"
         case .invite: "دعوة الأعضاء"
         }
     }
@@ -60,7 +60,7 @@ private enum CreationStep: Int, CaseIterable {
     var counter: String {
         switch self {
         case .identity: "1 من 3"
-        case .templates: "2 من 3"
+        case .details: "2 من 3"
         case .invite: "3 من 3"
         }
     }
@@ -97,11 +97,11 @@ struct CreateTeamFlow: View {
     @Bindable var feed: HomeStore
     @Binding var isPresented: Bool
     @State private var draft = TeamDraft()
+    /// The one exercise this flow creates. It carries the name typed on the
+    /// identity step, so the composer never asks for it a second time.
+    @State private var plan = PlanDraft()
     @State private var step: CreationStep = .identity
     @State private var goingForward = true
-    @State private var isComposing = false
-    @State private var composerPlan = PlanDraft()
-    @State private var composerInitialSheet: ComposerSheet?
     @State private var createdTeam: FeedTeam?
     @State private var isCreating = false
     @State private var failureMessage: String?
@@ -124,30 +124,20 @@ struct CreateTeamFlow: View {
                     case .identity:
                         IdentityStepPage(draft: $draft, advance: advanceFromIdentity)
                             .transition(stepTransition)
-                    case .templates:
-                        if isComposing {
-                            TemplateComposerPage(
-                                plan: $composerPlan,
-                                initialSheet: composerInitialSheet,
-                                save: savePlan,
-                                cancel: cancelComposer
-                            )
-                            .transition(stepTransition)
-                        } else {
-                            TemplatesListPage(
-                                draft: $draft,
-                                isCreating: isCreating,
-                                addPlan: { startComposer(with: PlanDraft()) },
-                                editPlan: { startComposer(with: $0) },
-                                advance: create
-                            )
-                            .transition(stepTransition)
-                        }
+                    case .details:
+                        TemplateComposerPage(
+                            plan: $plan,
+                            showsNameField: false,
+                            actionTitle: "أنشئ التمرين",
+                            isSaving: isCreating,
+                            save: create
+                        )
+                        .transition(stepTransition)
                     case .invite:
                         // Reached only once the workspace exists, because the
                         // join link is issued by the backend on creation.
                         if let createdTeam {
-                            InviteStepPage(team: createdTeam, planCount: draft.plans.count) {
+                            InviteStepPage(team: createdTeam) {
                                 isPresented = false
                             }
                             .transition(stepTransition)
@@ -155,12 +145,11 @@ struct CreateTeamFlow: View {
                     }
                 }
                 .animation(reduceMotion ? nil : .spring(response: 0.46, dampingFraction: 0.9), value: step)
-                .animation(reduceMotion ? nil : .spring(response: 0.46, dampingFraction: 0.9), value: isComposing)
             }
         }
         .environment(\.layoutDirection, .rightToLeft)
         .interactiveDismissDisabled()
-        .alert("تعذر إنشاء المجموعة", isPresented: Binding(
+        .alert("تعذر إنشاء التمرين", isPresented: Binding(
             get: { failureMessage != nil },
             set: { if !$0 { failureMessage = nil } }
         )) {
@@ -176,49 +165,22 @@ struct CreateTeamFlow: View {
         withAnimation { step = next }
     }
 
+    /// The name belongs to the exercise itself, so it travels from this step
+    /// into the plan rather than being asked for again on the next one.
     private func advanceFromIdentity() {
-        guard !draft.teamName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        goingForward = true
-        if draft.plans.isEmpty {
-            composerPlan = PlanDraft()
-            isComposing = true
-        }
-        withAnimation { step = .templates }
+        let name = draft.teamName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        plan.name = name
+        move(to: .details)
     }
 
-    private func startComposer(with plan: PlanDraft) {
-        composerPlan = plan
-        goingForward = true
-        composerInitialSheet = nil
-        withAnimation { isComposing = true }
-    }
-
-    private func savePlan() {
-        if let index = draft.plans.firstIndex(where: { $0.id == composerPlan.id }) {
-            draft.plans[index] = composerPlan
-        } else {
-            draft.plans.append(composerPlan)
-        }
-        goingForward = true
-        Haptics.success()
-        withAnimation { isComposing = false }
-    }
-
-    private func cancelComposer() {
-        goingForward = false
-        if draft.plans.isEmpty {
-            withAnimation { isComposing = false; step = .identity }
-        } else {
-            withAnimation { isComposing = false }
-        }
-    }
-
-    /// Creating the group is what issues the join link, so it happens when the
-    /// organizer leaves the templates step — the invite step then has a real
+    /// Creating the exercise is what issues the join link, so it happens when
+    /// the organizer leaves the details step — the invite step then has a real
     /// link to share instead of a placeholder.
     private func create() {
         guard !isCreating else { return }
         isCreating = true
+        draft.plans = [plan]
         Task {
             do {
                 let team = try await feed.createTeam(from: draft)
@@ -237,10 +199,10 @@ struct CreateTeamFlow: View {
         switch step {
         case .identity:
             isPresented = false
-        case .templates:
-            if isComposing { cancelComposer() } else { move(to: .identity) }
+        case .details:
+            move(to: .identity)
         case .invite:
-            // The group already exists — there is nothing to go back to.
+            // The exercise already exists — there is nothing to go back to.
             break
         }
     }
@@ -255,7 +217,7 @@ private struct FlowHeader: View {
     var body: some View {
         VStack(spacing: 14) {
             HStack {
-                // The last step has no way back: the group is already created.
+                // The last step has no way back: the exercise already exists.
                 Group {
                     if step == .invite {
                         Color.clear
@@ -343,7 +305,7 @@ private struct IdentityStepPage: View {
         count: 6
     )
 
-    /// The group as it will be seen everywhere else, shown once at the size a
+    /// The exercise as it will be seen everywhere else, shown once at the size a
     /// choice deserves. The symbol scales with it, so this is the only number
     /// to touch.
     private static let identityDiameter: CGFloat = 112
@@ -385,7 +347,7 @@ private struct IdentityStepPage: View {
         .onAppear { if draft.teamName.isEmpty { nameFocused = true } }
     }
 
-    /// The group as it will look, over the field that names it.
+    /// The exercise as it will look, over the field that names it.
     private var identityCard: some View {
         VStack(spacing: 18) {
             PhotosPicker(selection: $photoItem, matching: .images) {
@@ -407,9 +369,9 @@ private struct IdentityStepPage: View {
                 .clipShape(.circle)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("صورة المجموعة")
+            .accessibilityLabel("صورة التمرين")
 
-            TextField("اسم المجموعة", text: $draft.teamName)
+            TextField("اسم التمرين", text: $draft.teamName)
                 .font(TamrinFont.font(size: 20, weight: .medium))
                 .multilineTextAlignment(.center)
                 .focused($nameFocused)
@@ -424,8 +386,8 @@ private struct IdentityStepPage: View {
         .background(TamrinTheme.card, in: .rect(cornerRadius: 26, style: .continuous))
     }
 
-    /// One row, no scrolling: these are the colours worth a tap, and a group's
-    /// tint is not a decision worth paging through.
+    /// One row, no scrolling: these are the colours worth a tap, and an
+    /// exercise's tint is not a decision worth paging through.
     private var colorRow: some View {
         HStack(spacing: 0) {
             ForEach(TeamColor.allCases) { option in
@@ -492,137 +454,7 @@ private struct IdentityStepPage: View {
     }
 }
 
-// MARK: - Step 2: Templates list
-
-private struct TemplatesListPage: View {
-    @Binding var draft: TeamDraft
-    let isCreating: Bool
-    let addPlan: () -> Void
-    let editPlan: (PlanDraft) -> Void
-    let advance: () -> Void
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("تمارينكم جاهزة")
-                        .font(TamrinFont.largeTitle)
-                        .tracking(-0.8)
-                    Text("كل قالب ينشئ مواعيده أسبوعيًا بشكل تلقائي. أضف ما تحتاجه من تمارين.")
-                        .font(TamrinFont.body)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.top, 8)
-
-                VStack(spacing: 12) {
-                    ForEach(draft.plans) { plan in
-                        TemplateCard(plan: plan) {
-                            editPlan(plan)
-                        } delete: {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                                draft.plans.removeAll { $0.id == plan.id }
-                            }
-                        }
-                    }
-                }
-
-                Button(action: addPlan) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "plus")
-                            .font(.headline)
-                        Text("أنشئ تمرينًا آخر")
-                            .font(TamrinFont.headline)
-                    }
-                    .foregroundStyle(TamrinTheme.ink)
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: TamrinControlMetrics.actionHeight)
-                    .background(TamrinTheme.secondary.opacity(0.78), in: .rect(cornerRadius: 24, style: .continuous))
-                    .contentShape(.rect)
-                }
-                .buttonStyle(SpringCardPressStyle())
-
-                Spacer(minLength: 30)
-            }
-            .padding(.horizontal, 22)
-        }
-        .safeAreaInset(edge: .bottom) {
-            TamrinActionButton(title: "أنشئ المجموعة", isLoading: isCreating, action: advance)
-                .disabled(draft.plans.isEmpty)
-                .padding(.horizontal, 22)
-                .padding(.bottom, 10)
-        }
-    }
-}
-
-private struct TemplateCard: View {
-    let plan: PlanDraft
-    let edit: () -> Void
-    let delete: () -> Void
-
-    var body: some View {
-        Button(action: edit) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(plan.name)
-                            .font(TamrinFont.title3)
-                        Text("\(plan.daysSummary) · \(plan.timeSummary)")
-                            .font(TamrinFont.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    Spacer()
-                    Menu {
-                        Button("تعديل", systemImage: "pencil", action: edit)
-                        Button("حذف", systemImage: "trash", role: .destructive, action: delete)
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .font(.subheadline.bold())
-                            .foregroundStyle(.secondary)
-                            .frame(width: 34, height: 34)
-                            .background(TamrinTheme.secondary, in: .circle)
-                    }
-                }
-                HStack(spacing: 8) {
-                    TemplateTag(symbol: "mappin", text: plan.locationName)
-                    TemplateTag(symbol: "person.2", text: plan.capacity.counted(.player))
-                    TemplateTag(
-                        symbol: "banknote",
-                        text: plan.totalVenueCost == 0
-                            ? "بدون تكلفة"
-                            : "القطة \(plan.pricePerPerson.cleanAmount) ر.س"
-                    )
-                }
-            }
-            .padding(18)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(TamrinTheme.glass, in: .rect(cornerRadius: 26))
-            .shadow(color: .black.opacity(0.05), radius: 20, y: 10)
-            .contentShape(.rect)
-        }
-        .buttonStyle(SpringCardPressStyle())
-    }
-}
-
-private struct TemplateTag: View {
-    let symbol: String
-    let text: String
-
-    var body: some View {
-        Label {
-            Text(text).lineLimit(1)
-        } icon: {
-            Image(systemName: symbol)
-        }
-        .font(TamrinFont.font(size: 12, weight: .medium))
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(TamrinTheme.secondary.opacity(0.72), in: .capsule)
-    }
-}
-
-// MARK: - Step 2: Template composer
+// MARK: - Step 2: Exercise details
 
 private enum ComposerSheet: String, Identifiable {
     case schedule, location, capacity, venueCost, payment, publishing
@@ -631,9 +463,13 @@ private enum ComposerSheet: String, Identifiable {
 
 private struct TemplateComposerPage: View {
     @Binding var plan: PlanDraft
-    var initialSheet: ComposerSheet?
+    /// The creation wizard already asked for the name on its identity step, so
+    /// it hides this field rather than asking for the same thing twice. The
+    /// standalone session composer still needs it.
+    var showsNameField = true
+    var actionTitle = "احفظ الموعد"
+    var isSaving = false
     let save: () -> Void
-    let cancel: () -> Void
 
     @State private var activeSheet: ComposerSheet?
     @State private var locationSearch = LocationSearchService()
@@ -645,45 +481,51 @@ private struct TemplateComposerPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("صمّم التمرين")
+                    Text(showsNameField ? "صمّم الموعد" : "صمّم التمرين")
                         .font(TamrinFont.largeTitle)
                         .tracking(-0.8)
-                    Text("سمّه، وحدد تفاصيله بلمسة على كل بطاقة.")
+                    // With the name already settled, the subtitle says whose
+                    // details these are instead of asking for one.
+                    Text(showsNameField
+                         ? "سمّه، وحدد تفاصيله بلمسة على كل بطاقة."
+                         : "حدد تفاصيل «\(plan.name)» بلمسة على كل بطاقة.")
                         .font(TamrinFont.body)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.top, 8)
 
-                VStack(alignment: .leading, spacing: 10) {
-                    TextField("اسم التمرين", text: $plan.name)
-                        .font(TamrinFont.title2)
-                        .focused($nameFocused)
-                        .submitLabel(.done)
-                        .padding(.horizontal, 18)
-                        .frame(height: 62)
-                        .background(TamrinTheme.glass, in: .rect(cornerRadius: 21))
+                if showsNameField {
+                    VStack(alignment: .leading, spacing: 10) {
+                        TextField("اسم الموعد", text: $plan.name)
+                            .font(TamrinFont.title2)
+                            .focused($nameFocused)
+                            .submitLabel(.done)
+                            .padding(.horizontal, 18)
+                            .frame(height: 62)
+                            .background(TamrinTheme.glass, in: .rect(cornerRadius: 21))
 
-                    if plan.name.isEmpty {
-                        HStack(spacing: 8) {
-                            ForEach(nameSuggestions, id: \.self) { suggestion in
-                                Button {
-                                    plan.name = suggestion
-                                    Haptics.selection()
-                                } label: {
-                                    Text(suggestion)
-                                        .font(TamrinFont.font(size: 13, weight: .medium))
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 8)
-                                        .background(TamrinTheme.secondary, in: .capsule)
-                                        .foregroundStyle(.primary)
+                        if plan.name.isEmpty {
+                            HStack(spacing: 8) {
+                                ForEach(nameSuggestions, id: \.self) { suggestion in
+                                    Button {
+                                        plan.name = suggestion
+                                        Haptics.selection()
+                                    } label: {
+                                        Text(suggestion)
+                                            .font(TamrinFont.font(size: 13, weight: .medium))
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            .background(TamrinTheme.secondary, in: .capsule)
+                                            .foregroundStyle(.primary)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
-                                .buttonStyle(.plain)
                             }
+                            .transition(.opacity)
                         }
-                        .transition(.opacity)
                     }
+                    .animation(.easeOut(duration: 0.2), value: plan.name.isEmpty)
                 }
-                .animation(.easeOut(duration: 0.2), value: plan.name.isEmpty)
 
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                     ComposerTile(
@@ -745,7 +587,7 @@ private struct TemplateComposerPage: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .bottom) {
-            TamrinActionButton(title: "احفظ التمرين", action: save)
+            TamrinActionButton(title: actionTitle, isLoading: isSaving, action: save)
                 .disabled(!plan.isComplete)
                 .padding(.horizontal, 22)
                 .padding(.bottom, 10)
@@ -767,8 +609,7 @@ private struct TemplateComposerPage: View {
             }
         }
         .onAppear {
-            if let initialSheet { activeSheet = initialSheet }
-            else if plan.name.isEmpty { nameFocused = true }
+            if showsNameField, plan.name.isEmpty { nameFocused = true }
         }
     }
 }
@@ -1590,13 +1431,12 @@ private struct VenueCostSheet: View {
 
 // MARK: - Step 3: Invite
 
-/// By the time this step appears the group already exists, so the whole page is
-/// about getting its join link out: read it, copy it, or hand it straight to
+/// By the time this step appears the exercise already exists, so the whole page
+/// is about getting its join link out: read it, copy it, or hand it straight to
 /// WhatsApp or Messages — the two apps organizers actually use to round people
 /// up. The system share sheet stays available for everything else.
 private struct InviteStepPage: View {
     let team: FeedTeam
-    let planCount: Int
     let done: () -> Void
 
     @Environment(\.openURL) private var openURL
@@ -1611,8 +1451,8 @@ private struct InviteStepPage: View {
 
     private var shareMessage: String {
         team.inviteURL == nil
-            ? "انضم لمجموعة «\(team.name)» في تمرين برمز الدعوة: \(team.inviteCode)"
-            : "انضم لمجموعة «\(team.name)» في تمرين:\n\(shareValue)"
+            ? "انضم إلى «\(team.name)» في تمرين برمز الدعوة: \(team.inviteCode)"
+            : "انضم إلى «\(team.name)» في تمرين:\n\(shareValue)"
     }
 
     private var whatsAppURL: URL? {
@@ -1636,13 +1476,11 @@ private struct InviteStepPage: View {
                 teamBadge
 
                 VStack(spacing: 8) {
-                    Text("«\(team.name)» جاهزة!")
+                    Text("«\(team.name)» جاهز!")
                         .font(TamrinFont.largeTitle)
                         .tracking(-0.8)
                         .multilineTextAlignment(.center)
-                    Text(planCount == 1
-                         ? "التمرين ومواعيده القادمة صارت جاهزة. ارسل الرابط للأعضاء وخلهم ينضمون."
-                         : "\(planCount.appDigits) تمارين ومواعيدها صارت جاهزة. ارسل الرابط للأعضاء وخلهم ينضمون.")
+                    Text("المواعيد القادمة جاهزة. أرسل الرابط للأعضاء وخلهم ينضمون.")
                         .font(TamrinFont.body)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -1660,7 +1498,7 @@ private struct InviteStepPage: View {
             .frame(maxWidth: .infinity)
         }
         .safeAreaInset(edge: .bottom) {
-            TamrinActionButton(title: "ادخل إلى المجموعة", prominent: false, action: done)
+            TamrinActionButton(title: "ادخل إلى التمرين", prominent: false, action: done)
                 .padding(.horizontal, 22)
                 .padding(.bottom, 10)
         }
@@ -1781,7 +1619,7 @@ private struct InviteStepPage: View {
 
                 ShareLink(
                     item: shareValue,
-                    subject: Text("انضم لمجموعة \(team.name)"),
+                    subject: Text("انضم إلى \(team.name)"),
                     message: Text(shareMessage)
                 ) {
                     ShareChannelLabel(title: "غير ذلك", symbol: "square.and.arrow.up", tint: .secondary)
@@ -1833,7 +1671,7 @@ private extension String {
 }
 
 /// Standalone session composer — reuses the wizard's TemplateComposerPage.
-/// Create mode (no editingEventID) adds event(s) to the current workspace;
+/// Create mode (no editingEventID) adds date(s) to the current exercise;
 /// edit mode opens prefilled from the existing session and updates it on save.
 /// Opened from the team-details ••• menu.
 struct AddSessionSheet: View {
@@ -1862,7 +1700,6 @@ struct AddSessionSheet: View {
                 TamrinTheme.page.ignoresSafeArea()
                 TemplateComposerPage(
                     plan: $plan,
-                    initialSheet: nil,
                     save: {
                         guard !saving else { return }
                         if editingEventID != nil, editingTemplateID != nil {
@@ -1870,8 +1707,7 @@ struct AddSessionSheet: View {
                         } else {
                             save(scope: .occurrenceOnly)
                         }
-                    },
-                    cancel: { isPresented = false }
+                    }
                 )
             }
             .allowsHitTesting(!saving)
@@ -1899,17 +1735,17 @@ struct AddSessionSheet: View {
             isPresented: $showSaveScope,
             titleVisibility: .visible
         ) {
-            Button("حفظ في القالب والتمارين القادمة") {
+            Button("حفظ في القالب والمواعيد القادمة") {
                 save(scope: .seriesTemplate)
             }
-            Button("حفظ لهذا التمرين فقط") {
+            Button("حفظ لهذا الموعد فقط") {
                 save(scope: .occurrenceOnly)
             }
             Button("تراجع", role: .cancel) {}
         } message: {
-            Text("يمكنك تعديل هذا الموعد وحده، أو اعتماد التغييرات في القالب الذي تُنشأ منه التمارين القادمة.")
+            Text("يمكنك تعديل هذا الموعد وحده، أو اعتماد التغييرات في القالب الذي تُنشأ منه المواعيد القادمة.")
         }
-        .alert("تعذر حفظ التمرين", isPresented: Binding(
+        .alert("تعذر حفظ الموعد", isPresented: Binding(
             get: { failureMessage != nil },
             set: { if !$0 { failureMessage = nil } }
         )) {

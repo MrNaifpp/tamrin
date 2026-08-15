@@ -106,7 +106,7 @@ struct AppSettingsView: View {
             Button("حذف الحساب", role: .destructive) { deleteAccount() }
             Button("تراجع", role: .cancel) {}
         } message: {
-            Text("سيُحذف حسابك وكل بياناتك: مجموعاتك، تمارينك، تسجيلاتك ومدفوعاتك. لا يمكن التراجع عن هذا الإجراء.")
+            Text("سيُحذف حسابك وكل بياناتك: تمارينك، مواعيدك، تسجيلاتك ومدفوعاتك. لا يمكن التراجع عن هذا الإجراء.")
         }
         .alert("تعذر حذف الحساب", isPresented: Binding(
             get: { deleteError != nil },

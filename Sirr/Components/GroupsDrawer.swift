@@ -2,7 +2,7 @@
 //  GroupsDrawer.swift
 //  Sirr
 //
-//  Slide-in "المجموعات" panel (replaces the old half-sheet switcher).
+//  Slide-in "التمارين" panel (replaces the old half-sheet switcher).
 //  Dark panel enters from the leading edge over a dimmed home. The blue +
 //  creates a new group; the gear opens the current group's settings
 //  (which also hosts logout). New workouts are created from the home header.
@@ -58,9 +58,9 @@ struct GroupsDrawer: View {
 
     private func panel(width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Title row: "المجموعات" + blue + (new group).
+            // Title row: "التمارين" + blue + (new exercise).
             HStack {
-                Text("المجموعات")
+                Text("التمارين")
                     .font(.appSubheadline)
                     .foregroundStyle(.white)
                 Spacer()

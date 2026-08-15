@@ -22,12 +22,12 @@ struct CreateWorkspaceSheet: View {
             Color(white: 0.10).ignoresSafeArea()
 
             VStack(spacing: 20) {
-                Text("مجموعة جديدة")
+                Text("تمرين جديد")
                     .font(.appSubheadline)
                     .foregroundStyle(.white)
                     .padding(.top, 24)
 
-                TextField("", text: $name, prompt: Text("اسم المجموعة").foregroundColor(Color(white: 0.45)))
+                TextField("", text: $name, prompt: Text("اسم التمرين").foregroundColor(Color(white: 0.45)))
                     .font(.appBody)
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.trailing)
@@ -85,7 +85,7 @@ struct CreateWorkspaceSheet: View {
                 onCreated(ws)
                 dismiss()
             } catch {
-                errorText = "تعذر إنشاء المجموعة. حاول مرة أخرى."
+                errorText = "تعذر إنشاء التمرين. حاول مرة أخرى."
             }
         }
     }

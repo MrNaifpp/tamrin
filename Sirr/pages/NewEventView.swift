@@ -436,7 +436,7 @@ struct NewEventView: View {
         }
 
         guard let workspaceId else {
-            createError = "تعذر تحديد المجموعة الحالية. أعد فتح التطبيق وحاول مرة أخرى."
+            createError = "تعذر تحديد التمرين الحالي. أعد فتح التطبيق وحاول مرة أخرى."
             return
         }
 

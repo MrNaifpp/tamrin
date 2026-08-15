@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Group details. The page answers three questions in this order, top to
-/// bottom, with nothing between them: what the standing session is (day, time,
-/// venue, venue cost, per-player share), who is in the group, and — for the
+/// Exercise details. The page answers three questions in this order, top to
+/// bottom, with nothing between them: what the standing date is (day, time,
+/// venue, venue cost, per-player share), who is in the exercise, and — for the
 /// organizer only — how to invite more people.
 struct TeamDetailView: View {
     @Bindable var feed: HomeStore
@@ -11,7 +11,6 @@ struct TeamDetailView: View {
     @State private var didCopyCode = false
     @State private var showDeleteConfirm = false
     @State private var showAddSession = false
-    @State private var showNewSession = false
 
     // Read from `teams` directly (not `currentTeam`, which force-indexes) so the
     // delete → pop transition on the last team can't touch an empty array.
@@ -33,7 +32,7 @@ struct TeamDetailView: View {
         members.isEmpty ? (team?.memberCount ?? 0) : members.count
     }
 
-    /// The group has members, but this screen failed to load them.
+    /// The exercise has members, but this screen failed to load them.
     private var rosterUnavailable: Bool {
         members.isEmpty && (team?.memberCount ?? 0) > 0
     }
@@ -80,10 +79,6 @@ struct TeamDetailView: View {
 
                         planSection
 
-                        if feed.isCurrentTeamOwner, plan != nil {
-                            newSessionButton
-                        }
-
                         membersCard
 
                         if feed.isCurrentTeamOwner {
@@ -111,14 +106,14 @@ struct TeamDetailView: View {
         }
         .environment(\.layoutDirection, .rightToLeft)
         .colorScheme(.dark)
-        .navigationTitle(team?.name ?? "المجموعة")
+        .navigationTitle(team?.name ?? "التمرين")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
             // Contextual actions live in an ellipsis menu (the designer's pattern).
-            // Deleting the last group is allowed — Home falls back to WelcomeView.
+            // Deleting the last exercise is allowed — Home falls back to WelcomeView.
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     // Session editing is an owner (admin) action; the server
@@ -135,8 +130,8 @@ struct TeamDetailView: View {
                             }
                         }
                     }
-                    // Owner deletes the group; a member leaves it.
-                    Button(feed.isCurrentTeamOwner ? "حذف المجموعة" : "مغادرة المجموعة",
+                    // Owner deletes the exercise; a member leaves it.
+                    Button(feed.isCurrentTeamOwner ? "حذف التمرين" : "مغادرة التمرين",
                            systemImage: feed.isCurrentTeamOwner ? "trash" : "rectangle.portrait.and.arrow.right",
                            role: .destructive) {
                         showDeleteConfirm = true
@@ -145,22 +140,22 @@ struct TeamDetailView: View {
                     // Unstyled on purpose: a hand-set size and colour here made
                     // this button render differently from the system-drawn back
                     // button beside it. Left alone, both take the same glass.
-                    Label("خيارات المجموعة", systemImage: "ellipsis")
+                    Label("خيارات التمرين", systemImage: "ellipsis")
                 }
-                .accessibilityLabel("خيارات المجموعة")
+                .accessibilityLabel("خيارات التمرين")
             }
         }
-        .alert(feed.isCurrentTeamOwner ? "حذف «\(team?.name ?? "المجموعة")»؟" : "مغادرة «\(team?.name ?? "المجموعة")»؟",
+        .alert(feed.isCurrentTeamOwner ? "حذف «\(team?.name ?? "التمرين")»؟" : "مغادرة «\(team?.name ?? "التمرين")»؟",
                isPresented: $showDeleteConfirm) {
-            Button(feed.isCurrentTeamOwner ? "حذف المجموعة" : "مغادرة المجموعة", role: .destructive) {
+            Button(feed.isCurrentTeamOwner ? "حذف التمرين" : "مغادرة التمرين", role: .destructive) {
                 if let id = team?.id { feed.deleteTeam(id) }
                 dismiss()
             }
             Button("تراجع", role: .cancel) {}
         } message: {
             Text(feed.isCurrentTeamOwner
-                 ? "بتُحذف المجموعة وكل تمارينها وأعضائها وطرق الدفع من عندك. تقدر تنشئ مجموعة جديدة أي وقت."
-                 : "بتغادر المجموعة وتختفي تمارينها من عندك. تقدر ترجع أي وقت برمز الدعوة.")
+                 ? "بيُحذف التمرين وكل مواعيده وأعضائه وطرق الدفع من عندك. تقدر تنشئ تمرينًا جديدًا أي وقت."
+                 : "بتغادر التمرين وتختفي مواعيده من عندك. تقدر ترجع أي وقت برمز الدعوة.")
         }
         .sheet(isPresented: $showAddSession) {
             AddSessionSheet(feed: feed,
@@ -168,11 +163,6 @@ struct TeamDetailView: View {
                             editingEventID: plan?.sourceEventID,
                             editingTemplateID: plan?.sourceTemplateID,
                             initialPlan: plan.map(draft(from:)) ?? PlanDraft())
-        }
-        // Separate from the sheet above: that one edits the standing session,
-        // this one starts a blank exercise and must not inherit its identifiers.
-        .sheet(isPresented: $showNewSession) {
-            AddSessionSheet(feed: feed, isPresented: $showNewSession)
         }
     }
 
@@ -213,7 +203,7 @@ struct TeamDetailView: View {
             .shadow(color: TamrinTheme.lime.opacity(0.3), radius: 24, y: 10)
 
             VStack(spacing: 4) {
-                Text(team?.name ?? "المجموعة")
+                Text(team?.name ?? "التمرين")
                     .font(TamrinFont.font(size: 26, weight: .bold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
@@ -333,32 +323,8 @@ struct TeamDetailView: View {
         }
     }
 
-    /// Opening an exercise is the organizer's main act on this page, so it sits
-    /// under the template as a full-width row — the same shape as the roster's
-    /// manual-registration button, since both are "add one of these".
-    private var newSessionButton: some View {
-        Button {
-            showNewSession = true
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "plus")
-                    .font(.system(size: 15, weight: .semibold))
-                Text("تمرين جديد")
-                    .font(TamrinFont.font(size: 15, weight: .medium))
-            }
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity, minHeight: 56)
-            .padding(.horizontal, 14)
-            .tamrinGlassCard()
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("تمرين جديد")
-        .accessibilityHint("يفتح إنشاء تمرين جديد في هذه المجموعة")
-    }
-
     /// Same tile EventDetailView uses for its own directions action, and the
-    /// same two destinations — a group's exercises and its standing venue
+    /// same two destinations — an exercise's dates and its standing venue
     /// should offer identical ways to get there. Titled with the venue's own
     /// name rather than the generic "الاتجاهات": this is the only surface
     /// left that names the venue at all, now that the map preview is gone.
@@ -420,7 +386,7 @@ struct TeamDetailView: View {
                             name: member.displayName,
                             subtitle: member.isPending
                                 ? "بانتظار الانضمام"
-                                : (member.role == .admin ? "مشرف المجموعة" : "عضو"),
+                                : (member.role == .admin ? "مشرف التمرين" : "عضو"),
                             avatarTint: member.role == .admin
                                 ? TamrinTheme.lime
                                 : .white.opacity(0.28),
@@ -449,16 +415,16 @@ struct TeamDetailView: View {
     private var inviteCard: some View {
         // Inviting is an owner (admin) action — members don't see the code/link.
         if let team {
-            PlanGlassSection(title: "مشاركة المجموعة") {
+            PlanGlassSection(title: "مشاركة التمرين") {
                 VStack(spacing: 12) {
                     // Share stays available even before the backend has issued
                     // a join URL — the invite code alone is enough to join.
                     ShareLink(
                         item: team.inviteURL?.absoluteString ?? team.inviteCode,
-                        subject: Text("انضم لمجموعة \(team.name)"),
+                        subject: Text("انضم إلى \(team.name)"),
                         message: Text(team.inviteURL == nil
-                                      ? "انضم لمجموعتنا في تمرين برمز الدعوة: \(team.inviteCode)"
-                                      : "هذا رابط الانضمام لمجموعتنا في تمرين")
+                                      ? "انضم لتمريننا برمز الدعوة: \(team.inviteCode)"
+                                      : "هذا رابط الانضمام لتمريننا")
                     ) {
                         Label(team.inviteURL == nil ? "شارك رمز الدعوة" : "شارك رابط الانضمام",
                               systemImage: "square.and.arrow.up")

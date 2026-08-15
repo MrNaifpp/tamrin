@@ -213,7 +213,7 @@ final class ManualPaymentService {
             )
             guard destination.status == .free || destination.isAvailable else {
                 throw ManualPaymentServiceError.malformedResponse(
-                    "تعذر تحميل وسيلة الدفع المرتبطة بالتمرين."
+                    "تعذر تحميل وسيلة الدفع المرتبطة بالموعد."
                 )
             }
             let groupSize = payload.groupSize ?? max(1, guestNames.count + 1)

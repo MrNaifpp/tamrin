@@ -166,7 +166,7 @@ extension MemberRowCard where Accessory == EmptyView {
             }
             MemberRowCard(
                 name: "نايف الشهراني",
-                subtitle: "مشرف المجموعة",
+                subtitle: "مشرف التمرين",
                 avatarTint: TamrinTheme.lime,
                 avatarForeground: TamrinTheme.ink
             ) {
