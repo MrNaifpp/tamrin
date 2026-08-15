@@ -674,62 +674,23 @@ struct EventDetailView: View {
 
     // MARK: - Share
 
-    /// The date's own deep link. Only worth handing out once it has been sent
-    /// to the members — before that there is nothing to open.
-    private var eventShareURL: URL? {
-        guard occurrence.isPublished else { return nil }
-        return URL(string: "https://guileless-squirrel-b6537a.netlify.app/event/\(occurrence.id.uuidString)")
-    }
-
-    /// Inviting into the exercise is an organizer's act, same as on its own
-    /// page: members share the date, not the door to the exercise itself.
+    /// What this tile hands out is the way into the exercise, not the date in
+    /// front of it. That belongs to the exercise, so publishing the date has no
+    /// say in it and the tile is there every time an organizer opens the page.
     private var teamInvite: FeedTeam? {
         guard feed.isCurrentTeamOwner, let team = feed.currentTeam else { return nil }
         return team.inviteURL == nil && team.inviteCode.isEmpty ? nil : team
     }
 
+    /// Inviting into the exercise is an organizer's act: members open dates,
+    /// they don't hand out the door to the exercise itself.
     private var canShareJoinLink: Bool {
-        eventShareURL != nil || teamInvite != nil
+        teamInvite != nil
     }
 
-    /// One tile, two things worth passing on: the date itself, and the way
-    /// into the exercise behind it. When only one of them applies the menu would
-    /// be a dropdown of one, so the tile shares it directly instead.
     @ViewBuilder
     private var shareButton: some View {
-        if let eventShareURL, let team = teamInvite {
-            Menu {
-                ShareLink(
-                    item: eventShareURL,
-                    subject: Text(occurrence.title),
-                    message: Text("انضم لنا في «\(occurrence.title)»")
-                ) {
-                    Label("رابط الموعد", systemImage: "calendar")
-                }
-
-                ShareLink(
-                    item: teamInviteItem(team),
-                    subject: Text("انضم إلى \(team.name)"),
-                    message: Text(teamInviteMessage(team))
-                ) {
-                    Label("رابط التمرين", systemImage: "person.2.fill")
-                }
-            } label: {
-                EventActionTile(symbol: "square.and.arrow.up.fill", title: "مشاركة")
-            }
-            .accessibilityLabel("مشاركة")
-            .accessibilityHint("يفتح خيارات مشاركة رابط الموعد أو رابط الانضمام للتمرين")
-        } else if let eventShareURL {
-            ShareLink(
-                item: eventShareURL,
-                subject: Text(occurrence.title),
-                message: Text("انضم لنا في «\(occurrence.title)»")
-            ) {
-                EventActionTile(symbol: "square.and.arrow.up.fill", title: "مشاركة")
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("مشاركة رابط الموعد")
-        } else if let team = teamInvite {
+        if let team = teamInvite {
             ShareLink(
                 item: teamInviteItem(team),
                 subject: Text("انضم إلى \(team.name)"),
