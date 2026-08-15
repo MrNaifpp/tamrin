@@ -1427,21 +1427,49 @@ final class HomeStore {
     }
 
     // MARK: Profile
+    /// What the profile sheet did to the photo. An optional `Data` could only
+    /// say "here is a new one" or "nothing to report", and clearing the photo is
+    /// neither — spelling the three cases out keeps "no new photo" from being
+    /// mistaken for "remove the one on file".
+    enum AvatarEdit {
+        case unchanged
+        case replaced(Data)
+        case removed
+    }
+
     /// Optimistically applies the profile edit, then persists name / position /
     /// avatar. STC Pay number is edited elsewhere.
-    func saveProfile(name: String, avatarData: Data?, playerPosition: String) {
+    func saveProfile(name: String, avatar: AvatarEdit, playerPosition: String) {
         profileName = name
         self.playerPosition = playerPosition
-        if let avatarData { self.avatarData = avatarData }
+        switch avatar {
+        case .unchanged: break
+        case .replaced(let data): avatarData = data
+        case .removed: avatarData = nil
+        }
         guard !isPreview else { return }
         Task {
             var newUrl: String? = avatarUrl
-            if let data = avatarData, let uid = currentUserID,
-               let uploaded = await AuthService.shared.uploadAvatar(userId: uid, imageData: data) {
-                newUrl = uploaded
-                avatarUrl = uploaded
+            switch avatar {
+            case .unchanged:
+                break
+            case .replaced(let data):
+                if let uid = currentUserID,
+                   let uploaded = await AuthService.shared.uploadAvatar(userId: uid, imageData: data) {
+                    newUrl = uploaded
+                    avatarUrl = uploaded
+                }
+            case .removed:
+                newUrl = nil
+                avatarUrl = nil
             }
             try? await AuthService.shared.updateProfile(name: name, position: playerPosition, avatarUrl: newUrl)
+            // The row is what every roster reads, so it goes first: if the file
+            // outlives this call nobody can reach it, whereas a file deleted
+            // ahead of a failed update would leave rosters on a dead URL.
+            if case .removed = avatar, let uid = currentUserID {
+                await AuthService.shared.deleteAvatar(userId: uid)
+            }
         }
     }
 
