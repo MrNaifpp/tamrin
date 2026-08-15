@@ -325,7 +325,7 @@ struct DesignerHomeView: View {
                             isOnArtwork: !feed.occurrences.isEmpty,
                             sectionTitle: feed.occurrences.isEmpty
                                 ? nil
-                                : (currentIndex == 0 ? "التمرين الجاي" : "التمارين القادمة"),
+                                : (currentIndex == 0 ? "الموعد الجاي" : "المواعيد القادمة"),
                             openMenu: {
                                 Haptics.impact(.light)
                                 setMenu(open: true)
@@ -364,7 +364,7 @@ struct DesignerHomeView: View {
                                 reasonText: reasonText
                             )
                         )
-                        showActionToast("سُجّل اعتذارك عن التمرين")
+                        showActionToast("سُجّل اعتذارك عن الموعد")
                     }
                 }
                 .sheet(item: $publishConfirmation) { occurrence in
@@ -375,7 +375,7 @@ struct DesignerHomeView: View {
                         try await performEventAction(.publishing, for: occurrence.id) {
                             await feed.publish(occurrence)
                         }
-                        showActionToast("نُشر التمرين ووصل الأعضاء إشعار")
+                        showActionToast("نُشر الموعد ووصل الأعضاء إشعار")
                     }
                 }
                 .sheet(item: $skipOccurrence) { occurrence in
@@ -387,7 +387,7 @@ struct DesignerHomeView: View {
                                 reasonText: reasonText
                             )
                         }
-                        showActionToast("تمرين هذا الأسبوع متخطّى، وأُبلغ الأعضاء")
+                        showActionToast("موعد هذا الأسبوع متخطّى، وأُبلغ الأعضاء")
                     }
                 }
                 .sheet(item: $editingOccurrence) { occurrence in
@@ -461,7 +461,7 @@ struct DesignerHomeView: View {
             return [
                 EventPosterCardAction(
                     id: "send",
-                    title: occurrence.isPublished ? "منشور" : "نشر التمرين",
+                    title: occurrence.isPublished ? "منشور" : "نشر الموعد",
                     systemImage: occurrence.isPublished ? "checkmark.circle.fill" : "paperplane.fill",
                     kind: occurrence.isPublished ? .status : .primary,
                     isEnabled: !occurrence.isPublished && actionsEnabled,
@@ -477,7 +477,7 @@ struct DesignerHomeView: View {
                     isEnabled: actionsEnabled
                 ) {
                     guard feed.editDraft(for: occurrence) != nil else {
-                        actionError = "تعذر تحميل بيانات هذا التمرين للتعديل. حدّث الصفحة وحاول مرة أخرى."
+                        actionError = "تعذر تحميل بيانات هذا الموعد للتعديل. حدّث الصفحة وحاول مرة أخرى."
                         return
                     }
                     editingOccurrence = occurrence
@@ -579,7 +579,7 @@ struct DesignerHomeView: View {
             throw NSError(
                 domain: "DesignerHomeView.EventAction",
                 code: 2,
-                userInfo: [NSLocalizedDescriptionKey: "يوجد إجراء جارٍ لهذا التمرين. انتظر لحظة وحاول مرة أخرى."]
+                userInfo: [NSLocalizedDescriptionKey: "يوجد إجراء جارٍ لهذا الموعد. انتظر لحظة وحاول مرة أخرى."]
             )
         }
         eventActionsInFlight[eventID] = action
@@ -633,13 +633,13 @@ struct DesignerHomeView: View {
                 selected = occurrence
                 if appState.deepLinkEventId == eventID { appState.deepLinkEventId = nil }
             } else {
-                actionError = "هذا التمرين غير متاح لك أو لم تعد عضوًا في مجموعته."
+                actionError = "هذا الموعد غير متاح لك أو لم تعد عضوًا في تمرينه."
                 if appState.deepLinkEventId == eventID { appState.deepLinkEventId = nil }
             }
         } catch {
             // Retain the pending ID after a transient network/server failure so
             // a later delivery or app re-entry can retry the same destination.
-            actionError = "تعذر فتح التمرين الآن. تحقق من اتصالك وحاول مرة أخرى."
+            actionError = "تعذر فتح الموعد الآن. تحقق من اتصالك وحاول مرة أخرى."
         }
     }
 
@@ -816,7 +816,7 @@ private struct HomeTopBar: View {
         // close together; the profile button is pushed away by the spacer.
         HStack(spacing: 8) {
             Button(action: openMenu) {
-                Label("المجموعات", systemImage: "line.3.horizontal")
+                Label("التمارين", systemImage: "line.3.horizontal")
                     .labelStyle(.iconOnly)
                     .font(.system(size: 18, weight: .semibold))
                     .frame(width: TamrinControlMetrics.glassIconContent, height: TamrinControlMetrics.glassIconContent)
@@ -824,11 +824,11 @@ private struct HomeTopBar: View {
             .buttonStyle(.glass)
             .buttonBorderShape(.circle)
             .controlSize(.regular)
-            .accessibilityLabel("المجموعات")
+            .accessibilityLabel("التمارين")
 
             Button(action: openPlan) {
                 HStack(spacing: 9) {
-                    Text(team?.name ?? "المجموعة")
+                    Text(team?.name ?? "التمرين")
                         .font(TamrinFont.font(size: 17, weight: .medium))
                         .foregroundStyle(.primary)
                         .lineLimit(1).minimumScaleFactor(0.74)
@@ -844,7 +844,7 @@ private struct HomeTopBar: View {
             .buttonStyle(.glass)
             .buttonBorderShape(.capsule)
             .controlSize(.regular)
-            .accessibilityLabel("تفاصيل قالب التمرين")
+            .accessibilityLabel("تفاصيل التمرين")
 
             Spacer(minLength: 0)
 
@@ -897,7 +897,7 @@ private struct HomeQuickAddSheet: View {
         NavigationStack {
             VStack(spacing: 10) {
                 optionCard(
-                    title: "انضم إلى مجموعة",
+                    title: "انضم إلى تمرين",
                     subtitle: "أدخل رمز الدعوة الذي وصلك من المشرف",
                     systemImage: "link",
                     isPrimary: true,
@@ -905,8 +905,8 @@ private struct HomeQuickAddSheet: View {
                 )
 
                 optionCard(
-                    title: "مجموعة جديدة",
-                    subtitle: "ابدأ مجموعة مستقلة وادعُ أعضاءها",
+                    title: "تمرين جديد",
+                    subtitle: "ابدأ تمرينًا مستقلًا وادعُ أعضاءه",
                     systemImage: "person.3.fill",
                     isPrimary: false,
                     destination: .createTeam

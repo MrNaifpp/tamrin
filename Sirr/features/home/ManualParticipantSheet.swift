@@ -48,8 +48,8 @@ struct ManualParticipantSheet: View {
                     .background(TamrinTheme.card, in: .capsule)
 
                 Text(isPaid
-                     ? "يحجز مقعده في هذا التمرين فقط. مقعده محسوب مدفوع، وتسوّون المبلغ بينكم خارج التطبيق."
-                     : "يحجز مقعده في هذا التمرين فقط، ولا يحتاج حساب في التطبيق.")
+                     ? "يحجز مقعده في هذا الموعد فقط. مقعده محسوب مدفوع، وتسوّون المبلغ بينكم خارج التطبيق."
+                     : "يحجز مقعده في هذا الموعد فقط، ولا يحتاج حساب في التطبيق.")
                     .font(TamrinFont.footnote)
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)

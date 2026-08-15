@@ -83,7 +83,7 @@ struct JoinWorkspaceView: View {
     }
 
     private func previewSubtitle(_ p: WorkspaceInvitePreview) -> String {
-        if p.isMember { return "أنت عضو في هذه المجموعة" }
+        if p.isMember { return "أنت عضو في هذا التمرين" }
         if let owner = p.ownerName, !owner.isEmpty { return "دعاك \(owner) للانضمام" }
         return "دُعيت للانضمام"
     }
@@ -97,7 +97,7 @@ struct JoinWorkspaceView: View {
                 if isJoining {
                     ProgressView().tint(.black)
                 } else {
-                    Text(p.isMember ? "فتح المجموعة" : (isLoggedIn ? "انضمام" : "سجّل الدخول للانضمام"))
+                    Text(p.isMember ? "فتح التمرين" : (isLoggedIn ? "انضمام" : "سجّل الدخول للانضمام"))
                         .font(TamrinFont.font(size: 17, weight: .bold))
                         .foregroundStyle(.black)
                 }
@@ -116,13 +116,13 @@ struct JoinWorkspaceView: View {
             // generic invite card prompting login instead of failing.
             loadError = nil
             // Minimal logged-out experience: straight to the login CTA.
-            preview = WorkspaceInvitePreview(id: UUID(uuidString: "00000000-0000-0000-0000-000000000000")!, name: "دعوة إلى مجموعة", ownerName: nil, memberCount: 0, isMember: false)
+            preview = WorkspaceInvitePreview(id: UUID(uuidString: "00000000-0000-0000-0000-000000000000")!, name: "دعوة إلى تمرين", ownerName: nil, memberCount: 0, isMember: false)
             return
         }
         do {
             preview = try await WorkspaceService.shared.getInvitePreview(code: code)
         } catch {
-            loadError = "رابط الدعوة غير صالح أو مُبطَل.\nاطلب رابطًا جديدًا من صاحب المجموعة."
+            loadError = "رابط الدعوة غير صالح أو مُبطَل.\nاطلب رابطًا جديدًا من صاحب التمرين."
         }
     }
 

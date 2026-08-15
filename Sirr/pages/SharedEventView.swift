@@ -322,7 +322,7 @@ struct SharedEventView: View {
             let record = try await EventService.shared.getEventById(eventId)
             event = EventData.from(record: record)
         } catch {
-            errorMessage = "هذا التمرين في مجموعة خاصة.\nاطلب دعوة من صاحب المجموعة للانضمام."
+            errorMessage = "هذا الموعد في تمرين خاص.\nاطلب دعوة من صاحب التمرين للانضمام."
         }
     }
 

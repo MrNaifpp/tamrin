@@ -29,13 +29,13 @@ struct WelcomeView: View {
                     Text("اختر كيف تبدأ، والباقي علينا.").font(TamrinFont.title3).foregroundStyle(.secondary).padding(.top, 8)
                     Spacer().frame(height: 34)
                     Button { showCreate = true } label: {
-                        WelcomeChoiceCard(title: "أنشئ مجموعتك", subtitle: "رتّب روتين اللعب وادعُ الربع", symbol: "sparkles", accent: TamrinTheme.lime)
+                        WelcomeChoiceCard(title: "أنشئ تمرينك", subtitle: "رتّب روتين اللعب وادعُ الربع", symbol: "sparkles", accent: TamrinTheme.lime)
                     }.buttonStyle(SpringCardPressStyle())
                     Button { showJoin = true } label: {
-                        WelcomeChoiceCard(title: "انضم لمجموعة", subtitle: "ادخل برمز الدعوة ووفر مكانك", symbol: "link", accent: TamrinTheme.secondary)
+                        WelcomeChoiceCard(title: "انضم لتمرين", subtitle: "ادخل برمز الدعوة ووفر مكانك", symbol: "link", accent: TamrinTheme.secondary)
                     }.buttonStyle(SpringCardPressStyle()).padding(.top, 12)
                     Spacer()
-                    Text("مجموعاتك خاصة — ما يدخلها إلا بدعوة").font(TamrinFont.footnote).foregroundStyle(.tertiary)
+                    Text("تمارينك خاصة — ما يدخلها إلا بدعوة").font(TamrinFont.footnote).foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity).padding(.bottom, 24)
                 }
                 .padding(.horizontal, 22)
@@ -89,7 +89,7 @@ struct JoinTeamView: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 18) {
-                Text("ألصق رمز الدعوة الذي وصلك من مشرف المجموعة.")
+                Text("ألصق رمز الدعوة الذي وصلك من مشرف التمرين.")
                     .font(TamrinFont.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -135,7 +135,7 @@ struct JoinTeamView: View {
             }
 
             TamrinActionButton(
-                title: preview?.isMember == true ? "أنت عضو بالفعل" : "الانضمام للمجموعة",
+                title: preview?.isMember == true ? "أنت عضو بالفعل" : "الانضمام للتمرين",
                 isLoading: joining
             ) {
                 joining = true
@@ -155,7 +155,7 @@ struct JoinTeamView: View {
             // detent follows the content rather than the NavigationStack.
             .sheetContentHeight()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .navigationTitle("انضم إلى مجموعة")
+            .navigationTitle("انضم إلى تمرين")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

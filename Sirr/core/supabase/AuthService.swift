@@ -292,7 +292,7 @@ final class AuthService {
     /// the UI turns this into an instruction the user can act on.
     struct OwnsSharedWorkspaceError: LocalizedError {
         var errorDescription: String? {
-            "لديك مجموعة فيها أعضاء آخرون. احذف المجموعة أو انقل ملكيتها أولًا، ثم احذف الحساب."
+            "لديك تمرين فيه أعضاء آخرون. احذف التمرين أو انقل ملكيته أولًا، ثم احذف الحساب."
         }
     }
 

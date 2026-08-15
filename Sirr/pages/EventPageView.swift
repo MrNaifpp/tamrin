@@ -186,7 +186,7 @@ struct EventPageView: View {
                     let eventData = EventData.from(record: record)
                     navigationPath.append(eventData)
                 } catch {
-                    deepLinkError = "هذا التمرين في مجموعة خاصة.\nاطلب دعوة من صاحب المجموعة للانضمام."
+                    deepLinkError = "هذا الموعد في تمرين خاص.\nاطلب دعوة من صاحب التمرين للانضمام."
                 }
                 deepLinkEventId = nil
             }
@@ -358,7 +358,7 @@ private extension EventPageView {
     func emptyStateContent(geometry: GeometryProxy) -> some View {
         VStack(spacing: 24) {
             Spacer()
-            Text("لا توجد تمارين في \(currentWorkspace?.name ?? "المجموعة")")
+            Text("لا توجد مواعيد في \(currentWorkspace?.name ?? "التمرين")")
                 .font(.appTitle)
                 .foregroundStyle(.white)
             Text("أنشئ تمرينًا أو انضم إلى واحد")
@@ -387,10 +387,10 @@ private extension EventPageView {
         VStack(spacing: 16) {
             Spacer()
             Text("🏟️").font(.system(size: 56))
-            Text("ابدأ مجموعتك الأولى")
+            Text("ابدأ تمرينك الأول")
                 .font(.appTitle)
                 .foregroundStyle(.white)
-            Text("المجموعة لك ولأصحابك — أنشئ واحدة لشلّتك\nأو انضم برابط دعوة من صديق")
+            Text("التمرين لك ولأصحابك — أنشئ واحدًا لشلّتك\nأو انضم برابط دعوة من صديق")
                 .font(.appBody)
                 .foregroundStyle(.white.opacity(0.9))
                 .multilineTextAlignment(.center)
@@ -399,7 +399,7 @@ private extension EventPageView {
             Button {
                 showCreateWorkspace = true
             } label: {
-                Text("إنشاء مجموعة")
+                Text("إنشاء تمرين")
                     .font(TamrinFont.font(size: 17, weight: .bold))
                     .foregroundStyle(.black)
                     .frame(maxWidth: .infinity)

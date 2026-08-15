@@ -26,7 +26,7 @@ struct MemberReminderSheet: View {
                 option(
                     .payment,
                     title: "تذكير الأعضاء بدفع القطة",
-                    detail: "يوصل للمسجلين في التمرين",
+                    detail: "يوصل للمسجلين في الموعد",
                     symbol: "banknote.fill"
                 )
 

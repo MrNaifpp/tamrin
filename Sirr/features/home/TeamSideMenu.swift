@@ -83,7 +83,7 @@ struct TeamSideMenu: View {
 
     private func menuHeader(width: CGFloat) -> some View {
         ZStack {
-            Text("المجموعات")
+            Text("التمارين")
                 .font(TamrinFont.font(size: 22, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, alignment: .trailing)
@@ -123,8 +123,8 @@ struct TeamSideMenu: View {
                     "plus",
                     label: "إضافة",
                     hint: feed.isCurrentTeamOwner
-                        ? "يفتح خيارات إنشاء تمرين أو مجموعة"
-                        : "يفتح خيارات إنشاء مجموعة أو الانضمام إلى مجموعة",
+                        ? "يفتح خيارات إنشاء تمرين أو موعد"
+                        : "يفتح خيارات إنشاء تمرين أو الانضمام إلى تمرين",
                     action: createTeam
                 )
             }
@@ -167,8 +167,8 @@ struct TeamSideMenu: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(team.name)
-                    .accessibilityValue(isSelected ? "المجموعة الحالية" : team.memberCount.counted(.member))
-                    .accessibilityHint(isSelected ? "المجموعة محددة حاليًا" : "التبديل إلى هذه المجموعة")
+                    .accessibilityValue(isSelected ? "التمرين الحالي" : team.memberCount.counted(.member))
+                    .accessibilityHint(isSelected ? "التمرين محدد حاليًا" : "التبديل إلى هذا التمرين")
                     .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
             }

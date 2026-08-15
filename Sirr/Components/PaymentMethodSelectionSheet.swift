@@ -395,7 +395,7 @@ private struct PaymentMethodDetailsEditor: View {
             Button("إزالة الوسيلة", role: .destructive, action: onRemove)
             Button("تراجع", role: .cancel) {}
         } message: {
-            Text("لن تظهر هذه الوسيلة للاعب ضمن خيارات الدفع لهذا التمرين.")
+            Text("لن تظهر هذه الوسيلة للاعب ضمن خيارات الدفع لهذا الموعد.")
         }
         .onAppear {
             // The phone editor's UIKit field focuses itself in makeUIView; only
@@ -479,7 +479,7 @@ private struct PaymentMethodDetailsEditor: View {
                     isRemoveConfirmationPresented = true
                 }
                 .tint(.red)
-                .accessibilityHint("يحذف هذه الوسيلة من خيارات هذا التمرين")
+                .accessibilityHint("يحذف هذه الوسيلة من خيارات هذا الموعد")
             }
         }
         .padding(.horizontal, 20)
