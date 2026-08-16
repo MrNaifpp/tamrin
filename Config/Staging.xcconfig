@@ -20,6 +20,6 @@ SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSI
 //
 // Two further guards: the home-screen name reads STG, and TestFlight lists it
 // under 99.0. Never submit a 99.x build for review.
-INFOPLIST_KEY_CFBundleDisplayName = تمارين STG
+INFOPLIST_KEY_CFBundleDisplayName = تمرين STG
 MARKETING_VERSION = 99.0
 CURRENT_PROJECT_VERSION = 1

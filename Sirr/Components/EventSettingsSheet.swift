@@ -89,7 +89,7 @@ struct EventSettingsSheet: View {
             Button("إنهاء", role: .destructive) { handleEndRecurrence() }
             Button("إلغاء", role: .cancel) {}
         } message: {
-            Text("لن تُنشأ تمارين جديدة من هذه السلسلة. التمارين الحالية تبقى كما هي.")
+            Text("لن تُنشأ مواعيد جديدة من هذه السلسلة. المواعيد الحالية تبقى كما هي.")
         }
     }
 
@@ -139,7 +139,7 @@ struct EventSettingsSheet: View {
 
     private var managementSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("إدارة التمرين")
+            sectionHeader("إدارة الموعد")
 
             HStack {
                 Text("يتكرر أسبوعيًا")
@@ -160,7 +160,7 @@ struct EventSettingsSheet: View {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .fill(.white.opacity(0.08))
             )
-            caption("يُنشأ تمرين الأسبوع القادم تلقائيًا قبل موعده بـ3 أيام، ويصل إشعار لجميع الأعضاء.")
+            caption("يُنشأ موعد الأسبوع القادم تلقائيًا قبل حلوله بـ3 أيام، ويصل إشعار لجميع الأعضاء.")
 
             if let recurrenceError {
                 Text(recurrenceError)

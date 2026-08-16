@@ -57,13 +57,13 @@ struct WorkspaceSettingsSheet: View {
         .environment(\.layoutDirection, .rightToLeft)
         .sheetPresentationHaptic()
         .task { await loadDetail() }
-        .alert("إعادة تسمية المجموعة", isPresented: $showRename) {
+        .alert("إعادة تسمية التمرين", isPresented: $showRename) {
             TextField("الاسم", text: $renameText)
             Button("حفظ") { handleRename() }
             Button("إلغاء", role: .cancel) {}
         }
         .confirmationDialog(
-            isOwner ? "حذف المجموعة" : "مغادرة المجموعة",
+            isOwner ? "حذف التمرين" : "مغادرة التمرين",
             isPresented: $showDestructiveConfirm,
             titleVisibility: .visible
         ) {
@@ -71,8 +71,8 @@ struct WorkspaceSettingsSheet: View {
             Button("إلغاء", role: .cancel) {}
         } message: {
             Text(isOwner
-                 ? "تُحذف المجموعة وجميع تمارينها ومشاركيها نهائيًا. لا يمكن التراجع."
-                 : "ستفقد الوصول إلى تمارين هذه المجموعة وستُزال من التمارين القادمة.")
+                 ? "يُحذف التمرين وجميع مواعيده ومشاركيه نهائيًا. لا يمكن التراجع."
+                 : "ستفقد الوصول إلى مواعيد هذا التمرين وستُزال من المواعيد القادمة.")
         }
         .confirmationDialog(
             "إزالة العضو",
@@ -90,7 +90,7 @@ struct WorkspaceSettingsSheet: View {
             }
             Button("إلغاء", role: .cancel) { memberToRemove = nil }
         } message: {
-            Text("سيفقد \(memberToRemove?.displayName ?? "العضو") الوصول إلى المجموعة وسيُزال من التمارين القادمة.")
+            Text("سيفقد \(memberToRemove?.displayName ?? "العضو") الوصول إلى التمرين وسيُزال من المواعيد القادمة.")
         }
     }
 
@@ -98,7 +98,7 @@ struct WorkspaceSettingsSheet: View {
 
     private var header: some View {
         ZStack {
-            Text("إعدادات المجموعة")
+            Text("إعدادات التمرين")
                 .font(.appSubheadline)
                 .foregroundStyle(.white)
             HStack {
@@ -229,7 +229,7 @@ struct WorkspaceSettingsSheet: View {
                     if isWorking {
                         ProgressView().tint(.red)
                     } else {
-                        Text(isOwner ? "حذف المجموعة" : "مغادرة المجموعة")
+                        Text(isOwner ? "حذف التمرين" : "مغادرة التمرين")
                             .font(.appBody)
                             .foregroundStyle(.red)
                     }

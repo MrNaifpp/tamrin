@@ -198,8 +198,8 @@ private struct EventPosterPublishTagView: View {
 
     private var explanation: String {
         isPublished
-            ? "هذا التمرين ظاهر لأعضاء المجموعة وتصلهم إشعاراته."
-            : "هذا التمرين غير ظاهر للأعضاء وسيظهر لهم اذا نشرته."
+            ? "هذا الموعد ظاهر لأعضاء التمرين وتصلهم إشعاراته."
+            : "هذا الموعد غير ظاهر للأعضاء وسيظهر لهم اذا نشرته."
     }
 
     var body: some View {
@@ -228,7 +228,7 @@ private struct EventPosterPublishTagView: View {
                 .environment(\.layoutDirection, .rightToLeft)
                 .presentationCompactAdaptation(.popover)
         }
-        .accessibilityLabel("حالة التمرين: \(title)")
+        .accessibilityLabel("حالة الموعد: \(title)")
         .accessibilityHint("يعرض شرحًا لحالة النشر")
     }
 }

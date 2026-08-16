@@ -227,10 +227,14 @@ final class AuthService {
                 .update(payload)
                 .eq("user_id", value: userId)
                 .execute()
-            authLogger.info("API updateProfile succeeded")
+            authLogger.info("API updateProfile succeeded (avatarUrl: \(avatarUrl ?? "nil", privacy: .public))")
         } catch {
-            authLogger.error("API updateProfile failed: \(error.localizedDescription)")
-            if let e = error as? URLError { authLogger.error("URLError: \(String(describing: e))") }
+            // saveProfile calls this behind `try?`, so an error here leaves no
+            // trace anywhere else.
+            authLogger.error("API updateProfile failed: \(String(describing: error), privacy: .public)")
+            if let e = error as? URLError {
+                authLogger.error("URLError: \(String(describing: e), privacy: .public)")
+            }
             throw error
         }
     }
@@ -255,12 +259,38 @@ final class AuthService {
                     options: FileOptions(contentType: "image/jpeg", upsert: true)
                 )
             let url = try? client.storage.from(bucketName).getPublicURL(path: path).absoluteString
-            authLogger.info("API uploadAvatar succeeded")
+            authLogger.info("API uploadAvatar succeeded (url: \(url ?? "nil", privacy: .public))")
             return url.map { "\($0)?v=\(Int(Date().timeIntervalSince1970))" }
         } catch {
-            authLogger.error("API uploadAvatar failed: \(error.localizedDescription)")
-            if let e = error as? URLError { authLogger.error("URLError: \(String(describing: e))") }
+            // Public, and the whole error rather than its localized summary: a
+            // storage refusal (missing bucket, RLS) says nothing useful in
+            // `localizedDescription`, and this call swallows the failure —
+            // the log is the only place the reason survives.
+            authLogger.error("API uploadAvatar failed: \(String(describing: error), privacy: .public)")
+            if let e = error as? URLError {
+                authLogger.error("URLError: \(String(describing: e), privacy: .public)")
+            }
             return nil
+        }
+    }
+
+    /// Remove the current user's avatar from storage. Returns false if the file
+    /// was still there afterwards.
+    ///
+    /// Goes through the storage API rather than deleting the `storage.objects`
+    /// row: the SQL route drops only the metadata and leaves the blob behind in
+    /// the backend, which is not what "delete my photo" means.
+    @discardableResult
+    func deleteAvatar(userId: UUID) async -> Bool {
+        let bucketName = "tamrin-stg"
+        let path = "\(userId.uuidString).jpg"
+        do {
+            _ = try await client.storage.from(bucketName).remove(paths: [path])
+            authLogger.info("API deleteAvatar succeeded")
+            return true
+        } catch {
+            authLogger.error("API deleteAvatar failed: \(String(describing: error), privacy: .public)")
+            return false
         }
     }
 
@@ -292,7 +322,7 @@ final class AuthService {
     /// the UI turns this into an instruction the user can act on.
     struct OwnsSharedWorkspaceError: LocalizedError {
         var errorDescription: String? {
-            "لديك مجموعة فيها أعضاء آخرون. احذف المجموعة أو انقل ملكيتها أولًا، ثم احذف الحساب."
+            "لديك تمرين فيه أعضاء آخرون. احذف التمرين أو انقل ملكيته أولًا، ثم احذف الحساب."
         }
     }
 

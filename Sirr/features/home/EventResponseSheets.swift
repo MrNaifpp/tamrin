@@ -32,11 +32,11 @@ struct MemberDeclineSheet: View {
 
     var body: some View {
         EventResponseFlow(
-            title: "الاعتذار عن التمرين",
-            message: "هل أنت متأكد من الاعتذار؟ سيتاح مكانك لبقية أعضاء المجموعة، ويمكنك إضافة السبب بشكل اختياري.",
+            title: "الاعتذار عن الموعد",
+            message: "هل أنت متأكد من الاعتذار؟ سيتاح مكانك لبقية أعضاء التمرين، ويمكنك إضافة السبب بشكل اختياري.",
             confirmationTitle: "نعم، أعتذر",
             reasonTitle: "سبب الاعتذار",
-            reasonPrompt: "تحب تضيف سبب اعتذارك؟ اختياري، ويساعد المشرف يرتب التمرين.",
+            reasonPrompt: "تحب تضيف سبب اعتذارك؟ اختياري، ويساعد المشرف يرتب الموعد.",
             confirmTitle: "تأكيد الاعتذار",
             reasons: Self.reasons,
             // A member giving up their seat frees it for someone else, so the
@@ -64,7 +64,7 @@ struct AdminSkipEventSheet: View {
     var body: some View {
         EventResponseFlow(
             title: "تخطي هذا الموعد",
-            message: "يُتخطّى هذا الموعد وحده، وتستمر سلسلة التمارين والمواعيد القادمة كالمعتاد. إضافة السبب اختيارية.",
+            message: "يُتخطّى هذا الموعد وحده، وتستمر المواعيد القادمة كالمعتاد. إضافة السبب اختيارية.",
             confirmationTitle: "متابعة",
             reasonTitle: "سبب التخطي",
             reasonPrompt: "تحب تضيف سبب التخطي؟ اختياري، ويوصل للأعضاء مع الإشعار.",
@@ -92,7 +92,7 @@ struct AdminPublishEventSheet: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 18) {
                 Label {
-                    Text("سيظهر «\(eventTitle)» لأعضاء المجموعة، ويصلهم إشعار يدعوهم إلى تمرين \(dayText).")
+                    Text("سيظهر «\(eventTitle)» لأعضاء التمرين، ويصلهم إشعار يدعوهم إلى موعد \(dayText).")
                         .font(TamrinFont.body)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -112,7 +112,7 @@ struct AdminPublishEventSheet: View {
                         .accessibilityAddTraits(.isStaticText)
                 }
 
-                SlideToConfirmButton(title: "اسحب لنشر التمرين", tint: .blue) {
+                SlideToConfirmButton(title: "اسحب لنشر الموعد", tint: .blue) {
                     Task { await submit() }
                 }
                 .disabled(isSubmitting)
@@ -124,7 +124,7 @@ struct AdminPublishEventSheet: View {
             .sheetContentHeight()
             .frame(maxHeight: .infinity, alignment: .top)
             .animation(.smooth(duration: 0.28), value: errorMessage)
-            .navigationTitle("نشر التمرين")
+            .navigationTitle("نشر الموعد")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -159,7 +159,7 @@ struct AdminPublishEventSheet: View {
             dismiss()
         } catch {
             let description = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-            errorMessage = description.isEmpty ? "تعذر نشر التمرين. حاول مرة أخرى." : description
+            errorMessage = description.isEmpty ? "تعذر نشر الموعد. حاول مرة أخرى." : description
             isSubmitting = false
         }
     }

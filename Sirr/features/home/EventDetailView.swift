@@ -294,13 +294,18 @@ struct EventDetailView: View {
 
             // One row of square tiles rather than a wall of full-width rows.
             // Whichever tiles apply share the width between them.
-            if !declinedResponses.isEmpty || canRemindMembers || hasDirections {
+            if !declinedResponses.isEmpty || canRemindMembers || canShareJoinLink {
                 HStack(spacing: 10) {
                     if !declinedResponses.isEmpty { declinedResponsesButton }
                     if canRemindMembers { remindMembersButton }
-                    if hasDirections { directionsButton }
+                    if canShareJoinLink { shareButton }
                 }
             }
+
+            // Full width under the tiles, and titled with the venue itself when
+            // we know its name: getting there is one destination, not a choice
+            // among three, and the pitch's name says more than "الاتجاهات".
+            if hasDirections { directionsButton }
 
             progressPanel
 
@@ -381,7 +386,7 @@ struct EventDetailView: View {
             .padding(16)
             .tamrinGlassCard()
         } else {
-            Text("تمرين هذا الأسبوع متخطّى، وتستمر المواعيد القادمة كالمعتاد.")
+            Text("موعد هذا الأسبوع متخطّى، وتستمر المواعيد القادمة كالمعتاد.")
                 .font(TamrinFont.font(size: 14, weight: .medium))
                 .foregroundStyle(.white.opacity(0.76))
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -481,7 +486,7 @@ struct EventDetailView: View {
                 .buttonStyle(.glass)
                 .buttonBorderShape(.capsule)
                 .controlSize(.regular)
-                .accessibilityHint("يفتح تأكيد الاعتذار عن التمرين")
+                .accessibilityHint("يفتح تأكيد الاعتذار عن الموعد")
             }
         } else {
             let full = occurrence.capacity > 0 && confirmedCount >= occurrence.capacity
@@ -512,7 +517,7 @@ struct EventDetailView: View {
     private var progressPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("المسجلون في التمرين")
+                Text("المسجلون في الموعد")
                     .font(TamrinFont.font(size: 15, weight: .medium))
                     .foregroundStyle(.white)
                 Spacer()
@@ -664,8 +669,50 @@ struct EventDetailView: View {
     /// Directions need somewhere to go: a pin, or failing that a place name a
     /// maps app can search for.
     private var hasDirections: Bool {
-        (occurrence.latitude != nil && occurrence.longitude != nil)
-            || !occurrence.locationName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        (occurrence.latitude != nil && occurrence.longitude != nil) || !venueName.isEmpty
+    }
+
+    // MARK: - Share
+
+    /// What this tile hands out is the way into the exercise, not the date in
+    /// front of it. That belongs to the exercise, so publishing the date has no
+    /// say in it and the tile is there every time an organizer opens the page.
+    private var teamInvite: FeedTeam? {
+        guard feed.isCurrentTeamOwner, let team = feed.currentTeam else { return nil }
+        return team.inviteURL == nil && team.inviteCode.isEmpty ? nil : team
+    }
+
+    /// Inviting into the exercise is an organizer's act: members open dates,
+    /// they don't hand out the door to the exercise itself.
+    private var canShareJoinLink: Bool {
+        teamInvite != nil
+    }
+
+    @ViewBuilder
+    private var shareButton: some View {
+        if let team = teamInvite {
+            ShareLink(
+                item: teamInviteItem(team),
+                subject: Text("انضم إلى \(team.name)"),
+                message: Text(teamInviteMessage(team))
+            ) {
+                EventActionTile(symbol: "square.and.arrow.up.fill", title: "مشاركة")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("مشاركة رابط الانضمام للتمرين")
+        }
+    }
+
+    /// Share stays available before the backend has issued a join URL — the
+    /// invite code alone is enough to join.
+    private func teamInviteItem(_ team: FeedTeam) -> String {
+        team.inviteURL?.absoluteString ?? team.inviteCode
+    }
+
+    private func teamInviteMessage(_ team: FeedTeam) -> String {
+        team.inviteURL == nil
+            ? "انضم لتمريننا برمز الدعوة: \(team.inviteCode)"
+            : "هذا رابط الانضمام لتمريننا"
     }
 
     /// A plain menu, not a popover: the choice is two labelled destinations,
@@ -688,10 +735,42 @@ struct EventDetailView: View {
                 Label { Text("خرائط قوقل") } icon: { Image("MapAppGoogleMaps") }
             }
         } label: {
-            EventActionTile(symbol: "arrow.triangle.turn.up.right.diamond.fill", title: "الاتجاهات")
+            // A full-width row rather than a tile, and read like a list row
+            // rather than a centred button: the venue sits on the leading edge
+            // with its mark, and a chevron on the far side says it opens
+            // something. `chevron.forward` so it follows the language's
+            // direction instead of always pointing right.
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                Text(directionsTitle)
+                    .font(TamrinFont.font(size: 15, weight: .medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.forward")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.55))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, minHeight: 56)
+            .padding(.horizontal, 16)
+            .tamrinGlassCard()
+            .contentShape(.rect)
         }
-        .accessibilityLabel("الاتجاهات")
+        .accessibilityLabel(venueName.isEmpty ? "الاتجاهات" : "الاتجاهات إلى \(venueName)")
         .accessibilityHint("يفتح قائمة تطبيقات الخرائط")
+    }
+
+    private var venueName: String {
+        occurrence.locationName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// The venue names itself when it can; otherwise the action does.
+    private var directionsTitle: String {
+        venueName.isEmpty ? "الاتجاهات" : venueName
     }
 
     private func openDirections(_ provider: EventDirectionsProvider) {
@@ -1014,7 +1093,7 @@ struct RegistrationFlowSheet: View {
     /// rather than a hand-drawn header row.
     private var stepTitle: String {
         switch step {
-        case .selection: "سجّل في التمرين"
+        case .selection: "سجّل في الموعد"
         case .paymentMethod: reviewOnly ? "وسيلة الدفع" : "وسائل الدفع"
         case .details: "تفاصيل الدفع"
         case .success: "تم"
@@ -1299,7 +1378,7 @@ struct RegistrationFlowSheet: View {
                             .foregroundStyle(.white)
 
                         if destination.status == .free {
-                            Text("هذا التمرين بدون رسوم")
+                            Text("هذا الموعد بدون رسوم")
                                 .font(TamrinFont.font(size: 15, weight: .medium))
                                 .foregroundStyle(.white.opacity(0.62))
                         } else {
@@ -1378,13 +1457,13 @@ struct RegistrationFlowSheet: View {
             .frame(width: 76, height: 76)
 
             Text(destination?.status == .free || destination?.provider == .cash
-                 ? "سُجّلت في التمرين"
+                 ? "سُجّلت في الموعد"
                  : "سُجّل تحويلك")
                 .font(TamrinFont.font(size: 24, weight: .bold))
                 .foregroundStyle(.white)
 
             Text(destination?.status == .free
-                 ? "مكانك محفوظ في التمرين"
+                 ? "مكانك محفوظ في الموعد"
                  : (destination?.provider == .cash
                     ? "مكانك محفوظ، وتسدد للمشرف في الملعب"
                     : "طلبك الآن بانتظار تأكيد الدفع من المشرف"))
@@ -1407,7 +1486,7 @@ struct RegistrationFlowSheet: View {
         do {
             let loaded = try await feed.paymentDestination(for: occurrence)
             guard loaded.status != .paymentMethodRequired else {
-                failureMessage = "لم يضف المشرف وسيلة دفع لهذا التمرين بعد."
+                failureMessage = "لم يضف المشرف وسيلة دفع لهذا الموعد بعد."
                 if !reviewOnly { step = .selection }
                 return
             }
