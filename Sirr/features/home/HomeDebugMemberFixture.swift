@@ -20,6 +20,7 @@ enum HomeDebugMemberFixture {
     static let teamID = UUID(uuidString: "D3B00000-0000-4000-8000-000000000001")!
     static let organizerID = UUID(uuidString: "A3B00000-0000-4000-8000-000000000001")!
     static let memberFallbackID = UUID(uuidString: "F3B00000-0000-4000-8000-000000000001")!
+    static let salmanID = UUID(uuidString: "F3B00000-0000-4000-8000-000000000002")!
     static let eventID = UUID(uuidString: "E3B00000-0000-4000-8000-000000000001")!
     static let templateID = UUID(uuidString: "C3B00000-0000-4000-8000-000000000001")!
 
@@ -134,7 +135,7 @@ enum HomeDebugMemberFixture {
                 isPending: false
             ),
             FeedTeamMember(
-                id: UUID(uuidString: "F3B00000-0000-4000-8000-000000000002")!,
+                id: salmanID,
                 displayName: "سلمان",
                 role: .member,
                 isPending: false

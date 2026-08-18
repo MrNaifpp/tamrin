@@ -12,6 +12,9 @@ struct PlayerDetailsSheet: View {
     let share: Double
     /// 1-based position in the roster: who took the third seat, and so on.
     var seatNumber: Int?
+    /// Guests have no account of their own; this names the member who reserved
+    /// their seat instead of leaving the relationship hidden behind an id.
+    var registeredByName: String?
     /// Nil hides the reminder button — a free exercise, a player with no
     /// account to reach, or a viewer who is not the organizer.
     var onRemind: (@MainActor () async -> HomeStore.PaymentReminderOutcome)?
@@ -35,6 +38,7 @@ struct PlayerDetailsSheet: View {
         avatarImageData: Data? = nil,
         share: Double,
         seatNumber: Int? = nil,
+        registeredByName: String? = nil,
         onRemind: (@MainActor () async -> HomeStore.PaymentReminderOutcome)? = nil,
         onRemove: (() -> Void)? = nil
     ) {
@@ -42,6 +46,7 @@ struct PlayerDetailsSheet: View {
         self.avatarImageData = avatarImageData
         self.share = share
         self.seatNumber = seatNumber
+        self.registeredByName = registeredByName
         self.onRemind = onRemind
         self.onRemove = onRemove
         _cooldownEndsAt = State(
@@ -170,6 +175,14 @@ struct PlayerDetailsSheet: View {
                     symbol: "flag.checkered",
                     caption: "ترتيبه في التسجيل",
                     value: seatNumber.arabicOrdinal
+                )
+            }
+
+            if let registeredByName {
+                FactRow(
+                    symbol: "person.badge.plus",
+                    caption: "سجّله",
+                    value: registeredByName
                 )
             }
 

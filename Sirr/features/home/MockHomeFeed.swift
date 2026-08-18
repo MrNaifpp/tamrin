@@ -391,6 +391,10 @@ final class HomeStore {
         store.teams = [team]
         store.selectedTeamID = team.id
         store.ownerByTeam[team.id] = HomeDebugMemberFixture.organizerID
+        store.membersByTeam[team.id] = HomeDebugMemberFixture.members(
+            currentUserID: memberID,
+            profileName: store.profileName
+        )
         store.occurrencesByTeam = [team.id: [occurrence]]
         store.rosterCache = [occurrence.id: [
             FeedMember(
@@ -402,6 +406,24 @@ final class HomeStore {
             )
         ] + HomeDebugMemberFixture.roster()]
         store.myEventStatus[occurrence.id] = .registered
+        return store
+    }
+
+    /// Member-side roster with a guest linked to a named teammate. This proves
+    /// the T-46 attribution UI without creating any backend participant rows.
+    static var guestAttributionPreview: HomeStore {
+        let store = paymentRequestPreview
+        guard let occurrence = store.occurrences.first else { return store }
+        store.rosterCache[occurrence.id, default: []].insert(
+            FeedMember(
+                id: UUID(uuidString: "F3B00000-0000-4000-8000-000000000099")!,
+                name: "ضيف سلمان",
+                status: .registered,
+                addedBy: HomeDebugMemberFixture.salmanID,
+                joinedAt: .now
+            ),
+            at: 0
+        )
         return store
     }
     #endif
@@ -1400,7 +1422,16 @@ final class HomeStore {
     private func appendGuests(_ names: [String], to eventId: UUID) {
         guard !names.isEmpty else { return }
         var list = rosterCache[eventId] ?? []
-        for name in names { list.append(FeedMember(id: UUID(), name: name, status: .registered)) }
+        for name in names {
+            list.append(
+                FeedMember(
+                    id: UUID(),
+                    name: name,
+                    status: .registered,
+                    addedBy: currentUserID
+                )
+            )
+        }
         rosterCache[eventId] = list
     }
 

@@ -48,6 +48,26 @@ struct EventDetailView: View {
         roster.firstIndex { $0.id == member.id }.map { $0 + 1 }
     }
 
+    /// Guests carry the account id that registered them. Resolve it through
+    /// the exercise membership list so every viewer sees a human name without
+    /// exposing an opaque UUID in the roster.
+    private func registeredByName(for member: FeedMember) -> String? {
+        guard member.isGuest, !member.isManual, let addedBy = member.addedBy else {
+            return nil
+        }
+        if let registrar = feed.teamMembers.first(where: { $0.id == addedBy }) {
+            return registrar.displayName
+        }
+        guard addedBy == feed.currentUserID else { return nil }
+        let ownName = feed.profileName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ownName.isEmpty ? nil : ownName
+    }
+
+    private func rosterSubtitle(for member: FeedMember) -> String? {
+        if member.isManual { return "سجّله المشرف" }
+        return registeredByName(for: member).map { "سجّله \($0)" }
+    }
+
     var body: some View {
         ZStack {
             GeometryReader { proxy in
@@ -232,6 +252,7 @@ struct EventDetailView: View {
                 avatarImageData: avatarData(for: member),
                 share: occurrence.price,
                 seatNumber: seatNumber(of: member),
+                registeredByName: registeredByName(for: member),
                 // A free exercise has nothing to chase, a guest or a manually
                 // seated player has no account to notify, and nobody needs to
                 // be reminded of their own share.
@@ -636,7 +657,7 @@ struct EventDetailView: View {
                 ForEach(roster) { person in
                     MemberRowCard(
                         name: person.name,
-                        subtitle: person.isManual ? "سجّله المشرف" : nil,
+                        subtitle: rosterSubtitle(for: person),
                         avatarImageData: avatarData(for: person),
                         avatarImageUrl: person.avatarUrl
                     ) {

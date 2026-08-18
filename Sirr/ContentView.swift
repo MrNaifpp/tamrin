@@ -17,6 +17,7 @@ struct ContentView: View {
     @StateObject private var updateGate = AppUpdateGate()
     #if DEBUG
     @State private var paymentRequestPreview = HomeStore.paymentRequestPreview
+    @State private var guestAttributionPreview = HomeStore.guestAttributionPreview
     @State private var teamIconPreview = HomeStore.preview
     #endif
     @Environment(\.scenePhase) private var scenePhase
@@ -29,7 +30,13 @@ struct ContentView: View {
 
     var body: some View {
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("-demoTeamIconScreen") {
+        if ProcessInfo.processInfo.arguments.contains("-demoGuestAttributionScreen") {
+            EventDetailView(
+                feed: guestAttributionPreview,
+                occurrence: guestAttributionPreview.occurrences[0],
+                artName: "ExerciseArt3"
+            )
+        } else if ProcessInfo.processInfo.arguments.contains("-demoTeamIconScreen") {
             TeamDetailView(feed: teamIconPreview)
         } else if ProcessInfo.processInfo.arguments.contains("-demoPaymentRequestScreen") {
             EventDetailView(
