@@ -7,9 +7,14 @@ struct EventDetailView: View {
     let occurrence: FeedOccurrence
     var artName: String = "ExerciseArt1"
     var initiallyShowsRegistration = false
+    #if DEBUG
+    /// Opens the post-registration guest flow for deterministic simulator QA.
+    var initiallyShowsGuestRegistration = false
+    #endif
     @Environment(\.dismiss) private var dismiss
     @State private var showWithdrawConfirm = false
     @State private var showRegisterFlow = false
+    @State private var showGuestRegisterFlow = false
     @State private var showPaymentReview = false
     @State private var paymentActionInFlight: UUID?
     @State private var memberAwaitingRejection: FeedMember?
@@ -166,6 +171,14 @@ struct EventDetailView: View {
         .sheet(isPresented: $showRegisterFlow) {
             RegistrationFlowSheet(feed: feed, occurrence: occurrence, artName: artName)
         }
+        .sheet(isPresented: $showGuestRegisterFlow) {
+            RegistrationFlowSheet(
+                feed: feed,
+                occurrence: occurrence,
+                artName: artName,
+                mode: .guestsOnly
+            )
+        }
         .sheet(isPresented: $showPaymentReview) {
             RegistrationFlowSheet(
                 feed: feed,
@@ -178,6 +191,18 @@ struct EventDetailView: View {
             await feed.reloadOccurrence(occurrence.id)
             await feed.reloadRoster(occurrence.id)
             await feed.reloadMemberResponses(occurrence.id)
+            #if DEBUG
+            if initiallyShowsGuestRegistration,
+               !handledInitialRegistration,
+               !feed.isCurrentTeamOwner,
+               feed.participationState(for: occurrence) == .registered,
+               !occurrence.isCancelled {
+                handledInitialRegistration = true
+                await Task.yield()
+                showGuestRegisterFlow = true
+                return
+            }
+            #endif
             guard initiallyShowsRegistration,
                   !handledInitialRegistration,
                   !feed.isCurrentTeamOwner,
@@ -201,7 +226,11 @@ struct EventDetailView: View {
             }
             Button("تراجع", role: .cancel) { memberAwaitingRejection = nil }
         } message: {
-            Text("سيُلغى حجز اللاعب وكل الضيوف المسجلين معه وتتحرر مقاعدهم.")
+            Text(
+                memberAwaitingRejection?.userId == nil
+                    ? "سيُلغى طلب الضيوف المعلّق وتتحرر مقاعدهم، ويبقى تسجيل العضو محفوظًا."
+                    : "سيُلغى حجز اللاعب وكل الضيوف المسجلين معه وتتحرر مقاعدهم."
+            )
         }
         .fullScreenCover(isPresented: $showDeclinedResponses) {
             DeclinedResponsesPage(
@@ -511,6 +540,28 @@ struct EventDetailView: View {
                         .accessibilityHint("يفتح مبلغ القطة ووسائل الدفع المتاحة")
                     }
 
+                    if mine.status == .registered,
+                       occurrence.isPublished,
+                       !occurrence.isCancelled {
+                        Button {
+                            Haptics.impact(.medium)
+                            showGuestRegisterFlow = true
+                        } label: {
+                            Label("+ سجّل معك أحد", systemImage: "person.badge.plus")
+                                .font(TamrinFont.font(size: 16, weight: .bold))
+                                .foregroundStyle(TamrinTheme.ink)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: TamrinControlMetrics.glassActionHeight)
+                                .contentShape(.capsule)
+                        }
+                        .buttonStyle(.glassProminent)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.regular)
+                        .tint(.white.opacity(0.94))
+                        .accessibilityLabel("إضافة لاعبين معك")
+                        .accessibilityHint("يفتح تسجيل ضيوف جدد دون تغيير تسجيلك")
+                    }
+
                     participationStatusButton(for: mine)
                 }
             }
@@ -687,7 +738,7 @@ struct EventDetailView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.orange)
         } else if person.status == .paymentPending {
-            if feed.isCurrentTeamOwner, person.userId != nil {
+            if feed.isCurrentTeamOwner, isPrimaryPendingPaymentRow(person) {
                 paymentReviewActions(for: person)
             } else {
                 Image(systemName: "creditcard.fill")
@@ -696,6 +747,19 @@ struct EventDetailView: View {
                     .accessibilityLabel("بانتظار تأكيد الدفع")
             }
         }
+    }
+
+    /// One follow-up payment may contain several guest rows. Show a single
+    /// confirm/reject control for their shared registrar instead of repeating
+    /// the same destructive action on every name.
+    private func isPrimaryPendingPaymentRow(_ member: FeedMember) -> Bool {
+        guard let ownerID = member.paymentOwnerId else { return false }
+        let pendingRows = roster.filter {
+            $0.status == .paymentPending && $0.paymentOwnerId == ownerID
+        }
+        let primaryRow = pendingRows.first { $0.userId == ownerID }
+            ?? pendingRows.first
+        return primaryRow?.id == member.id
     }
 
     /// Manual registration is a real seat, so it follows the same rules as a
@@ -918,7 +982,7 @@ struct EventDetailView: View {
 
     private func paymentReviewActions(for member: FeedMember) -> some View {
         HStack(spacing: 6) {
-            if paymentActionInFlight == member.userId {
+            if paymentActionInFlight == member.paymentOwnerId {
                 ProgressView()
                     .tint(.white)
                     .frame(width: TamrinControlMetrics.touchTarget, height: TamrinControlMetrics.touchTarget)
@@ -955,7 +1019,7 @@ struct EventDetailView: View {
     }
 
     private func confirmPayment(_ member: FeedMember) {
-        guard let joinerId = member.userId, paymentActionInFlight == nil else { return }
+        guard let joinerId = member.paymentOwnerId, paymentActionInFlight == nil else { return }
         paymentActionInFlight = joinerId
         Task {
             let outcome = await feed.confirmPayment(for: member, in: occurrence)
@@ -971,7 +1035,7 @@ struct EventDetailView: View {
     }
 
     private func rejectPayment(_ member: FeedMember) {
-        guard let joinerId = member.userId, paymentActionInFlight == nil else { return }
+        guard let joinerId = member.paymentOwnerId, paymentActionInFlight == nil else { return }
         paymentActionInFlight = joinerId
         Task {
             let outcome = await feed.rejectPayment(for: member, in: occurrence)
@@ -1077,9 +1141,15 @@ private struct DeclinedResponsesPage: View {
 /// submitted only after the player reviews the destination and confirms from
 /// the detail step.
 struct RegistrationFlowSheet: View {
+    enum Mode {
+        case selfAndGuests
+        case guestsOnly
+    }
+
     @Bindable var feed: HomeStore
     let occurrence: FeedOccurrence
     var artName: String = "ExerciseArt1"
+    var mode: Mode = .selfAndGuests
     var reviewOnly = false
 
     @Environment(\.dismiss) private var dismiss
@@ -1104,14 +1174,20 @@ struct RegistrationFlowSheet: View {
         feed: HomeStore,
         occurrence: FeedOccurrence,
         artName: String = "ExerciseArt1",
+        mode: Mode = .selfAndGuests,
         reviewOnly: Bool = false
     ) {
         self.feed = feed
         self.occurrence = occurrence
         self.artName = artName
+        self.mode = mode
         self.reviewOnly = reviewOnly
         _step = State(initialValue: reviewOnly ? .paymentMethod : .selection)
+        _guestNames = State(initialValue: mode == .guestsOnly ? [""] : [])
+        _showGuestSection = State(initialValue: mode == .guestsOnly)
     }
+
+    private var isGuestsOnly: Bool { mode == .guestsOnly }
 
     private var validGuests: [String] {
         guestNames
@@ -1119,8 +1195,8 @@ struct RegistrationFlowSheet: View {
             .filter { !$0.isEmpty }
     }
 
-    /// submit_payment_v2 always includes the payer, then adds their guests.
-    private var groupSize: Int { 1 + validGuests.count }
+    /// A follow-up guest request never charges for the already-seated member.
+    private var groupSize: Int { (isGuestsOnly ? 0 : 1) + validGuests.count }
 
     private var displayedGroupSize: Int {
         reviewOnly ? max(1, destination?.groupSize ?? 1) : groupSize
@@ -1149,7 +1225,7 @@ struct RegistrationFlowSheet: View {
     /// rather than a hand-drawn header row.
     private var stepTitle: String {
         switch step {
-        case .selection: "سجّل في الموعد"
+        case .selection: isGuestsOnly ? "سجّل ضيوفك" : "سجّل في الموعد"
         case .paymentMethod: reviewOnly ? "وسيلة الدفع" : "وسائل الدفع"
         case .details: "تفاصيل الدفع"
         case .success: "تم"
@@ -1274,10 +1350,14 @@ struct RegistrationFlowSheet: View {
                             imageUrl: feed.avatarUrl
                         )
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(feed.profileName.isEmpty ? "أنا" : feed.profileName)
+                            Text(
+                                isGuestsOnly
+                                    ? "تسجيلك محفوظ مسبقًا"
+                                    : (feed.profileName.isEmpty ? "أنا" : feed.profileName)
+                            )
                                 .font(TamrinFont.font(size: 15, weight: .bold))
                                 .foregroundStyle(.white)
-                            Text("اللاعب الأساسي")
+                            Text(isGuestsOnly ? "الطلب الجديد للضيوف فقط" : "اللاعب الأساسي")
                                 .font(TamrinFont.font(size: 11, weight: .medium))
                                 .foregroundStyle(.white.opacity(0.52))
                         }
@@ -1290,9 +1370,13 @@ struct RegistrationFlowSheet: View {
                     .frame(height: 52)
                     .background(TamrinTheme.lime.opacity(0.2), in: .rect(cornerRadius: 17, style: .continuous))
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel("\(feed.profileName.isEmpty ? "أنا" : feed.profileName)، اللاعب الأساسي، مشمول")
+                    .accessibilityLabel(
+                        isGuestsOnly
+                            ? "تسجيلك محفوظ، ولن تُحسب ضمن الطلب الجديد"
+                            : "\(feed.profileName.isEmpty ? "أنا" : feed.profileName)، اللاعب الأساسي، مشمول"
+                    )
 
-                    if showGuestSection {
+                    if showGuestSection || isGuestsOnly {
                         VStack(spacing: 9) {
                             ForEach(guestNames.indices, id: \.self) { index in
                                 HStack(spacing: 8) {
@@ -1357,7 +1441,8 @@ struct RegistrationFlowSheet: View {
             primaryButton(
                 title: occurrence.price > 0 ? "متابعة للدفع" : "متابعة",
                 color: Color(red: 0.20, green: 0.47, blue: 0.96),
-                isLoading: false
+                isLoading: false,
+                isEnabled: !isGuestsOnly || !validGuests.isEmpty
             ) {
                 focusedGuest = nil
                 withAnimation { step = .paymentMethod }
@@ -1495,7 +1580,7 @@ struct RegistrationFlowSheet: View {
                 } else {
                     primaryButton(
                         title: destination.status == .free
-                            ? "تأكيد التسجيل"
+                            ? (isGuestsOnly ? "تأكيد الضيوف" : "تأكيد التسجيل")
                             : (destination.provider == .cash ? "سأسدد في الملعب" : "حوّلت المبلغ"),
                         color: destination.provider?.brandColor ?? Color(red: 0.20, green: 0.47, blue: 0.96),
                         isLoading: submitting,
@@ -1520,17 +1605,33 @@ struct RegistrationFlowSheet: View {
             }
             .frame(width: 76, height: 76)
 
-            Text(destination?.status == .free || destination?.provider == .cash
-                 ? "سُجّلت في الموعد"
-                 : "سُجّل تحويلك")
+            Text(
+                isGuestsOnly
+                    ? (destination?.status == .free
+                        ? "سُجّل ضيوفك"
+                        : (destination?.provider == .cash
+                            ? "سُجّل طلب ضيوفك"
+                            : "سُجّل تحويل ضيوفك"))
+                    : (destination?.status == .free || destination?.provider == .cash
+                        ? "سُجّلت في الموعد"
+                        : "سُجّل تحويلك")
+            )
                 .font(TamrinFont.font(size: 24, weight: .bold))
                 .foregroundStyle(.white)
 
-            Text(destination?.status == .free
-                 ? "مكانك محفوظ في الموعد"
-                 : (destination?.provider == .cash
-                    ? "مكانك محفوظ، وتسدد للمشرف في الملعب"
-                    : "طلبك الآن بانتظار تأكيد الدفع من المشرف"))
+            Text(
+                isGuestsOnly
+                    ? (destination?.status == .free
+                        ? "أضيف الضيوف إلى قائمة الموعد"
+                        : (destination?.provider == .cash
+                            ? "طلبهم بانتظار تأكيد المشرف، وتسدد في الملعب"
+                            : "طلب الضيوف الآن بانتظار تأكيد الدفع من المشرف"))
+                    : (destination?.status == .free
+                        ? "مكانك محفوظ في الموعد"
+                        : (destination?.provider == .cash
+                            ? "مكانك محفوظ، وتسدد للمشرف في الملعب"
+                            : "طلبك الآن بانتظار تأكيد الدفع من المشرف"))
+            )
                 .font(TamrinFont.font(size: 14, weight: .medium))
                 .foregroundStyle(.white.opacity(0.62))
                 .multilineTextAlignment(.center)
@@ -1548,7 +1649,9 @@ struct RegistrationFlowSheet: View {
         defer { isLoadingDestination = false }
 
         do {
-            let loaded = try await feed.paymentDestination(for: occurrence)
+            let loaded = try await (isGuestsOnly
+                ? feed.guestPaymentDestination(for: occurrence)
+                : feed.paymentDestination(for: occurrence))
             guard loaded.status != .paymentMethodRequired else {
                 failureMessage = "لم يضف المشرف وسيلة دفع لهذا الموعد بعد."
                 if !reviewOnly { step = .selection }
@@ -1565,11 +1668,19 @@ struct RegistrationFlowSheet: View {
         guard !submitting, step == .details, let destination else { return }
         submitting = true
         Task {
-            let outcome = await feed.submitRegistration(
-                guests: validGuests,
-                for: occurrence,
-                expectedDestination: destination
-            )
+            let outcome = if isGuestsOnly {
+                await feed.addGuests(
+                    validGuests,
+                    to: occurrence,
+                    expectedDestination: destination
+                )
+            } else {
+                await feed.submitRegistration(
+                    guests: validGuests,
+                    for: occurrence,
+                    expectedDestination: destination
+                )
+            }
             submitting = false
             switch outcome {
             case .success:

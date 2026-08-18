@@ -30,7 +30,14 @@ struct ContentView: View {
 
     var body: some View {
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("-demoGuestAttributionScreen") {
+        if ProcessInfo.processInfo.arguments.contains("-demoGuestRegistrationScreen") {
+            EventDetailView(
+                feed: paymentRequestPreview,
+                occurrence: paymentRequestPreview.occurrences[0],
+                artName: "ExerciseArt3",
+                initiallyShowsGuestRegistration: true
+            )
+        } else if ProcessInfo.processInfo.arguments.contains("-demoGuestAttributionScreen") {
             EventDetailView(
                 feed: guestAttributionPreview,
                 occurrence: guestAttributionPreview.occurrences[0],

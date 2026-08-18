@@ -1092,7 +1092,7 @@ final class HomeStore {
 
     func confirmPayment(for member: FeedMember, in occurrence: FeedOccurrence) async -> RegistrationOutcome {
         guard let creatorId = currentUserID,
-              let joinerId = member.userId,
+              let joinerId = member.paymentOwnerId,
               isCurrentTeamOwner else {
             return .failure("لا يمكن تأكيد هذه الدفعة.")
         }
@@ -1112,7 +1112,7 @@ final class HomeStore {
 
     func rejectPayment(for member: FeedMember, in occurrence: FeedOccurrence) async -> RegistrationOutcome {
         guard let creatorId = currentUserID,
-              let joinerId = member.userId,
+              let joinerId = member.paymentOwnerId,
               isCurrentTeamOwner else {
             return .failure("لا يمكن رفض هذه الدفعة.")
         }
@@ -1322,6 +1322,15 @@ final class HomeStore {
         return try await ManualPaymentService.shared.getEventDestination(eventId: occurrence.id)
     }
 
+    func guestPaymentDestination(for occurrence: FeedOccurrence) async throws -> PaymentDestination {
+        #if DEBUG
+        if isDebugMemberFixtureEvent(occurrence.id) {
+            return HomeDebugMemberFixture.destination(for: occurrence)
+        }
+        #endif
+        return try await ManualPaymentService.shared.getEventGuestDestination(eventId: occurrence.id)
+    }
+
     /// Records the transfer after the player has reviewed the selected method.
     /// The resulting seats are payment-pending, not waitlisted.
     func submitRegistration(
@@ -1331,8 +1340,9 @@ final class HomeStore {
     ) async -> RegistrationOutcome {
         let cleanGuests = guests.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         guard !isPreview else {
-            appendMe(to: occurrence)
-            appendGuests(cleanGuests, to: occurrence.id)
+            let status: FeedRegStatus = occurrence.price > 0 ? .paymentPending : .registered
+            appendMe(to: occurrence, as: status)
+            appendGuests(cleanGuests, to: occurrence.id, as: status)
             return .success
         }
         #if DEBUG
@@ -1342,7 +1352,7 @@ final class HomeStore {
                 return .failure("اختر وسيلة الدفع أولًا.")
             }
             appendMe(to: occurrence, as: .paymentPending)
-            appendGuests(cleanGuests, to: occurrence.id)
+            appendGuests(cleanGuests, to: occurrence.id, as: .paymentPending)
             memberResponseByEvent[occurrence.id] = nil
             updateOccurrence(occurrence.id) { $0.memberResponse = nil }
             return .success
@@ -1369,6 +1379,80 @@ final class HomeStore {
                 return .failure("التسجيل مقفل لهذا الموعد.")
             case .eventTermsChanged:
                 return .failure("غيّر المشرف مبلغ الموعد أو وسيلة الدفع. أغلق النافذة وافتحها مجددًا لمراجعة البيانات الجديدة.")
+            }
+        } catch {
+            await reloadRoster(occurrence.id)
+            return .failure(error.localizedDescription)
+        }
+    }
+
+    /// Adds only new guest seats for a member who is already confirmed. This
+    /// keeps their own registration untouched and charges only for the names
+    /// entered in this follow-up request.
+    func addGuests(
+        _ guests: [String],
+        to occurrence: FeedOccurrence,
+        expectedDestination: PaymentDestination
+    ) async -> RegistrationOutcome {
+        let cleanGuests = guests
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !cleanGuests.isEmpty else {
+            return .failure("أضف اسم لاعب واحد على الأقل.")
+        }
+
+        let localStatus: FeedRegStatus = expectedDestination.status == .free
+            ? .registered
+            : .paymentPending
+        guard !isPreview else {
+            appendGuests(cleanGuests, to: occurrence.id, as: localStatus)
+            return .success
+        }
+        #if DEBUG
+        if isDebugMemberFixtureEvent(occurrence.id) {
+            guard myEventStatus[occurrence.id] == .registered else {
+                return .failure("سجّل نفسك في الموعد أولًا.")
+            }
+            guard expectedDestination.eventId == occurrence.id,
+                  expectedDestination.status == .free || expectedDestination.selectedMethod != nil else {
+                return .failure("اختر وسيلة الدفع أولًا.")
+            }
+            appendGuests(cleanGuests, to: occurrence.id, as: localStatus)
+            return .success
+        }
+        #endif
+        guard currentUserID != nil else { return .failure("يجب تسجيل الدخول أولاً.") }
+
+        do {
+            let result = try await ManualPaymentService.shared.registerGuests(
+                eventId: occurrence.id,
+                guestNames: cleanGuests,
+                expectedDestination: expectedDestination
+            )
+            await reloadRoster(occurrence.id)
+            switch result {
+            case .submitted:
+                return .success
+            case .seatsFull:
+                return .failure("المقاعد المتبقية لا تكفي لكل الضيوف.")
+            case .notRegistered:
+                return .failure("لازم يكون تسجيلك مؤكد قبل إضافة ضيوف.")
+            case .emptyGuests:
+                return .failure("أضف اسم لاعب واحد على الأقل.")
+            case .duplicateName:
+                return .failure("أحد هذه الأسماء مسجل معك مسبقًا.")
+            case .pendingGuestRequest:
+                return .failure("عندك طلب ضيوف بانتظار تأكيد المشرف. انتظر تأكيده قبل إضافة طلب جديد.")
+            case .creatorMissingPaymentMethod:
+                return .failure("منظّم التمرين لم يضف وسيلة دفع لهذا الموعد بعد.")
+            case .registrationClosed:
+                return .failure("التسجيل مقفل لهذا الموعد.")
+            case .eventTermsChanged:
+                return .failure("غيّر المشرف مبلغ الموعد أو وسيلة الدفع. ارجع خطوة وراجع البيانات الجديدة.")
+            case .notPublished:
+                return .failure("لم يُنشر هذا الموعد بعد.")
+            case .cancelled:
+                return .failure("هذا الموعد متخطى.")
             }
         } catch {
             await reloadRoster(occurrence.id)
@@ -1419,7 +1503,11 @@ final class HomeStore {
         myEventStatus[occurrence.id] = status
     }
 
-    private func appendGuests(_ names: [String], to eventId: UUID) {
+    private func appendGuests(
+        _ names: [String],
+        to eventId: UUID,
+        as status: FeedRegStatus = .registered
+    ) {
         guard !names.isEmpty else { return }
         var list = rosterCache[eventId] ?? []
         for name in names {
@@ -1427,7 +1515,7 @@ final class HomeStore {
                 FeedMember(
                     id: UUID(),
                     name: name,
-                    status: .registered,
+                    status: status,
                     addedBy: currentUserID
                 )
             )
