@@ -15,6 +15,9 @@ enum AuthScreen: Hashable {
 struct ContentView: View {
     @StateObject private var appState = AppState()
     @StateObject private var updateGate = AppUpdateGate()
+    #if DEBUG
+    @State private var paymentRequestPreview = HomeStore.paymentRequestPreview
+    #endif
     @Environment(\.scenePhase) private var scenePhase
     @State private var authPath = NavigationPath()
     /// Event the user was trying to join when prompted to log in. Held across
@@ -24,6 +27,22 @@ struct ContentView: View {
     @State private var pendingJoinCode: String?
 
     var body: some View {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-demoPaymentRequestScreen") {
+            EventDetailView(
+                feed: paymentRequestPreview,
+                occurrence: paymentRequestPreview.occurrences[0],
+                artName: "ExerciseArt3"
+            )
+        } else {
+            productionContent
+        }
+        #else
+        productionContent
+        #endif
+    }
+
+    private var productionContent: some View {
         ZStack {
             Group {
                 if appState.isLoggedIn, appState.authVM.isNewUserAfterOTP {

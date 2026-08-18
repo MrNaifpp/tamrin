@@ -155,6 +155,7 @@ struct EventDetailView: View {
             )
         }
         .task {
+            await feed.reloadOccurrence(occurrence.id)
             await feed.reloadRoster(occurrence.id)
             await feed.reloadMemberResponses(occurrence.id)
             guard initiallyShowsRegistration,
@@ -467,26 +468,30 @@ struct EventDetailView: View {
                 .padding(16)
                 .tamrinGlassCard()
             } else {
-                Button { showWithdrawConfirm = true } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: mine.status == .registered ? "checkmark.circle.fill" : "clock.fill")
-                            .foregroundStyle(mine.status == .registered ? TamrinTheme.lime : .orange)
-                        Text(mine.status == .registered ? "مكانك محفوظ" : "أنت في قائمة الانتظار")
-                            .font(TamrinFont.font(size: 15, weight: .bold))
-                            .foregroundStyle(.white)
-                        Spacer()
-                        Text(mine.status == .registered ? "اعتذر" : "انسحب")
-                            .font(TamrinFont.font(size: 13, weight: .medium))
-                            .foregroundStyle(.red.opacity(0.95))
+                VStack(spacing: 10) {
+                    if mine.status == .registered,
+                       occurrence.price > 0,
+                       feed.paymentWasRequested(for: occurrence) {
+                        Button {
+                            Haptics.impact(.light)
+                            showPaymentReview = true
+                        } label: {
+                            Label("دفع القطة", systemImage: "banknote.fill")
+                                .font(TamrinFont.font(size: 16, weight: .bold))
+                                .foregroundStyle(TamrinTheme.ink)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: TamrinControlMetrics.glassActionHeight)
+                                .contentShape(.capsule)
+                        }
+                        .buttonStyle(.glassProminent)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.regular)
+                        .tint(TamrinTheme.lime)
+                        .accessibilityHint("يفتح مبلغ القطة ووسائل الدفع المتاحة")
                     }
-                    .padding(.horizontal, 18)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: TamrinControlMetrics.glassActionHeight)
+
+                    participationStatusButton(for: mine)
                 }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.capsule)
-                .controlSize(.regular)
-                .accessibilityHint("يفتح تأكيد الاعتذار عن الموعد")
             }
         } else {
             let full = occurrence.capacity > 0 && confirmedCount >= occurrence.capacity
@@ -506,6 +511,29 @@ struct EventDetailView: View {
             .controlSize(.regular)
             .tint(.white.opacity(0.94))
         }
+    }
+
+    private func participationStatusButton(for member: FeedMember) -> some View {
+        Button { showWithdrawConfirm = true } label: {
+            HStack(spacing: 10) {
+                Image(systemName: member.status == .registered ? "checkmark.circle.fill" : "clock.fill")
+                    .foregroundStyle(member.status == .registered ? TamrinTheme.lime : .orange)
+                Text(member.status == .registered ? "مكانك محفوظ" : "أنت في قائمة الانتظار")
+                    .font(TamrinFont.font(size: 15, weight: .bold))
+                    .foregroundStyle(.white)
+                Spacer()
+                Text(member.status == .registered ? "اعتذر" : "انسحب")
+                    .font(TamrinFont.font(size: 13, weight: .medium))
+                    .foregroundStyle(.red.opacity(0.95))
+            }
+            .padding(.horizontal, 18)
+            .frame(maxWidth: .infinity)
+            .frame(height: TamrinControlMetrics.glassActionHeight)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.capsule)
+        .controlSize(.regular)
+        .accessibilityHint("يفتح تأكيد الاعتذار عن الموعد")
     }
 
     /// Clamped so an over-subscribed list cannot draw past the track.
@@ -1089,6 +1117,13 @@ struct RegistrationFlowSheet: View {
         return max(0, destination?.pricePerPerson ?? occurrence.price) * Double(displayedGroupSize)
     }
 
+    /// A pending payer has an immutable destination snapshot. A previously
+    /// registered player opening the T-40 contribution entry point does not,
+    /// so that player is browsing the organizer's current choices instead.
+    private var isSubmittedPaymentReview: Bool {
+        reviewOnly && destination?.selectedMethod != nil
+    }
+
     /// Title for the step currently on screen — shown by the navigation bar
     /// rather than a hand-drawn header row.
     private var stepTitle: String {
@@ -1324,12 +1359,20 @@ struct RegistrationFlowSheet: View {
             } else if let destination {
                 Group {
                     VStack(alignment: .leading, spacing: 14) {
-                        Text(reviewOnly ? "راجع الوسيلة التي حوّلت إليها" : "اختر وسيلة الدفع المناسبة لك")
+                        Text(
+                            isSubmittedPaymentReview
+                                ? "راجع الوسيلة التي حوّلت إليها"
+                                : (reviewOnly
+                                    ? "اختر وسيلة الدفع لعرض بياناتها"
+                                    : "اختر وسيلة الدفع المناسبة لك")
+                        )
                             .font(TamrinFont.font(size: 14, weight: .medium))
                             .foregroundStyle(.white.opacity(0.58))
                             .frame(maxWidth: .infinity, alignment: .leading)
 
-                        if reviewOnly || destination.status == .free || destination.availablePaymentMethods.isEmpty {
+                        if destination.status == .free
+                            || destination.availablePaymentMethods.isEmpty
+                            || (reviewOnly && destination.selectedMethod != nil) {
                             snapshotDestinationRow(destination)
                         } else {
                             VStack(spacing: 10) {
@@ -1341,7 +1384,7 @@ struct RegistrationFlowSheet: View {
 
                         if destination.status != .free {
                             HStack {
-                                Text(reviewOnly ? "المبلغ المسجل" : "المبلغ المطلوب")
+                                Text(isSubmittedPaymentReview ? "المبلغ المسجل" : "المبلغ المطلوب")
                                     .font(TamrinFont.font(size: 13, weight: .medium))
                                     .foregroundStyle(.white.opacity(0.55))
                                 Spacer()

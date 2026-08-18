@@ -12,6 +12,10 @@ enum HomeDebugMemberFixture {
     /// scheme — Product ▸ Scheme ▸ Edit Scheme ▸ Run ▸ Arguments ▸ Arguments
     /// Passed On Launch — with `-demoMemberFixture`.
     static let isEnabled = ProcessInfo.processInfo.arguments.contains("-demoMemberFixture")
+    /// Starts the member already registered after the organizer requested the
+    /// contribution, so the persistent T-40 entry point can be checked on a
+    /// simulator without touching Supabase data.
+    static let isPaymentRequestEnabled = ProcessInfo.processInfo.arguments.contains("-demoPaymentRequest")
 
     static let teamID = UUID(uuidString: "D3B00000-0000-4000-8000-000000000001")!
     static let organizerID = UUID(uuidString: "A3B00000-0000-4000-8000-000000000001")!
@@ -82,6 +86,7 @@ enum HomeDebugMemberFixture {
             templateId: templateID,
             paymentMethodIds: paymentMethodIDs,
             publishedAt: referenceDate,
+            paymentReminderSentAt: isPaymentRequestEnabled ? referenceDate : nil,
             memberResponse: .invited
         )
     }

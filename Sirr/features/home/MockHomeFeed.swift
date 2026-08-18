@@ -237,6 +237,9 @@ struct FeedOccurrence: Identifiable {
     var cancelledAt: Date? = nil
     var cancellationReasonCode: String? = nil
     var cancellationReasonText: String? = nil
+    /// Persists the organizer's payment request on the event itself so a
+    /// registered player can always return to the transfer details.
+    var paymentReminderSentAt: Date? = nil
     var memberResponse: FeedMemberResponse? = nil
 
     /// Compatibility convenience for surfaces that only need a representative
@@ -376,6 +379,34 @@ final class HomeStore {
     static var preview: HomeStore { HomeStore(previewSeed: true) }
 
     #if DEBUG
+    /// Deterministic member-side screen for visually checking the persistent
+    /// contribution entry point added in T-40. It never reaches Supabase.
+    static var paymentRequestPreview: HomeStore {
+        let store = HomeStore(previewSeed: true)
+        let memberID = store.currentUserID ?? HomeDebugMemberFixture.memberFallbackID
+        let team = HomeDebugMemberFixture.team
+        var occurrence = HomeDebugMemberFixture.occurrence()
+        occurrence.paymentReminderSentAt = .now
+
+        store.teams = [team]
+        store.selectedTeamID = team.id
+        store.ownerByTeam[team.id] = HomeDebugMemberFixture.organizerID
+        store.occurrencesByTeam = [team.id: [occurrence]]
+        store.rosterCache = [occurrence.id: [
+            FeedMember(
+                id: memberID,
+                name: store.profileName.isEmpty ? "أنا" : store.profileName,
+                status: .registered,
+                userId: memberID,
+                joinedAt: .now
+            )
+        ] + HomeDebugMemberFixture.roster()]
+        store.myEventStatus[occurrence.id] = .registered
+        return store
+    }
+    #endif
+
+    #if DEBUG
     /// Installs a realistic non-admin team beside live workspaces without ever
     /// creating corresponding backend records. Existing local participation is
     /// preserved across refreshes so register/decline/withdraw can be tested.
@@ -398,7 +429,22 @@ final class HomeStore {
         occurrencesByTeam[teamID] = [occurrence]
         plansByTeam[teamID] = [HomeDebugMemberFixture.plan(for: occurrence)]
         paymentMethodsByTeam[teamID] = []
-        rosterCache[occurrence.id] = HomeDebugMemberFixture.roster()
+        var fixtureRoster = HomeDebugMemberFixture.roster()
+        if HomeDebugMemberFixture.isPaymentRequestEnabled {
+            let me = currentUserID ?? HomeDebugMemberFixture.memberFallbackID
+            fixtureRoster.insert(
+                FeedMember(
+                    id: me,
+                    name: profileName.isEmpty ? "أنا" : profileName,
+                    status: .registered,
+                    userId: me,
+                    joinedAt: .now
+                ),
+                at: 0
+            )
+            myEventStatus[occurrence.id] = .registered
+        }
+        rosterCache[occurrence.id] = fixtureRoster
         memberResponseByEvent[occurrence.id] = .invited
     }
     #endif
@@ -550,6 +596,34 @@ final class HomeStore {
             }
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Refreshes event-level state that can change while the detail screen is
+    /// open (for example, an organizer requesting the contribution). Roster
+    /// refreshes alone cannot observe columns on `events`.
+    func reloadOccurrence(_ eventId: UUID) async {
+        guard !isPreview, !isDebugMemberFixtureEvent(eventId) else { return }
+        do {
+            let event = try await EventService.shared.getEventById(eventId)
+            eventRecordsByID[event.id] = event
+            guard let workspaceID = event.workspaceId else { return }
+            let mapped = mapOccurrence(event)
+            if let index = occurrencesByTeam[workspaceID]?.firstIndex(where: { $0.id == eventId }) {
+                occurrencesByTeam[workspaceID]?[index] = mapped
+            }
+        } catch {
+            // Keep the last known event. A transient event refresh must not
+            // hide the detail screen or discard the already loaded roster.
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func paymentWasRequested(for occurrence: FeedOccurrence) -> Bool {
+        let current = occurrencesByTeam.values
+            .lazy
+            .compactMap { $0.first(where: { $0.id == occurrence.id }) }
+            .first
+        return (current?.paymentReminderSentAt ?? occurrence.paymentReminderSentAt) != nil
     }
 
     /// Refreshes the organizer-only invitation responses for any event opened
@@ -1180,6 +1254,9 @@ final class HomeStore {
             )
             switch result {
             case .sent(let recipients, _):
+                if kind == .payment {
+                    updateOccurrence(occurrence.id) { $0.paymentReminderSentAt = .now }
+                }
                 return .sent(message: "أُرسل التذكير إلى \(recipients.counted(.player))")
             case .tooSoon(let nextAllowedAt):
                 let minutes = max(Int(nextAllowedAt.timeIntervalSinceNow / 60), 1)
@@ -1500,6 +1577,7 @@ final class HomeStore {
                               cancelledAt: ev.cancelledAt,
                               cancellationReasonCode: ev.cancellationReasonCode,
                               cancellationReasonText: ev.cancellationReasonText,
+                              paymentReminderSentAt: ev.paymentReminderSentAt,
                               memberResponse: ev.myResponseStatus.flatMap(FeedMemberResponse.init(rawValue:)))
     }
 
