@@ -18,6 +18,7 @@ enum ManualPaymentSubmissionResult {
     case submitted(destination: PaymentDestination, groupSize: Int, totalAmount: Double)
     case seatsFull
     case alreadyJoined(PaymentStatus)
+    case pendingGuestRequest
     case creatorMissingPaymentMethod
     case registrationClosed
     case eventTermsChanged
@@ -30,6 +31,8 @@ enum GuestRegistrationSubmissionResult {
     case submitted(destination: PaymentDestination, groupSize: Int, totalAmount: Double)
     case seatsFull
     case notRegistered
+    case selfAlreadyRegistered
+    case selfRegistrationPending
     case emptyGuests
     case duplicateName
     case pendingGuestRequest
@@ -268,6 +271,9 @@ final class ManualPaymentService {
             let status = PaymentStatus(rawValue: payload.paymentStatus ?? "confirmed") ?? .confirmed
             return .alreadyJoined(status)
 
+        case "pending_guest_request":
+            return .pendingGuestRequest
+
         case "payment_method_required", "creator_missing_payment_method", "creator_missing_number":
             return .creatorMissingPaymentMethod
 
@@ -287,7 +293,8 @@ final class ManualPaymentService {
     func registerGuests(
         eventId: UUID,
         guestNames: [String],
-        expectedDestination: PaymentDestination
+        expectedDestination: PaymentDestination,
+        withoutSelf: Bool = false
     ) async throws -> GuestRegistrationSubmissionResult {
         if expectedDestination.status == .available,
            expectedDestination.paymentMethodId == nil {
@@ -333,12 +340,15 @@ final class ManualPaymentService {
         ]
 
         let response: PostgrestResponse<Void>
+        let function = withoutSelf
+            ? "register_event_guest_only"
+            : "register_event_guests"
         do {
             response = try await client
-                .rpc("register_event_guests", params: params)
+                .rpc(function, params: params)
                 .execute()
         } catch {
-            throw translatedRPCError(error, function: "register_event_guests")
+            throw translatedRPCError(error, function: function)
         }
         let payload = try decode(SubmissionPayload.self, from: response.data)
 
@@ -375,6 +385,8 @@ final class ManualPaymentService {
 
         case "seats_full": return .seatsFull
         case "not_registered": return .notRegistered
+        case "self_already_registered": return .selfAlreadyRegistered
+        case "self_registration_pending": return .selfRegistrationPending
         case "empty_guests": return .emptyGuests
         case "duplicate_name": return .duplicateName
         case "pending_guest_request": return .pendingGuestRequest
@@ -386,7 +398,7 @@ final class ManualPaymentService {
         case "cancelled": return .cancelled
         default:
             throw ManualPaymentServiceError.malformedResponse(
-                "استجابة غير معروفة من register_event_guests: \(payload.status)"
+                "استجابة غير معروفة من \(function): \(payload.status)"
             )
         }
     }

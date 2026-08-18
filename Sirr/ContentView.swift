@@ -17,6 +17,7 @@ struct ContentView: View {
     @StateObject private var updateGate = AppUpdateGate()
     #if DEBUG
     @State private var paymentRequestPreview = HomeStore.paymentRequestPreview
+    @State private var guestOnlyRegistrationPreview = HomeStore.guestOnlyRegistrationPreview
     @State private var guestAttributionPreview = HomeStore.guestAttributionPreview
     @State private var teamIconPreview = HomeStore.preview
     #endif
@@ -30,7 +31,20 @@ struct ContentView: View {
 
     var body: some View {
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("-demoGuestRegistrationScreen") {
+        if ProcessInfo.processInfo.arguments.contains("-demoGuestOnlyDetailScreen") {
+            EventDetailView(
+                feed: guestOnlyRegistrationPreview,
+                occurrence: guestOnlyRegistrationPreview.occurrences[0],
+                artName: "ExerciseArt3"
+            )
+        } else if ProcessInfo.processInfo.arguments.contains("-demoGuestOnlyRegistrationScreen") {
+            EventDetailView(
+                feed: guestOnlyRegistrationPreview,
+                occurrence: guestOnlyRegistrationPreview.occurrences[0],
+                artName: "ExerciseArt3",
+                initiallyShowsGuestOnlyRegistration: true
+            )
+        } else if ProcessInfo.processInfo.arguments.contains("-demoGuestRegistrationScreen") {
             EventDetailView(
                 feed: paymentRequestPreview,
                 occurrence: paymentRequestPreview.occurrences[0],

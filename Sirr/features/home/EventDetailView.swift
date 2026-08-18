@@ -10,11 +10,13 @@ struct EventDetailView: View {
     #if DEBUG
     /// Opens the post-registration guest flow for deterministic simulator QA.
     var initiallyShowsGuestRegistration = false
+    /// Opens the guest-without-self flow for deterministic simulator QA.
+    var initiallyShowsGuestOnlyRegistration = false
     #endif
     @Environment(\.dismiss) private var dismiss
     @State private var showWithdrawConfirm = false
     @State private var showRegisterFlow = false
-    @State private var showGuestRegisterFlow = false
+    @State private var guestRegistrationMode: RegistrationFlowSheet.Mode?
     @State private var showPaymentReview = false
     @State private var paymentActionInFlight: UUID?
     @State private var memberAwaitingRejection: FeedMember?
@@ -171,12 +173,12 @@ struct EventDetailView: View {
         .sheet(isPresented: $showRegisterFlow) {
             RegistrationFlowSheet(feed: feed, occurrence: occurrence, artName: artName)
         }
-        .sheet(isPresented: $showGuestRegisterFlow) {
+        .sheet(item: $guestRegistrationMode) { mode in
             RegistrationFlowSheet(
                 feed: feed,
                 occurrence: occurrence,
                 artName: artName,
-                mode: .guestsOnly
+                mode: mode
             )
         }
         .sheet(isPresented: $showPaymentReview) {
@@ -192,6 +194,16 @@ struct EventDetailView: View {
             await feed.reloadRoster(occurrence.id)
             await feed.reloadMemberResponses(occurrence.id)
             #if DEBUG
+            if initiallyShowsGuestOnlyRegistration,
+               !handledInitialRegistration,
+               !feed.isCurrentTeamOwner,
+               [.available, .declined].contains(feed.participationState(for: occurrence)),
+               !occurrence.isCancelled {
+                handledInitialRegistration = true
+                await Task.yield()
+                guestRegistrationMode = .guestOnly
+                return
+            }
             if initiallyShowsGuestRegistration,
                !handledInitialRegistration,
                !feed.isCurrentTeamOwner,
@@ -199,7 +211,7 @@ struct EventDetailView: View {
                !occurrence.isCancelled {
                 handledInitialRegistration = true
                 await Task.yield()
-                showGuestRegisterFlow = true
+                guestRegistrationMode = .additionalGuests
                 return
             }
             #endif
@@ -545,7 +557,7 @@ struct EventDetailView: View {
                        !occurrence.isCancelled {
                         Button {
                             Haptics.impact(.medium)
-                            showGuestRegisterFlow = true
+                            guestRegistrationMode = .additionalGuests
                         } label: {
                             Label("+ سجّل معك أحد", systemImage: "person.badge.plus")
                                 .font(TamrinFont.font(size: 16, weight: .bold))
@@ -567,21 +579,44 @@ struct EventDetailView: View {
             }
         } else {
             let full = occurrence.capacity > 0 && confirmedCount >= occurrence.capacity
-            Button {
-                Haptics.impact(.medium)
-                showRegisterFlow = true
-            } label: {
-                Label(full ? "انضم لقائمة الانتظار" : "سجل في التمرين", systemImage: "plus")
-                    .font(TamrinFont.font(size: 16, weight: .bold))
-                    .foregroundStyle(TamrinTheme.ink)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: TamrinControlMetrics.glassActionHeight)
-                    .contentShape(.capsule)
+            VStack(spacing: 10) {
+                Button {
+                    Haptics.impact(.medium)
+                    showRegisterFlow = true
+                } label: {
+                    Label(full ? "انضم لقائمة الانتظار" : "سجل في التمرين", systemImage: "plus")
+                        .font(TamrinFont.font(size: 16, weight: .bold))
+                        .foregroundStyle(TamrinTheme.ink)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: TamrinControlMetrics.glassActionHeight)
+                        .contentShape(.capsule)
+                }
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.capsule)
+                .controlSize(.regular)
+                .tint(.white.opacity(0.94))
+
+                if !full,
+                   occurrence.isPublished,
+                   !occurrence.isCancelled {
+                    Button {
+                        Haptics.impact(.light)
+                        guestRegistrationMode = .guestOnly
+                    } label: {
+                        Label("سجّل ضيف بدونك", systemImage: "person.badge.plus")
+                            .font(TamrinFont.font(size: 15, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: TamrinControlMetrics.glassActionHeight)
+                            .contentShape(.capsule)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.regular)
+                    .accessibilityLabel("تسجيل ضيف دون تسجيل نفسك")
+                    .accessibilityHint("يفتح طلبًا لا يحجز لك مقعدًا ولا يحتسب أجرتك")
+                }
             }
-            .buttonStyle(.glassProminent)
-            .buttonBorderShape(.capsule)
-            .controlSize(.regular)
-            .tint(.white.opacity(0.94))
         }
     }
 
@@ -1141,9 +1176,12 @@ private struct DeclinedResponsesPage: View {
 /// submitted only after the player reviews the destination and confirms from
 /// the detail step.
 struct RegistrationFlowSheet: View {
-    enum Mode {
+    enum Mode: String, Identifiable {
         case selfAndGuests
-        case guestsOnly
+        case additionalGuests
+        case guestOnly
+
+        var id: String { rawValue }
     }
 
     @Bindable var feed: HomeStore
@@ -1183,11 +1221,56 @@ struct RegistrationFlowSheet: View {
         self.mode = mode
         self.reviewOnly = reviewOnly
         _step = State(initialValue: reviewOnly ? .paymentMethod : .selection)
-        _guestNames = State(initialValue: mode == .guestsOnly ? [""] : [])
-        _showGuestSection = State(initialValue: mode == .guestsOnly)
+        _guestNames = State(initialValue: mode == .selfAndGuests ? [] : [""])
+        _showGuestSection = State(initialValue: mode != .selfAndGuests)
     }
 
-    private var isGuestsOnly: Bool { mode == .guestsOnly }
+    private var isGuestRequest: Bool { mode != .selfAndGuests }
+    private var registersWithoutSelf: Bool { mode == .guestOnly }
+
+    private var memberSummaryTitle: String {
+        switch mode {
+        case .selfAndGuests:
+            feed.profileName.isEmpty ? "أنا" : feed.profileName
+        case .additionalGuests:
+            "تسجيلك محفوظ مسبقًا"
+        case .guestOnly:
+            "لن تُسجَّل أنت"
+        }
+    }
+
+    private var memberSummarySubtitle: String {
+        switch mode {
+        case .selfAndGuests: "اللاعب الأساسي"
+        case .additionalGuests: "الطلب الجديد للضيوف فقط"
+        case .guestOnly: "المقاعد والمبلغ للضيوف فقط"
+        }
+    }
+
+    private var memberSummaryIcon: String {
+        registersWithoutSelf ? "minus.circle.fill" : "checkmark.circle.fill"
+    }
+
+    private var memberSummaryTint: Color {
+        registersWithoutSelf ? .white.opacity(0.58) : TamrinTheme.lime
+    }
+
+    private var memberSummaryBackground: Color {
+        registersWithoutSelf
+            ? Color(red: 0.20, green: 0.47, blue: 0.96).opacity(0.14)
+            : TamrinTheme.lime.opacity(0.2)
+    }
+
+    private var memberSummaryAccessibilityLabel: String {
+        switch mode {
+        case .selfAndGuests:
+            "\(feed.profileName.isEmpty ? "أنا" : feed.profileName)، اللاعب الأساسي، مشمول"
+        case .additionalGuests:
+            "تسجيلك محفوظ، ولن تُحسب ضمن الطلب الجديد"
+        case .guestOnly:
+            "لن تُسجّل أنت، والمقاعد والمبلغ للضيوف فقط"
+        }
+    }
 
     private var validGuests: [String] {
         guestNames
@@ -1196,7 +1279,7 @@ struct RegistrationFlowSheet: View {
     }
 
     /// A follow-up guest request never charges for the already-seated member.
-    private var groupSize: Int { (isGuestsOnly ? 0 : 1) + validGuests.count }
+    private var groupSize: Int { (isGuestRequest ? 0 : 1) + validGuests.count }
 
     private var displayedGroupSize: Int {
         reviewOnly ? max(1, destination?.groupSize ?? 1) : groupSize
@@ -1225,7 +1308,7 @@ struct RegistrationFlowSheet: View {
     /// rather than a hand-drawn header row.
     private var stepTitle: String {
         switch step {
-        case .selection: isGuestsOnly ? "سجّل ضيوفك" : "سجّل في الموعد"
+        case .selection: isGuestRequest ? "سجّل ضيوفك" : "سجّل في الموعد"
         case .paymentMethod: reviewOnly ? "وسيلة الدفع" : "وسائل الدفع"
         case .details: "تفاصيل الدفع"
         case .success: "تم"
@@ -1350,33 +1433,25 @@ struct RegistrationFlowSheet: View {
                             imageUrl: feed.avatarUrl
                         )
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(
-                                isGuestsOnly
-                                    ? "تسجيلك محفوظ مسبقًا"
-                                    : (feed.profileName.isEmpty ? "أنا" : feed.profileName)
-                            )
+                            Text(memberSummaryTitle)
                                 .font(TamrinFont.font(size: 15, weight: .bold))
                                 .foregroundStyle(.white)
-                            Text(isGuestsOnly ? "الطلب الجديد للضيوف فقط" : "اللاعب الأساسي")
+                            Text(memberSummarySubtitle)
                                 .font(TamrinFont.font(size: 11, weight: .medium))
                                 .foregroundStyle(.white.opacity(0.52))
                         }
                         Spacer()
-                        Image(systemName: "checkmark.circle.fill")
+                        Image(systemName: memberSummaryIcon)
                             .font(.system(size: 21, weight: .semibold))
-                            .foregroundStyle(TamrinTheme.lime)
+                            .foregroundStyle(memberSummaryTint)
                     }
                     .padding(.horizontal, 14)
                     .frame(height: 52)
-                    .background(TamrinTheme.lime.opacity(0.2), in: .rect(cornerRadius: 17, style: .continuous))
+                    .background(memberSummaryBackground, in: .rect(cornerRadius: 17, style: .continuous))
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel(
-                        isGuestsOnly
-                            ? "تسجيلك محفوظ، ولن تُحسب ضمن الطلب الجديد"
-                            : "\(feed.profileName.isEmpty ? "أنا" : feed.profileName)، اللاعب الأساسي، مشمول"
-                    )
+                    .accessibilityLabel(memberSummaryAccessibilityLabel)
 
-                    if showGuestSection || isGuestsOnly {
+                    if showGuestSection || isGuestRequest {
                         VStack(spacing: 9) {
                             ForEach(guestNames.indices, id: \.self) { index in
                                 HStack(spacing: 8) {
@@ -1442,7 +1517,7 @@ struct RegistrationFlowSheet: View {
                 title: occurrence.price > 0 ? "متابعة للدفع" : "متابعة",
                 color: Color(red: 0.20, green: 0.47, blue: 0.96),
                 isLoading: false,
-                isEnabled: !isGuestsOnly || !validGuests.isEmpty
+                isEnabled: !isGuestRequest || !validGuests.isEmpty
             ) {
                 focusedGuest = nil
                 withAnimation { step = .paymentMethod }
@@ -1580,7 +1655,7 @@ struct RegistrationFlowSheet: View {
                 } else {
                     primaryButton(
                         title: destination.status == .free
-                            ? (isGuestsOnly ? "تأكيد الضيوف" : "تأكيد التسجيل")
+                            ? (isGuestRequest ? "تأكيد الضيوف" : "تأكيد التسجيل")
                             : (destination.provider == .cash ? "سأسدد في الملعب" : "حوّلت المبلغ"),
                         color: destination.provider?.brandColor ?? Color(red: 0.20, green: 0.47, blue: 0.96),
                         isLoading: submitting,
@@ -1606,7 +1681,7 @@ struct RegistrationFlowSheet: View {
             .frame(width: 76, height: 76)
 
             Text(
-                isGuestsOnly
+                isGuestRequest
                     ? (destination?.status == .free
                         ? "سُجّل ضيوفك"
                         : (destination?.provider == .cash
@@ -1620,7 +1695,7 @@ struct RegistrationFlowSheet: View {
                 .foregroundStyle(.white)
 
             Text(
-                isGuestsOnly
+                isGuestRequest
                     ? (destination?.status == .free
                         ? "أضيف الضيوف إلى قائمة الموعد"
                         : (destination?.provider == .cash
@@ -1649,7 +1724,7 @@ struct RegistrationFlowSheet: View {
         defer { isLoadingDestination = false }
 
         do {
-            let loaded = try await (isGuestsOnly
+            let loaded = try await (isGuestRequest
                 ? feed.guestPaymentDestination(for: occurrence)
                 : feed.paymentDestination(for: occurrence))
             guard loaded.status != .paymentMethodRequired else {
@@ -1668,11 +1743,12 @@ struct RegistrationFlowSheet: View {
         guard !submitting, step == .details, let destination else { return }
         submitting = true
         Task {
-            let outcome = if isGuestsOnly {
+            let outcome = if isGuestRequest {
                 await feed.addGuests(
                     validGuests,
                     to: occurrence,
-                    expectedDestination: destination
+                    expectedDestination: destination,
+                    withoutSelf: registersWithoutSelf
                 )
             } else {
                 await feed.submitRegistration(

@@ -426,6 +426,19 @@ final class HomeStore {
         )
         return store
     }
+
+    /// Member-side fixture with no personal participant row. Used to verify
+    /// that a guest-only request is explicit about not reserving or charging
+    /// a seat for the current member.
+    static var guestOnlyRegistrationPreview: HomeStore {
+        let store = paymentRequestPreview
+        guard let occurrence = store.occurrences.first else { return store }
+        store.rosterCache[occurrence.id]?.removeAll {
+            $0.userId == store.currentUserID
+        }
+        store.myEventStatus[occurrence.id] = nil
+        return store
+    }
     #endif
 
     #if DEBUG
@@ -1373,6 +1386,8 @@ final class HomeStore {
                 return .success
             case .seatsFull:
                 return .failure("اكتملت المقاعد لهذا الموعد.")
+            case .pendingGuestRequest:
+                return .failure("عندك طلب ضيوف بانتظار تأكيد المشرف. انتظر حسمه قبل تسجيل نفسك.")
             case .creatorMissingPaymentMethod:
                 return .failure("منظّم التمرين لم يضف وسيلة دفع لهذا الموعد بعد.")
             case .registrationClosed:
@@ -1392,7 +1407,8 @@ final class HomeStore {
     func addGuests(
         _ guests: [String],
         to occurrence: FeedOccurrence,
-        expectedDestination: PaymentDestination
+        expectedDestination: PaymentDestination,
+        withoutSelf: Bool = false
     ) async -> RegistrationOutcome {
         let cleanGuests = guests
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -1410,8 +1426,14 @@ final class HomeStore {
         }
         #if DEBUG
         if isDebugMemberFixtureEvent(occurrence.id) {
-            guard myEventStatus[occurrence.id] == .registered else {
-                return .failure("سجّل نفسك في الموعد أولًا.")
+            if withoutSelf {
+                guard myEventStatus[occurrence.id] == nil else {
+                    return .failure("لديك تسجيل قائم في هذا الموعد.")
+                }
+            } else {
+                guard myEventStatus[occurrence.id] == .registered else {
+                    return .failure("سجّل نفسك في الموعد أولًا.")
+                }
             }
             guard expectedDestination.eventId == occurrence.id,
                   expectedDestination.status == .free || expectedDestination.selectedMethod != nil else {
@@ -1427,7 +1449,8 @@ final class HomeStore {
             let result = try await ManualPaymentService.shared.registerGuests(
                 eventId: occurrence.id,
                 guestNames: cleanGuests,
-                expectedDestination: expectedDestination
+                expectedDestination: expectedDestination,
+                withoutSelf: withoutSelf
             )
             await reloadRoster(occurrence.id)
             switch result {
@@ -1437,6 +1460,10 @@ final class HomeStore {
                 return .failure("المقاعد المتبقية لا تكفي لكل الضيوف.")
             case .notRegistered:
                 return .failure("لازم يكون تسجيلك مؤكد قبل إضافة ضيوف.")
+            case .selfAlreadyRegistered:
+                return .failure("أنت مسجل في الموعد. استخدم «سجّل معك أحد» لإضافة ضيوف.")
+            case .selfRegistrationPending:
+                return .failure("طلب تسجيلك ما زال بانتظار التأكيد. انتظر حسمه قبل تسجيل ضيف بدونك.")
             case .emptyGuests:
                 return .failure("أضف اسم لاعب واحد على الأقل.")
             case .duplicateName:
