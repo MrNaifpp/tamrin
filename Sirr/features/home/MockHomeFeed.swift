@@ -754,7 +754,10 @@ final class HomeStore {
         }
         var createdWorkspace: WorkspaceRecord?
         do {
-            let ws = try await WorkspaceService.shared.createWorkspace(name: name)
+            let ws = try await WorkspaceService.shared.createWorkspace(
+                name: name,
+                symbol: draft.teamSymbol
+            )
             createdWorkspace = ws
             try await createEvents(from: draft.plans, startDate: draft.startDate, in: ws.id)
 
@@ -1552,7 +1555,7 @@ final class HomeStore {
 
     // MARK: Mappers
     private func mapTeam(_ ws: WorkspaceRecord) -> FeedTeam {
-        FeedTeam(id: ws.id, name: ws.name, symbol: "figure.soccer", avatarData: nil,
+        FeedTeam(id: ws.id, name: ws.name, symbol: ws.symbol ?? "figure.soccer", avatarData: nil,
                  memberCount: ws.memberCount ?? 0, inviteCode: ws.inviteCode ?? "",
                  inviteURL: ws.inviteURL)
     }
