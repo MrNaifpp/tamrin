@@ -19,10 +19,11 @@ struct WorkspaceRecord: Codable, Identifiable, Hashable {
     let ownerId: UUID
     let inviteCode: String?
     let imageUrl: String?
+    let symbol: String?
     let memberCount: Int?
 
     enum CodingKeys: String, CodingKey {
-        case id, name
+        case id, name, symbol
         case ownerId = "owner_id"
         case inviteCode = "invite_code"
         case imageUrl = "image_url"
@@ -79,9 +80,13 @@ final class WorkspaceService {
     static let shared = WorkspaceService()
     private let client = SupabaseClientManager.shared.client
 
-    func createWorkspace(name: String) async throws -> WorkspaceRecord {
+    func createWorkspace(name: String, symbol: String? = nil) async throws -> WorkspaceRecord {
+        var params = ["p_name": name]
+        if let symbol {
+            params["p_symbol"] = symbol
+        }
         let response = try await client
-            .rpc("create_workspace", params: ["p_name": name])
+            .rpc("create_workspace", params: params)
             .execute()
         let ws = try JSONDecoder().decode(WorkspaceRecord.self, from: response.data)
         wsLogger.info("API createWorkspace succeeded (id: \(ws.id))")

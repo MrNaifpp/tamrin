@@ -44,6 +44,10 @@ struct EventRecord: Codable {
     let cancelledAt: Date?
     let cancellationReasonCode: String?
     let cancellationReasonText: String?
+    /// Set when the organizer has explicitly asked the registered players to
+    /// pay their share. Members use it to keep the payment destination
+    /// reachable after dismissing the reminder or payment sheet.
+    let paymentReminderSentAt: Date?
     /// Current authenticated member's private response, computed by the list
     /// RPC. Organizers do not receive other members' reasons here.
     let myResponseStatus: String?
@@ -73,6 +77,7 @@ struct EventRecord: Codable {
         case cancelledAt = "cancelled_at"
         case cancellationReasonCode = "cancellation_reason_code"
         case cancellationReasonText = "cancellation_reason_text"
+        case paymentReminderSentAt = "payment_reminder_sent_at"
         case myResponseStatus = "my_response_status"
     }
 
@@ -104,6 +109,7 @@ struct EventRecord: Codable {
         cancelledAt = try container.decodeIfPresent(Date.self, forKey: .cancelledAt)
         cancellationReasonCode = try container.decodeIfPresent(String.self, forKey: .cancellationReasonCode)
         cancellationReasonText = try container.decodeIfPresent(String.self, forKey: .cancellationReasonText)
+        paymentReminderSentAt = try container.decodeIfPresent(Date.self, forKey: .paymentReminderSentAt)
         myResponseStatus = try container.decodeIfPresent(String.self, forKey: .myResponseStatus)
     }
 }

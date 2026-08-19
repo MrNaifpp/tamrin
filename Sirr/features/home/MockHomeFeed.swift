@@ -241,6 +241,9 @@ struct FeedOccurrence: Identifiable {
     var cancelledAt: Date? = nil
     var cancellationReasonCode: String? = nil
     var cancellationReasonText: String? = nil
+    /// Persists the organizer's payment request on the event itself so a
+    /// registered player can always return to the transfer details.
+    var paymentReminderSentAt: Date? = nil
     var memberResponse: FeedMemberResponse? = nil
 
     /// Compatibility convenience for surfaces that only need a representative
@@ -382,6 +385,69 @@ final class HomeStore {
     static var preview: HomeStore { HomeStore(previewSeed: true) }
 
     #if DEBUG
+    /// Deterministic member-side screen for visually checking the persistent
+    /// contribution entry point added in T-40. It never reaches Supabase.
+    static var paymentRequestPreview: HomeStore {
+        let store = HomeStore(previewSeed: true)
+        let memberID = store.currentUserID ?? HomeDebugMemberFixture.memberFallbackID
+        let team = HomeDebugMemberFixture.team
+        var occurrence = HomeDebugMemberFixture.occurrence()
+        occurrence.paymentReminderSentAt = .now
+
+        store.teams = [team]
+        store.selectedTeamID = team.id
+        store.ownerByTeam[team.id] = HomeDebugMemberFixture.organizerID
+        store.membersByTeam[team.id] = HomeDebugMemberFixture.members(
+            currentUserID: memberID,
+            profileName: store.profileName
+        )
+        store.occurrencesByTeam = [team.id: [occurrence]]
+        store.rosterCache = [occurrence.id: [
+            FeedMember(
+                id: memberID,
+                name: store.profileName.isEmpty ? "أنا" : store.profileName,
+                status: .registered,
+                userId: memberID,
+                joinedAt: .now
+            )
+        ] + HomeDebugMemberFixture.roster()]
+        store.myEventStatus[occurrence.id] = .registered
+        return store
+    }
+
+    /// Member-side roster with a guest linked to a named teammate. This proves
+    /// the T-46 attribution UI without creating any backend participant rows.
+    static var guestAttributionPreview: HomeStore {
+        let store = paymentRequestPreview
+        guard let occurrence = store.occurrences.first else { return store }
+        store.rosterCache[occurrence.id, default: []].insert(
+            FeedMember(
+                id: UUID(uuidString: "F3B00000-0000-4000-8000-000000000099")!,
+                name: "ضيف سلمان",
+                status: .registered,
+                addedBy: HomeDebugMemberFixture.salmanID,
+                joinedAt: .now
+            ),
+            at: 0
+        )
+        return store
+    }
+
+    /// Member-side fixture with no personal participant row. Used to verify
+    /// that a guest-only request is explicit about not reserving or charging
+    /// a seat for the current member.
+    static var guestOnlyRegistrationPreview: HomeStore {
+        let store = paymentRequestPreview
+        guard let occurrence = store.occurrences.first else { return store }
+        store.rosterCache[occurrence.id]?.removeAll {
+            $0.userId == store.currentUserID
+        }
+        store.myEventStatus[occurrence.id] = nil
+        return store
+    }
+    #endif
+
+    #if DEBUG
     /// Installs a realistic non-admin team beside live workspaces without ever
     /// creating corresponding backend records. Existing local participation is
     /// preserved across refreshes so register/decline/withdraw can be tested.
@@ -424,7 +490,22 @@ final class HomeStore {
         occurrencesByTeam[teamID] = [occurrence]
         plansByTeam[teamID] = [HomeDebugMemberFixture.plan(for: occurrence)]
         paymentMethodsByTeam[teamID] = []
-        rosterCache[occurrence.id] = HomeDebugMemberFixture.roster()
+        var fixtureRoster = HomeDebugMemberFixture.roster()
+        if HomeDebugMemberFixture.isPaymentRequestEnabled {
+            let me = currentUserID ?? HomeDebugMemberFixture.memberFallbackID
+            fixtureRoster.insert(
+                FeedMember(
+                    id: me,
+                    name: profileName.isEmpty ? "أنا" : profileName,
+                    status: .registered,
+                    userId: me,
+                    joinedAt: .now
+                ),
+                at: 0
+            )
+            myEventStatus[occurrence.id] = .registered
+        }
+        rosterCache[occurrence.id] = fixtureRoster
         memberResponseByEvent[occurrence.id] = .invited
     }
     #endif
@@ -588,6 +669,34 @@ final class HomeStore {
         }
     }
 
+    /// Refreshes event-level state that can change while the detail screen is
+    /// open (for example, an organizer requesting the contribution). Roster
+    /// refreshes alone cannot observe columns on `events`.
+    func reloadOccurrence(_ eventId: UUID) async {
+        guard !isPreview, !isDebugMemberFixtureEvent(eventId) else { return }
+        do {
+            let event = try await EventService.shared.getEventById(eventId)
+            eventRecordsByID[event.id] = event
+            guard let workspaceID = event.workspaceId else { return }
+            let mapped = mapOccurrence(event)
+            if let index = occurrencesByTeam[workspaceID]?.firstIndex(where: { $0.id == eventId }) {
+                occurrencesByTeam[workspaceID]?[index] = mapped
+            }
+        } catch {
+            // Keep the last known event. A transient event refresh must not
+            // hide the detail screen or discard the already loaded roster.
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func paymentWasRequested(for occurrence: FeedOccurrence) -> Bool {
+        let current = occurrencesByTeam.values
+            .lazy
+            .compactMap { $0.first(where: { $0.id == occurrence.id }) }
+            .first
+        return (current?.paymentReminderSentAt ?? occurrence.paymentReminderSentAt) != nil
+    }
+
     /// Refreshes the organizer-only invitation responses for any event opened
     /// in detail, including events reached by a deep link outside Home's first
     /// six cards. Failures preserve the last known private response cache.
@@ -720,7 +829,10 @@ final class HomeStore {
         }
         var createdWorkspace: WorkspaceRecord?
         do {
-            let ws = try await WorkspaceService.shared.createWorkspace(name: name)
+            let ws = try await WorkspaceService.shared.createWorkspace(
+                name: name,
+                symbol: draft.teamSymbol
+            )
             createdWorkspace = ws
             try await createEvents(from: draft.plans, startDate: draft.startDate, in: ws.id)
 
@@ -1033,7 +1145,7 @@ final class HomeStore {
 
     func confirmPayment(for member: FeedMember, in occurrence: FeedOccurrence) async -> RegistrationOutcome {
         guard let creatorId = currentUserID,
-              let joinerId = member.userId,
+              let joinerId = member.paymentOwnerId,
               isCurrentTeamOwner else {
             return .failure("لا يمكن تأكيد هذه الدفعة.")
         }
@@ -1053,7 +1165,7 @@ final class HomeStore {
 
     func rejectPayment(for member: FeedMember, in occurrence: FeedOccurrence) async -> RegistrationOutcome {
         guard let creatorId = currentUserID,
-              let joinerId = member.userId,
+              let joinerId = member.paymentOwnerId,
               isCurrentTeamOwner else {
             return .failure("لا يمكن رفض هذه الدفعة.")
         }
@@ -1220,6 +1332,9 @@ final class HomeStore {
             )
             switch result {
             case .sent(let recipients, _):
+                if kind == .payment {
+                    updateOccurrence(occurrence.id) { $0.paymentReminderSentAt = .now }
+                }
                 return .sent(message: "أُرسل التذكير إلى \(recipients.counted(.player))")
             case .tooSoon(let nextAllowedAt):
                 let minutes = max(Int(nextAllowedAt.timeIntervalSinceNow / 60), 1)
@@ -1363,6 +1478,15 @@ final class HomeStore {
         return try await ManualPaymentService.shared.getEventDestination(eventId: occurrence.id)
     }
 
+    func guestPaymentDestination(for occurrence: FeedOccurrence) async throws -> PaymentDestination {
+        #if DEBUG
+        if isDebugMemberFixtureEvent(occurrence.id) {
+            return HomeDebugMemberFixture.destination(for: occurrence)
+        }
+        #endif
+        return try await ManualPaymentService.shared.getEventGuestDestination(eventId: occurrence.id)
+    }
+
     /// Records the transfer after the player has reviewed the selected method.
     /// The resulting seats are payment-pending, not waitlisted.
     func submitRegistration(
@@ -1372,8 +1496,9 @@ final class HomeStore {
     ) async -> RegistrationOutcome {
         let cleanGuests = guests.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         guard !isPreview else {
-            appendMe(to: occurrence)
-            appendGuests(cleanGuests, to: occurrence.id)
+            let status: FeedRegStatus = occurrence.price > 0 ? .paymentPending : .registered
+            appendMe(to: occurrence, as: status)
+            appendGuests(cleanGuests, to: occurrence.id, as: status)
             return .success
         }
         #if DEBUG
@@ -1383,7 +1508,7 @@ final class HomeStore {
                 return .failure("اختر وسيلة الدفع أولًا.")
             }
             appendMe(to: occurrence, as: .paymentPending)
-            appendGuests(cleanGuests, to: occurrence.id)
+            appendGuests(cleanGuests, to: occurrence.id, as: .paymentPending)
             memberResponseByEvent[occurrence.id] = nil
             updateOccurrence(occurrence.id) { $0.memberResponse = nil }
             return .success
@@ -1404,12 +1529,100 @@ final class HomeStore {
                 return .success
             case .seatsFull:
                 return .failure("اكتملت المقاعد لهذا الموعد.")
+            case .pendingGuestRequest:
+                return .failure("عندك طلب ضيوف بانتظار تأكيد المشرف. انتظر حسمه قبل تسجيل نفسك.")
             case .creatorMissingPaymentMethod:
                 return .failure("منظّم التمرين لم يضف وسيلة دفع لهذا الموعد بعد.")
             case .registrationClosed:
                 return .failure("التسجيل مقفل لهذا الموعد.")
             case .eventTermsChanged:
                 return .failure("غيّر المشرف مبلغ الموعد أو وسيلة الدفع. أغلق النافذة وافتحها مجددًا لمراجعة البيانات الجديدة.")
+            }
+        } catch {
+            await reloadRoster(occurrence.id)
+            return .failure(error.localizedDescription)
+        }
+    }
+
+    /// Adds only new guest seats for a member who is already confirmed. This
+    /// keeps their own registration untouched and charges only for the names
+    /// entered in this follow-up request.
+    func addGuests(
+        _ guests: [String],
+        to occurrence: FeedOccurrence,
+        expectedDestination: PaymentDestination,
+        withoutSelf: Bool = false
+    ) async -> RegistrationOutcome {
+        let cleanGuests = guests
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !cleanGuests.isEmpty else {
+            return .failure("أضف اسم لاعب واحد على الأقل.")
+        }
+
+        let localStatus: FeedRegStatus = expectedDestination.status == .free
+            ? .registered
+            : .paymentPending
+        guard !isPreview else {
+            appendGuests(cleanGuests, to: occurrence.id, as: localStatus)
+            return .success
+        }
+        #if DEBUG
+        if isDebugMemberFixtureEvent(occurrence.id) {
+            if withoutSelf {
+                guard myEventStatus[occurrence.id] == nil else {
+                    return .failure("لديك تسجيل قائم في هذا الموعد.")
+                }
+            } else {
+                guard myEventStatus[occurrence.id] == .registered else {
+                    return .failure("سجّل نفسك في الموعد أولًا.")
+                }
+            }
+            guard expectedDestination.eventId == occurrence.id,
+                  expectedDestination.status == .free || expectedDestination.selectedMethod != nil else {
+                return .failure("اختر وسيلة الدفع أولًا.")
+            }
+            appendGuests(cleanGuests, to: occurrence.id, as: localStatus)
+            return .success
+        }
+        #endif
+        guard currentUserID != nil else { return .failure("يجب تسجيل الدخول أولاً.") }
+
+        do {
+            let result = try await ManualPaymentService.shared.registerGuests(
+                eventId: occurrence.id,
+                guestNames: cleanGuests,
+                expectedDestination: expectedDestination,
+                withoutSelf: withoutSelf
+            )
+            await reloadRoster(occurrence.id)
+            switch result {
+            case .submitted:
+                return .success
+            case .seatsFull:
+                return .failure("المقاعد المتبقية لا تكفي لكل الضيوف.")
+            case .notRegistered:
+                return .failure("لازم يكون تسجيلك مؤكد قبل إضافة ضيوف.")
+            case .selfAlreadyRegistered:
+                return .failure("أنت مسجل في الموعد. استخدم «سجّل معك أحد» لإضافة ضيوف.")
+            case .selfRegistrationPending:
+                return .failure("طلب تسجيلك ما زال بانتظار التأكيد. انتظر حسمه قبل تسجيل ضيف بدونك.")
+            case .emptyGuests:
+                return .failure("أضف اسم لاعب واحد على الأقل.")
+            case .duplicateName:
+                return .failure("أحد هذه الأسماء مسجل معك مسبقًا.")
+            case .pendingGuestRequest:
+                return .failure("عندك طلب ضيوف بانتظار تأكيد المشرف. انتظر تأكيده قبل إضافة طلب جديد.")
+            case .creatorMissingPaymentMethod:
+                return .failure("منظّم التمرين لم يضف وسيلة دفع لهذا الموعد بعد.")
+            case .registrationClosed:
+                return .failure("التسجيل مقفل لهذا الموعد.")
+            case .eventTermsChanged:
+                return .failure("غيّر المشرف مبلغ الموعد أو وسيلة الدفع. ارجع خطوة وراجع البيانات الجديدة.")
+            case .notPublished:
+                return .failure("لم يُنشر هذا الموعد بعد.")
+            case .cancelled:
+                return .failure("هذا الموعد متخطى.")
             }
         } catch {
             await reloadRoster(occurrence.id)
@@ -1460,10 +1673,23 @@ final class HomeStore {
         myEventStatus[occurrence.id] = status
     }
 
-    private func appendGuests(_ names: [String], to eventId: UUID) {
+    private func appendGuests(
+        _ names: [String],
+        to eventId: UUID,
+        as status: FeedRegStatus = .registered
+    ) {
         guard !names.isEmpty else { return }
         var list = rosterCache[eventId] ?? []
-        for name in names { list.append(FeedMember(id: UUID(), name: name, status: .registered)) }
+        for name in names {
+            list.append(
+                FeedMember(
+                    id: UUID(),
+                    name: name,
+                    status: status,
+                    addedBy: currentUserID
+                )
+            )
+        }
         rosterCache[eventId] = list
     }
 
@@ -1618,7 +1844,7 @@ final class HomeStore {
 
     // MARK: Mappers
     private func mapTeam(_ ws: WorkspaceRecord) -> FeedTeam {
-        FeedTeam(id: ws.id, name: ws.name, symbol: "figure.soccer", avatarData: nil,
+        FeedTeam(id: ws.id, name: ws.name, symbol: ws.symbol ?? "figure.soccer", avatarData: nil,
                  memberCount: ws.memberCount ?? 0, inviteCode: ws.inviteCode ?? "",
                  inviteURL: ws.inviteURL)
     }
@@ -1643,6 +1869,7 @@ final class HomeStore {
                               cancelledAt: ev.cancelledAt,
                               cancellationReasonCode: ev.cancellationReasonCode,
                               cancellationReasonText: ev.cancellationReasonText,
+                              paymentReminderSentAt: ev.paymentReminderSentAt,
                               memberResponse: ev.myResponseStatus.flatMap(FeedMemberResponse.init(rawValue:)))
     }
 
