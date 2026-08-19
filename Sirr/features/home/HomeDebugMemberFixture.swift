@@ -6,12 +6,12 @@ import Foundation
 /// every interaction with these ids locally so testing it can never mutate
 /// production data.
 enum HomeDebugMemberFixture {
-    /// Opt-in, because the fixture used to appear in every Debug run: a brand
-    /// new account landed on a workspace full of events it had never joined,
-    /// which reads as a data leak rather than a test aid. Enable it from the
-    /// scheme — Product ▸ Scheme ▸ Edit Scheme ▸ Run ▸ Arguments ▸ Arguments
-    /// Passed On Launch — with `-demoMemberFixture`.
+    /// The launch argument keeps the fixture opt-in for ordinary Debug builds.
+    /// The dedicated `.local` bundle is the installable QA copy, so it also
+    /// enables the fixture when opened directly from the iPhone home screen.
+    /// Neither path exists in a Release build because this whole file is DEBUG-only.
     static let isEnabled = ProcessInfo.processInfo.arguments.contains("-demoMemberFixture")
+        || Bundle.main.bundleIdentifier?.hasSuffix(".tamrin.local") == true
     /// Starts the member already registered after the organizer requested the
     /// contribution, so the persistent T-40 entry point can be checked on a
     /// simulator without touching Supabase data.
@@ -23,6 +23,13 @@ enum HomeDebugMemberFixture {
     static let salmanID = UUID(uuidString: "F3B00000-0000-4000-8000-000000000002")!
     static let eventID = UUID(uuidString: "E3B00000-0000-4000-8000-000000000001")!
     static let templateID = UUID(uuidString: "C3B00000-0000-4000-8000-000000000001")!
+
+    /// A paid member-side scenario. It is separate from the free scenario so
+    /// instant confirmation, contribution access, and post-registration guest
+    /// registration can all be tried without resetting fixture state.
+    static let paidMemberTeamID = UUID(uuidString: "D3B00000-0000-4000-8000-000000000003")!
+    static let paidMemberEventID = UUID(uuidString: "E3B00000-0000-4000-8000-000000000003")!
+    static let paidMemberTemplateID = UUID(uuidString: "C3B00000-0000-4000-8000-000000000003")!
 
     /// A second group, owned by whoever is signed in, so the organizer's half
     /// of every screen is testable too: the money tiles, payment review, the
@@ -39,19 +46,28 @@ enum HomeDebugMemberFixture {
 
     static let team = FeedTeam(
         id: teamID,
-        name: "تجربة المستخدم",
+        name: "١ — عضو: قبول فوري وتقييم",
         symbol: "figure.soccer",
         avatarData: nil,
-        memberCount: 14,
+        memberCount: 18,
         inviteCode: "DEMO-USER"
+    )
+
+    static let paidMemberTeam = FeedTeam(
+        id: paidMemberTeamID,
+        name: "٢ — عضو: القطة والضيوف",
+        symbol: "person.3.fill",
+        avatarData: nil,
+        memberCount: 16,
+        inviteCode: "DEMO-PAID"
     )
 
     static let ownerTeam = FeedTeam(
         id: ownerTeamID,
-        name: "تجربة المشرف",
-        symbol: "figure.soccer",
+        name: "٣ — مشرف: كل الحالات",
+        symbol: "shield.checkered",
         avatarData: nil,
-        memberCount: 9,
+        memberCount: 16,
         inviteCode: "DEMO-OWNER"
     )
 
@@ -93,29 +109,46 @@ enum HomeDebugMemberFixture {
     static func occurrence(referenceDate: Date = .now) -> FeedOccurrence {
         FeedOccurrence(
             id: eventID,
-            title: "تمرين تجربة المستخدم",
+            title: "مجاني — سجّل ويتأكد فورًا",
             startAt: nextTuesdayEvening(after: referenceDate),
             locationName: "ملعب النخيل",
-            capacity: 16,
-            price: 30,
+            capacity: 18,
+            price: 0,
             isCancelled: false,
             artIndex: 2,
             isRecurring: true,
             templateId: templateID,
+            paymentMethodIds: [],
+            publishedAt: referenceDate,
+            memberResponse: .invited
+        )
+    }
+
+    static func paidMemberOccurrence(referenceDate: Date = .now) -> FeedOccurrence {
+        FeedOccurrence(
+            id: paidMemberEventID,
+            title: "مدفوع — جرّب القطة وإضافة ضيف",
+            startAt: nextTuesdayEvening(after: referenceDate).addingTimeInterval(24 * 60 * 60),
+            locationName: "ملعب الندى",
+            capacity: 16,
+            price: 30,
+            isCancelled: false,
+            artIndex: 3,
+            isRecurring: true,
+            templateId: paidMemberTemplateID,
             paymentMethodIds: paymentMethodIDs,
             publishedAt: referenceDate,
-            paymentReminderSentAt: isPaymentRequestEnabled ? referenceDate : nil,
-            memberResponse: .invited
+            paymentReminderSentAt: referenceDate.addingTimeInterval(-15 * 60)
         )
     }
 
     static func ownerOccurrence(referenceDate: Date = .now) -> FeedOccurrence {
         FeedOccurrence(
             id: ownerEventID,
-            title: "تمرين تجربة المشرف",
-            startAt: nextTuesdayEvening(after: referenceDate),
+            title: "كل الحالات — راجع اللاعبين والطلبات",
+            startAt: nextTuesdayEvening(after: referenceDate).addingTimeInterval(2 * 24 * 60 * 60),
             locationName: "ملعب الرواد",
-            capacity: 14,
+            capacity: 16,
             price: 45,
             isCancelled: false,
             artIndex: 1,
@@ -126,11 +159,43 @@ enum HomeDebugMemberFixture {
         )
     }
 
-    /// Mixed states on purpose: two seats still awaiting confirmation so the
-    /// payment review, the reminder cooldown and the waiting badge all have
-    /// something to act on.
+    static func paidMemberRoster(
+        currentUserID: UUID?,
+        profileName: String,
+        referenceDate: Date = .now
+    ) -> [FeedMember] {
+        let me = currentUserID ?? memberFallbackID
+        let myName = profileName.trimmingCharacters(in: .whitespacesAndNewlines)
+        var rows = Array(roster(referenceDate: referenceDate).prefix(7))
+        rows.insert(
+            FeedMember(
+                id: me,
+                name: myName.isEmpty ? "أنا — مسجل ومطلوب منه القطة" : myName,
+                status: .registered,
+                userId: me,
+                joinedAt: referenceDate.addingTimeInterval(-3 * 60 * 60),
+                position: "وسط"
+            ),
+            at: 0
+        )
+        rows.append(
+            FeedMember(
+                id: UUID(uuidString: "F3B00000-0000-4000-8000-000000000081")!,
+                name: "ضيف سلمان — جرّب خانة سجّله",
+                status: .registered,
+                addedBy: salmanID,
+                joinedAt: referenceDate.addingTimeInterval(-75 * 60)
+            )
+        )
+        return rows
+    }
+
+    /// The organizer group deliberately holds every row shape the production
+    /// RPC can return. Shared `paymentOwnerId` values make member+guest payment
+    /// batches render one confirm/reject action, while the standalone guest
+    /// batch has no participant row for its registrar.
     static func ownerRoster(referenceDate: Date = .now) -> [FeedMember] {
-        ownerRosterSeed.enumerated().map { index, seed in
+        var rows = ownerAccountSeed.enumerated().map { index, seed in
             let id = ownerPlayerID(at: index)
             return FeedMember(
                 id: id,
@@ -138,18 +203,62 @@ enum HomeDebugMemberFixture {
                 status: seed.status,
                 userId: id,
                 joinedAt: referenceDate.addingTimeInterval(Double(-index) * 5400 - 3600),
-                position: seed.position
+                position: seed.position,
+                paymentReminderSentAt: index == 2
+                    ? referenceDate.addingTimeInterval(-20 * 60)
+                    : nil
             )
         }
+        let pendingMemberID = ownerPlayerID(at: 1)
+        rows.insert(
+            FeedMember(
+                id: UUID(uuidString: "F3B00000-0000-4000-8000-000000000091")!,
+                name: "ضيف مشعل — ضمن نفس طلب الدفع",
+                status: .paymentPending,
+                addedBy: pendingMemberID,
+                joinedAt: referenceDate.addingTimeInterval(-50 * 60)
+            ),
+            at: 2
+        )
+        rows.append(
+            FeedMember(
+                id: UUID(uuidString: "F3B00000-0000-4000-8000-000000000092")!,
+                name: "ضيف مستقل — صاحبه غير مسجل",
+                status: .paymentPending,
+                addedBy: guestOnlyRegistrarID,
+                joinedAt: referenceDate.addingTimeInterval(-35 * 60)
+            )
+        )
+        rows.append(
+            FeedMember(
+                id: UUID(uuidString: "F3B00000-0000-4000-8000-000000000093")!,
+                name: "ضيف سلمان — مؤكد",
+                status: .registered,
+                addedBy: salmanID,
+                joinedAt: referenceDate.addingTimeInterval(-5 * 60 * 60)
+            )
+        )
+        rows.append(
+            FeedMember(
+                id: UUID(uuidString: "F3B00000-0000-4000-8000-000000000094")!,
+                name: "لاعب يدوي — سجّله المشرف",
+                status: .registered,
+                addedBy: memberFallbackID,
+                isManual: true,
+                joinedAt: referenceDate.addingTimeInterval(-6 * 60 * 60)
+            )
+        )
+        return rows
     }
 
-    private static let ownerRosterSeed: [(name: String, position: String, status: FeedRegStatus)] = [
-        ("بندر", "هجوم", .registered),
-        ("مشعل", "دفاع", .paymentPending),
-        ("سعود", "وسط", .registered),
-        ("راكان", "حارس", .registered),
-        ("فهد", "هجوم", .paymentPending),
-        ("عمر", "وسط", .waitlisted)
+    static let guestOnlyRegistrarID = UUID(uuidString: "F3B00000-0000-4000-8000-000000000007")!
+
+    private static let ownerAccountSeed: [(name: String, position: String, status: FeedRegStatus)] = [
+        ("بندر — مسجل", "هجوم", .registered),
+        ("مشعل — طلب دفع مع ضيف", "دفاع", .paymentPending),
+        ("سعود — مسجل وتذكيره متاح", "وسط", .registered),
+        ("راكان — حارس", "حارس", .registered),
+        ("فهد — في الانتظار", "هجوم", .waitlisted)
     ]
 
     static func ownerPlayerID(at index: Int) -> UUID {
@@ -160,8 +269,9 @@ enum HomeDebugMemberFixture {
         let calendar = Calendar(identifier: .gregorian)
         let endTime = calendar.date(byAdding: .minute, value: 90, to: occurrence.startAt)
             ?? occurrence.startAt
+        let occurrenceTemplateID = occurrence.templateId ?? occurrence.id
         return FeedPlan(
-            id: templateID,
+            id: occurrenceTemplateID,
             name: occurrence.title,
             weekdays: [3],
             startTime: occurrence.startAt,
@@ -169,7 +279,7 @@ enum HomeDebugMemberFixture {
             startDate: occurrence.startAt,
             endDate: nil,
             price: occurrence.price,
-            totalVenueCost: 480,
+            totalVenueCost: occurrence.price * Double(max(occurrence.capacity, 1)),
             currency: "ر.س",
             capacity: occurrence.capacity,
             capacityPolicy: .waitlist,
@@ -177,15 +287,15 @@ enum HomeDebugMemberFixture {
             longitude: 46.7386,
             locationName: occurrence.locationName,
             locationAddress: "حي النخيل، الرياض",
-            sourceEventID: eventID,
-            sourceTemplateID: templateID
+            sourceEventID: occurrence.id,
+            sourceTemplateID: occurrenceTemplateID
         )
     }
 
-    static func members(currentUserID: UUID?, profileName: String) -> [FeedTeamMember] {
+    static func memberTeamMembers(currentUserID: UUID?, profileName: String) -> [FeedTeamMember] {
         let me = currentUserID ?? memberFallbackID
         let myName = profileName.trimmingCharacters(in: .whitespacesAndNewlines)
-        return [
+        var result = [
             FeedTeamMember(
                 id: organizerID,
                 displayName: "مشرف التجربة",
@@ -198,6 +308,33 @@ enum HomeDebugMemberFixture {
                 role: .member,
                 isPending: false
             ),
+        ]
+        result.append(contentsOf: rosterSeed.enumerated().map { index, seed in
+            FeedTeamMember(
+                id: playerID(at: index),
+                displayName: seed.name,
+                role: .member,
+                isPending: false
+            )
+        })
+        return result
+    }
+
+    /// Kept as the shared preview helper used by focused debug screens.
+    static func members(currentUserID: UUID?, profileName: String) -> [FeedTeamMember] {
+        memberTeamMembers(currentUserID: currentUserID, profileName: profileName)
+    }
+
+    static func ownerTeamMembers(currentUserID: UUID?, profileName: String) -> [FeedTeamMember] {
+        let me = currentUserID ?? memberFallbackID
+        let myName = profileName.trimmingCharacters(in: .whitespacesAndNewlines)
+        var result = [
+            FeedTeamMember(
+                id: me,
+                displayName: myName.isEmpty ? "أنا — مشرف التجربة" : myName,
+                role: .admin,
+                isPending: false
+            ),
             FeedTeamMember(
                 id: salmanID,
                 displayName: "سلمان",
@@ -205,24 +342,37 @@ enum HomeDebugMemberFixture {
                 isPending: false
             ),
             FeedTeamMember(
-                id: UUID(uuidString: "F3B00000-0000-4000-8000-000000000003")!,
-                displayName: "عبدالعزيز",
+                id: guestOnlyRegistrarID,
+                displayName: "وليد — سجّل ضيفًا فقط",
                 role: .member,
                 isPending: false
             ),
         ]
+        result.append(contentsOf: ownerAccountSeed.enumerated().map { index, seed in
+            FeedTeamMember(
+                id: ownerPlayerID(at: index),
+                displayName: seed.name,
+                role: .member,
+                isPending: false
+            )
+        })
+        return result
     }
 
     /// One player per position the Overall weights differently, so the rating
     /// can be tried against every branch of the weighting table without
     /// editing anyone's profile.
     private static let rosterSeed: [(name: String, position: String)] = [
-        ("سلمان", "وسط"),
-        ("عبدالعزيز", "هجوم"),
-        ("تركي", "دفاع"),
-        ("ماجد", "حارس"),
-        ("خالد", "وسط"),
-        ("نواف", "دفاع")
+        ("سلمان — بلا تقييم حتى الآن", "وسط"),
+        ("عبدالعزيز — سبق وقيّمته", "هجوم"),
+        ("تركي — مدافع", "دفاع"),
+        ("ماجد — حارس", "حارس"),
+        ("خالد — وسط", "وسط"),
+        ("نواف — مدافع", "دفاع"),
+        ("ريان — مهاجم", "هجوم"),
+        ("حمزة — وسط", "وسط"),
+        ("ياسر — مدافع", "دفاع"),
+        ("زياد — مهاجم", "هجوم")
     ]
 
     static func roster(referenceDate: Date = .now) -> [FeedMember] {
@@ -243,19 +393,29 @@ enum HomeDebugMemberFixture {
     }
 
     static func playerID(at index: Int) -> UUID {
-        UUID(uuidString: String(format: "F3B00000-0000-4000-8000-%012d", index + 10))!
+        if index == 0 { return salmanID }
+        return UUID(uuidString: String(format: "F3B00000-0000-4000-8000-%012d", index + 10))!
     }
 
     static func isFixturePlayer(_ id: UUID) -> Bool {
         guard isEnabled else { return false }
         return (0..<rosterSeed.count).contains { playerID(at: $0) == id }
-            || (0..<ownerRosterSeed.count).contains { ownerPlayerID(at: $0) == id }
+            || (0..<ownerAccountSeed.count).contains { ownerPlayerID(at: $0) == id }
     }
 
     /// My own rating of each fixture player, for the life of the session. It
     /// sits beside the seeded ratings rather than on `HomeStore` because it is
     /// fixture data, not app state, and nothing observes it.
-    nonisolated(unsafe) static var submittedRatings: [UUID: PlayerRatingScores] = [:]
+    nonisolated(unsafe) static var submittedRatings: [UUID: PlayerRatingScores] = [
+        playerID(at: 1): PlayerRatingScores(
+            pace: 82,
+            passing: 76,
+            shooting: 91,
+            stamina: 79,
+            defending: 54,
+            awareness: 87
+        )
+    ]
 
     /// Ratings other people already left, so the average the flow reveals is a
     /// crowd's rather than an echo of the one rating just submitted. Two per
@@ -264,11 +424,15 @@ enum HomeDebugMemberFixture {
         let index: Int
         if let i = (0..<rosterSeed.count).first(where: { playerID(at: $0) == player }) {
             index = i
-        } else if let i = (0..<ownerRosterSeed.count).first(where: { ownerPlayerID(at: $0) == player }) {
+        } else if let i = (0..<ownerAccountSeed.count).first(where: { ownerPlayerID(at: $0) == player }) {
             index = i + rosterSeed.count
         } else {
             return []
         }
+
+        // The first player's empty aggregate exercises the exact
+        // "باقي ما قُيم" state. Every other account starts with a crowd average.
+        if player == playerID(at: 0) { return [] }
 
         return (0..<2).map { rater in
             var scores = PlayerRatingScores.neutral
@@ -283,16 +447,17 @@ enum HomeDebugMemberFixture {
     }
 
     static func destination(for occurrence: FeedOccurrence) -> PaymentDestination {
-        PaymentDestination(
-            status: .available,
+        let isFree = occurrence.price <= 0
+        return PaymentDestination(
+            status: isFree ? .free : .available,
             eventId: occurrence.id,
             paymentMethodId: nil,
             provider: nil,
             mobileNumber: nil,
             iban: nil,
             accountNumber: nil,
-            paymentMethods: paymentMethods,
-            totalPrice: 480,
+            paymentMethods: isFree ? [] : paymentMethods,
+            totalPrice: occurrence.price * Double(max(occurrence.capacity, 1)),
             pricePerPerson: occurrence.price,
             groupSize: nil
         )

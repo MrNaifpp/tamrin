@@ -311,6 +311,7 @@ final class HomeStore {
     private func isDebugMemberFixtureTeam(_ teamID: UUID) -> Bool {
         #if DEBUG
         return teamID == HomeDebugMemberFixture.teamID
+            || teamID == HomeDebugMemberFixture.paidMemberTeamID
             || teamID == HomeDebugMemberFixture.ownerTeamID
         #else
         return false
@@ -320,6 +321,7 @@ final class HomeStore {
     private func isDebugMemberFixtureEvent(_ eventID: UUID) -> Bool {
         #if DEBUG
         return eventID == HomeDebugMemberFixture.eventID
+            || eventID == HomeDebugMemberFixture.paidMemberEventID
             || eventID == HomeDebugMemberFixture.ownerEventID
         #else
         return false
@@ -390,8 +392,8 @@ final class HomeStore {
     static var paymentRequestPreview: HomeStore {
         let store = HomeStore(previewSeed: true)
         let memberID = store.currentUserID ?? HomeDebugMemberFixture.memberFallbackID
-        let team = HomeDebugMemberFixture.team
-        var occurrence = HomeDebugMemberFixture.occurrence()
+        let team = HomeDebugMemberFixture.paidMemberTeam
+        var occurrence = HomeDebugMemberFixture.paidMemberOccurrence()
         occurrence.paymentReminderSentAt = .now
 
         store.teams = [team]
@@ -402,15 +404,10 @@ final class HomeStore {
             profileName: store.profileName
         )
         store.occurrencesByTeam = [team.id: [occurrence]]
-        store.rosterCache = [occurrence.id: [
-            FeedMember(
-                id: memberID,
-                name: store.profileName.isEmpty ? "أنا" : store.profileName,
-                status: .registered,
-                userId: memberID,
-                joinedAt: .now
-            )
-        ] + HomeDebugMemberFixture.roster()]
+        store.rosterCache = [occurrence.id: HomeDebugMemberFixture.paidMemberRoster(
+            currentUserID: memberID,
+            profileName: store.profileName
+        )]
         store.myEventStatus[occurrence.id] = .registered
         return store
     }
@@ -455,25 +452,70 @@ final class HomeStore {
         // Off unless the scheme asks for it: see HomeDebugMemberFixture.isEnabled.
         guard HomeDebugMemberFixture.isEnabled else { return }
 
+        // Fixture mode also works with a clean simulator that has never logged
+        // in. Give that run one stable local identity so the owner scenario is
+        // genuinely an owner and rating never mistakes another player for me.
+        if currentUserID == nil {
+            currentUserID = HomeDebugMemberFixture.memberFallbackID
+        }
+        if profileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            profileName = "أنا — حساب التجربة"
+        }
+        if playerPosition.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            playerPosition = "وسط"
+        }
+        let fixtureUserID = currentUserID ?? HomeDebugMemberFixture.memberFallbackID
+
         let teamID = HomeDebugMemberFixture.teamID
         if !teams.contains(where: { $0.id == teamID }) {
             teams.append(HomeDebugMemberFixture.team)
         }
         ownerByTeam[teamID] = HomeDebugMemberFixture.organizerID
-        membersByTeam[teamID] = HomeDebugMemberFixture.members(
-            currentUserID: currentUserID,
+        membersByTeam[teamID] = HomeDebugMemberFixture.memberTeamMembers(
+            currentUserID: fixtureUserID,
             profileName: profileName
         )
 
-        // The second group is mine, so the organizer's side of every screen is
+        if occurrencesByTeam[teamID] == nil {
+            let free = HomeDebugMemberFixture.occurrence()
+            occurrencesByTeam[teamID] = [free]
+            plansByTeam[teamID] = [HomeDebugMemberFixture.plan(for: free)]
+            paymentMethodsByTeam[teamID] = []
+            rosterCache[free.id] = HomeDebugMemberFixture.roster()
+            myEventStatus[free.id] = nil
+            memberResponseByEvent[free.id] = .invited
+        }
+
+        let paidMemberTeamID = HomeDebugMemberFixture.paidMemberTeamID
+        if !teams.contains(where: { $0.id == paidMemberTeamID }) {
+            teams.append(HomeDebugMemberFixture.paidMemberTeam)
+        }
+        ownerByTeam[paidMemberTeamID] = HomeDebugMemberFixture.organizerID
+        membersByTeam[paidMemberTeamID] = HomeDebugMemberFixture.memberTeamMembers(
+            currentUserID: fixtureUserID,
+            profileName: profileName
+        )
+        if occurrencesByTeam[paidMemberTeamID] == nil {
+            let paid = HomeDebugMemberFixture.paidMemberOccurrence()
+            occurrencesByTeam[paidMemberTeamID] = [paid]
+            plansByTeam[paidMemberTeamID] = [HomeDebugMemberFixture.plan(for: paid)]
+            paymentMethodsByTeam[paidMemberTeamID] = []
+            rosterCache[paid.id] = HomeDebugMemberFixture.paidMemberRoster(
+                currentUserID: fixtureUserID,
+                profileName: profileName
+            )
+            myEventStatus[paid.id] = .registered
+        }
+
+        // The third group is mine, so the organizer's side of every screen is
         // reachable without a backend: money tiles, payment review, reminders.
         let ownerTeamID = HomeDebugMemberFixture.ownerTeamID
         if !teams.contains(where: { $0.id == ownerTeamID }) {
             teams.append(HomeDebugMemberFixture.ownerTeam)
         }
-        ownerByTeam[ownerTeamID] = currentUserID ?? HomeDebugMemberFixture.memberFallbackID
-        membersByTeam[ownerTeamID] = HomeDebugMemberFixture.members(
-            currentUserID: currentUserID,
+        ownerByTeam[ownerTeamID] = fixtureUserID
+        membersByTeam[ownerTeamID] = HomeDebugMemberFixture.ownerTeamMembers(
+            currentUserID: fixtureUserID,
             profileName: profileName
         )
 
@@ -484,29 +526,6 @@ final class HomeStore {
             paymentMethodsByTeam[ownerTeamID] = []
             rosterCache[mine.id] = HomeDebugMemberFixture.ownerRoster()
         }
-
-        guard occurrencesByTeam[teamID] == nil else { return }
-        let occurrence = HomeDebugMemberFixture.occurrence()
-        occurrencesByTeam[teamID] = [occurrence]
-        plansByTeam[teamID] = [HomeDebugMemberFixture.plan(for: occurrence)]
-        paymentMethodsByTeam[teamID] = []
-        var fixtureRoster = HomeDebugMemberFixture.roster()
-        if HomeDebugMemberFixture.isPaymentRequestEnabled {
-            let me = currentUserID ?? HomeDebugMemberFixture.memberFallbackID
-            fixtureRoster.insert(
-                FeedMember(
-                    id: me,
-                    name: profileName.isEmpty ? "أنا" : profileName,
-                    status: .registered,
-                    userId: me,
-                    joinedAt: .now
-                ),
-                at: 0
-            )
-            myEventStatus[occurrence.id] = .registered
-        }
-        rosterCache[occurrence.id] = fixtureRoster
-        memberResponseByEvent[occurrence.id] = .invited
     }
     #endif
 
@@ -570,7 +589,11 @@ final class HomeStore {
             // The local member journey remains testable when the development
             // backend is unavailable; no fixture operation depends on it.
             installDebugMemberFixtureIfNeeded()
-            if let preferred,
+            if HomeDebugMemberFixture.isEnabled,
+               teams.contains(where: { $0.id == HomeDebugMemberFixture.teamID }) {
+                selectedTeamID = HomeDebugMemberFixture.teamID
+                onSelectWorkspace?(HomeDebugMemberFixture.teamID)
+            } else if let preferred,
                teams.contains(where: { $0.id == preferred }) {
                 selectedTeamID = preferred
             } else if teams.count == 1,
@@ -1149,6 +1172,18 @@ final class HomeStore {
               isCurrentTeamOwner else {
             return .failure("لا يمكن تأكيد هذه الدفعة.")
         }
+        #if DEBUG
+        if isDebugMemberFixtureEvent(occurrence.id) {
+            guard var rows = rosterCache[occurrence.id] else { return .success }
+            for index in rows.indices where
+                rows[index].status == .paymentPending
+                    && rows[index].paymentOwnerId == joinerId {
+                rows[index].status = .registered
+            }
+            rosterCache[occurrence.id] = rows
+            return .success
+        }
+        #endif
         do {
             try await STCPayService.shared.confirmPayment(
                 eventId: occurrence.id,
@@ -1169,6 +1204,14 @@ final class HomeStore {
               isCurrentTeamOwner else {
             return .failure("لا يمكن رفض هذه الدفعة.")
         }
+        #if DEBUG
+        if isDebugMemberFixtureEvent(occurrence.id) {
+            rosterCache[occurrence.id]?.removeAll {
+                $0.status == .paymentPending && $0.paymentOwnerId == joinerId
+            }
+            return .success
+        }
+        #endif
         do {
             _ = try await STCPayService.shared.rejectPayment(
                 eventId: occurrence.id,
@@ -1503,12 +1546,18 @@ final class HomeStore {
         }
         #if DEBUG
         if isDebugMemberFixtureEvent(occurrence.id) {
-            guard expectedDestination.eventId == occurrence.id,
-                  expectedDestination.selectedMethod != nil else {
+            guard expectedDestination.eventId == occurrence.id else {
+                return .failure("بيانات الموعد غير متطابقة.")
+            }
+            guard expectedDestination.status == .free
+                    || expectedDestination.selectedMethod != nil else {
                 return .failure("اختر وسيلة الدفع أولًا.")
             }
-            appendMe(to: occurrence, as: .paymentPending)
-            appendGuests(cleanGuests, to: occurrence.id, as: .paymentPending)
+            let localStatus: FeedRegStatus = expectedDestination.status == .free
+                ? .registered
+                : .paymentPending
+            appendMe(to: occurrence, as: localStatus)
+            appendGuests(cleanGuests, to: occurrence.id, as: localStatus)
             memberResponseByEvent[occurrence.id] = nil
             updateOccurrence(occurrence.id) { $0.memberResponse = nil }
             return .success
