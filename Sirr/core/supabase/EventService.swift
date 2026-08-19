@@ -124,6 +124,9 @@ struct ParticipantRecord: Codable, Identifiable {
     let joinedAt: String?
     let displayName: String?
     let avatarUrl: String?
+    /// The position on the player's profile, verbatim. Nil for a guest, and on
+    /// a server that predates the player sheet showing it.
+    let playerPosition: String?
     let paymentStatus: PaymentStatus?
     let paidToNumber: String?
     let guestName: String?
@@ -173,6 +176,7 @@ struct ParticipantRecord: Codable, Identifiable {
         case joinedAt = "joined_at"
         case displayName = "display_name"
         case avatarUrl = "avatar_url"
+        case playerPosition = "player_position"
         case paymentStatus = "payment_status"
         case paidToNumber = "paid_to_number"
         case guestName = "guest_name"

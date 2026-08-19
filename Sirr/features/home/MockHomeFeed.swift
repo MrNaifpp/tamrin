@@ -205,6 +205,10 @@ struct FeedMember: Identifiable {
     var joinedAt: Date? = nil
     /// Profile photo, shown large at the top of the player's detail sheet.
     var avatarUrl: String? = nil
+    /// The position from their profile, verbatim — the detail sheet leads with
+    /// it, and it decides how their rating's Overall is weighted. Empty for a
+    /// guest, or for anyone who never picked one.
+    var position: String = ""
     /// Last payment nudge the organizer sent them, which the sheet's reminder
     /// button counts an hour from. Only the organizer's roster carries it.
     var paymentReminderSentAt: Date? = nil
@@ -304,6 +308,7 @@ final class HomeStore {
     private func isDebugMemberFixtureTeam(_ teamID: UUID) -> Bool {
         #if DEBUG
         return teamID == HomeDebugMemberFixture.teamID
+            || teamID == HomeDebugMemberFixture.ownerTeamID
         #else
         return false
         #endif
@@ -312,6 +317,7 @@ final class HomeStore {
     private func isDebugMemberFixtureEvent(_ eventID: UUID) -> Bool {
         #if DEBUG
         return eventID == HomeDebugMemberFixture.eventID
+            || eventID == HomeDebugMemberFixture.ownerEventID
         #else
         return false
         #endif
@@ -393,6 +399,26 @@ final class HomeStore {
             profileName: profileName
         )
 
+        // The second group is mine, so the organizer's side of every screen is
+        // reachable without a backend: money tiles, payment review, reminders.
+        let ownerTeamID = HomeDebugMemberFixture.ownerTeamID
+        if !teams.contains(where: { $0.id == ownerTeamID }) {
+            teams.append(HomeDebugMemberFixture.ownerTeam)
+        }
+        ownerByTeam[ownerTeamID] = currentUserID ?? HomeDebugMemberFixture.memberFallbackID
+        membersByTeam[ownerTeamID] = HomeDebugMemberFixture.members(
+            currentUserID: currentUserID,
+            profileName: profileName
+        )
+
+        if occurrencesByTeam[ownerTeamID] == nil {
+            let mine = HomeDebugMemberFixture.ownerOccurrence()
+            occurrencesByTeam[ownerTeamID] = [mine]
+            plansByTeam[ownerTeamID] = [HomeDebugMemberFixture.plan(for: mine)]
+            paymentMethodsByTeam[ownerTeamID] = []
+            rosterCache[mine.id] = HomeDebugMemberFixture.ownerRoster()
+        }
+
         guard occurrencesByTeam[teamID] == nil else { return }
         let occurrence = HomeDebugMemberFixture.occurrence()
         occurrencesByTeam[teamID] = [occurrence]
@@ -438,6 +464,16 @@ final class HomeStore {
             ownerByTeam = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0.ownerId) })
             #if DEBUG
             installDebugMemberFixtureIfNeeded()
+            #endif
+            #if DEBUG
+            if HomeDebugMemberFixture.isEnabled,
+               teams.contains(where: { isDebugMemberFixtureTeam($0.id) }) {
+                // The flag was passed to test the fixture, so open on it rather
+                // than on whichever real workspace happens to sort first.
+                selectedTeamID = HomeDebugMemberFixture.teamID
+                onSelectWorkspace?(HomeDebugMemberFixture.teamID)
+                return
+            }
             #endif
             if let pref = preferred, teams.contains(where: { $0.id == pref }) {
                 selectedTeamID = pref
@@ -579,6 +615,10 @@ final class HomeStore {
                        // row shows it without waiting on the roster's copy.
                        avatarUrl: $0.avatarUrl
                            ?? ($0.userId == currentUserID ? avatarUrl : nil),
+                       // Same reasoning as the avatar: my own position is
+                       // already loaded with my profile.
+                       position: $0.playerPosition
+                           ?? ($0.userId == currentUserID ? playerPosition : ""),
                        paymentReminderSentAt: $0.paymentReminderSentAtDate)
         }
         if let mine = parts.first(where: { $0.userId == currentUserID && $0.guestName == nil }) {
@@ -1210,6 +1250,109 @@ final class HomeStore {
         change(&list[index])
         rosterCache[eventID] = list
     }
+
+    // MARK: Player ratings
+
+    /// True when this player can receive a rating from the current user:
+    /// someone with an account who is not me. Reading one's own anonymous
+    /// average is handled separately by `playerRating(for:)`.
+    func canRate(_ member: FeedMember) -> Bool {
+        guard let userId = member.userId else { return false }
+        return userId != currentUserID
+    }
+
+    func playerRating(for member: FeedMember) async throws -> PlayerRatingSummary {
+        guard let userId = member.userId else {
+            throw NSError(
+                domain: "HomeStore.Rating",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "هذا اللاعب بدون حساب."]
+            )
+        }
+
+        #if DEBUG
+        if HomeDebugMemberFixture.isFixturePlayer(userId) {
+            return debugRatingSummary(for: userId, position: member.position)
+        }
+        #endif
+
+        return try await RatingService.shared.getPlayerRating(
+            workspaceId: selectedTeamID,
+            userId: userId
+        )
+    }
+
+    func submitPlayerRating(
+        _ scores: PlayerRatingScores,
+        for member: FeedMember
+    ) async throws -> SubmitRatingResult {
+        guard let userId = member.userId else { return .notAMember }
+
+        #if DEBUG
+        if HomeDebugMemberFixture.isFixturePlayer(userId) {
+            HomeDebugMemberFixture.submittedRatings[userId] = scores
+            return .saved(debugRatingSummary(for: userId, position: member.position))
+        }
+        #endif
+
+        return try await RatingService.shared.submitPlayerRating(
+            workspaceId: selectedTeamID,
+            userId: userId,
+            scores: scores
+        )
+    }
+
+    #if DEBUG
+    /// The fixture's rating backend: what I submitted, held in memory for the
+    /// life of the session, blended with the seeded ratings so the average is
+    /// a crowd's. Same shape and same arithmetic as the RPC, so the sheet
+    /// cannot tell the two apart.
+    private func debugRatingSummary(for playerID: UUID, position: String) -> PlayerRatingSummary {
+        let resolved = PlayerPosition.resolved(from: position)
+        let seeded = HomeDebugMemberFixture.seededRatings(for: playerID)
+        let mine = HomeDebugMemberFixture.submittedRatings[playerID]
+
+        let all = seeded + (mine.map { [$0] } ?? [])
+        guard !all.isEmpty else {
+            return PlayerRatingSummary(
+                position: position,
+                hasRated: mine != nil,
+                ratingsCount: 0,
+                mine: mine,
+                average: nil,
+                averageOverall: nil,
+                myOverall: mine?.overall(for: resolved)
+            )
+        }
+
+        var averaged = PlayerRatingScores.neutral
+        for attribute in PlayerAttribute.allCases {
+            let total = all.reduce(0) { $0 + $1[attribute] }
+            averaged[attribute] = roundedMean(total: total, count: all.count)
+        }
+
+        let overallTotal = all.reduce(0) { $0 + $1.overall(for: resolved) }
+        let averageOverall = roundedMean(total: overallTotal, count: all.count)
+
+        return PlayerRatingSummary(
+            position: position,
+            hasRated: mine != nil,
+            ratingsCount: all.count,
+            mine: mine,
+            average: averaged,
+            averageOverall: averageOverall,
+            myOverall: mine?.overall(for: resolved)
+        )
+    }
+
+    /// PostgreSQL `round()` and the product rule both round a positive .5 up.
+    /// Keeping the fixture in integer arithmetic makes it match the RPC exactly
+    /// (Swift's default floating-point `.rounded()` is easy to change subtly).
+    private func roundedMean(total: Int, count: Int) -> Int {
+        guard count > 0 else { return 0 }
+        return ((2 * total) + count) / (2 * count)
+    }
+    #endif
 
     func paymentDestination(for occurrence: FeedOccurrence) async throws -> PaymentDestination {
         #if DEBUG

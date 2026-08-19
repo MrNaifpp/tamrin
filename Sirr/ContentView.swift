@@ -30,7 +30,7 @@ struct ContentView: View {
                     SignupView(vm: appState.authVM, onBack: nil, isPostOTP: true, onComplete: {
                         appState.authVM.clearNewUserAfterOTP()
                     })
-                } else if appState.isLoggedIn {
+                } else if appState.isLoggedIn || isDebugMemberFixtureEnabled {
                     // Designer Home feed, now wired to Supabase via HomeStore
                     // (workspaces / events / participants / profile).
                     DesignerHomeView(appState: appState)
@@ -134,6 +134,17 @@ struct ContentView: View {
             guard phase == .active else { return }
             Task { await updateGate.refresh() }
         }
+    }
+
+    /// The deterministic Home fixture is an explicit launch-only testing mode.
+    /// Let it reach Home without creating a real Supabase session so the member
+    /// journey — including anonymous ratings — can be exercised safely offline.
+    private var isDebugMemberFixtureEnabled: Bool {
+        #if DEBUG
+        HomeDebugMemberFixture.isEnabled
+        #else
+        false
+        #endif
     }
 }
 

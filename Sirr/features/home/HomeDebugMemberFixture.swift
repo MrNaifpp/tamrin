@@ -19,6 +19,14 @@ enum HomeDebugMemberFixture {
     static let eventID = UUID(uuidString: "E3B00000-0000-4000-8000-000000000001")!
     static let templateID = UUID(uuidString: "C3B00000-0000-4000-8000-000000000001")!
 
+    /// A second group, owned by whoever is signed in, so the organizer's half
+    /// of every screen is testable too: the money tiles, payment review, the
+    /// reminder button, manual registration. The member-side group above
+    /// deliberately cannot show any of that.
+    static let ownerTeamID = UUID(uuidString: "D3B00000-0000-4000-8000-000000000002")!
+    static let ownerEventID = UUID(uuidString: "E3B00000-0000-4000-8000-000000000002")!
+    static let ownerTemplateID = UUID(uuidString: "C3B00000-0000-4000-8000-000000000002")!
+
     private static let stcBankMethodID = UUID(uuidString: "B3B00000-0000-4000-8000-000000000001")!
     private static let barqMethodID = UUID(uuidString: "B3B00000-0000-4000-8000-000000000002")!
     private static let alRajhiMethodID = UUID(uuidString: "B3B00000-0000-4000-8000-000000000003")!
@@ -31,6 +39,15 @@ enum HomeDebugMemberFixture {
         avatarData: nil,
         memberCount: 14,
         inviteCode: "DEMO-USER"
+    )
+
+    static let ownerTeam = FeedTeam(
+        id: ownerTeamID,
+        name: "تجربة المشرف",
+        symbol: "figure.soccer",
+        avatarData: nil,
+        memberCount: 9,
+        inviteCode: "DEMO-OWNER"
     )
 
     static let paymentMethods: [PaymentDestinationMethod] = [
@@ -84,6 +101,53 @@ enum HomeDebugMemberFixture {
             publishedAt: referenceDate,
             memberResponse: .invited
         )
+    }
+
+    static func ownerOccurrence(referenceDate: Date = .now) -> FeedOccurrence {
+        FeedOccurrence(
+            id: ownerEventID,
+            title: "تمرين تجربة المشرف",
+            startAt: nextTuesdayEvening(after: referenceDate),
+            locationName: "ملعب الرواد",
+            capacity: 14,
+            price: 45,
+            isCancelled: false,
+            artIndex: 1,
+            isRecurring: false,
+            templateId: ownerTemplateID,
+            paymentMethodIds: paymentMethodIDs,
+            publishedAt: referenceDate
+        )
+    }
+
+    /// Mixed states on purpose: two seats still awaiting confirmation so the
+    /// payment review, the reminder cooldown and the waiting badge all have
+    /// something to act on.
+    static func ownerRoster(referenceDate: Date = .now) -> [FeedMember] {
+        ownerRosterSeed.enumerated().map { index, seed in
+            let id = ownerPlayerID(at: index)
+            return FeedMember(
+                id: id,
+                name: seed.name,
+                status: seed.status,
+                userId: id,
+                joinedAt: referenceDate.addingTimeInterval(Double(-index) * 5400 - 3600),
+                position: seed.position
+            )
+        }
+    }
+
+    private static let ownerRosterSeed: [(name: String, position: String, status: FeedRegStatus)] = [
+        ("بندر", "هجوم", .registered),
+        ("مشعل", "دفاع", .paymentPending),
+        ("سعود", "وسط", .registered),
+        ("راكان", "حارس", .registered),
+        ("فهد", "هجوم", .paymentPending),
+        ("عمر", "وسط", .waitlisted)
+    ]
+
+    static func ownerPlayerID(at index: Int) -> UUID {
+        UUID(uuidString: String(format: "F3B00000-0000-4000-8000-%012d", index + 30))!
     }
 
     static func plan(for occurrence: FeedOccurrence) -> FeedPlan {
@@ -143,13 +207,72 @@ enum HomeDebugMemberFixture {
         ]
     }
 
-    static func roster() -> [FeedMember] {
-        ["سلمان", "عبدالعزيز", "تركي", "ماجد", "خالد", "نواف"].enumerated().map { index, name in
-            FeedMember(
-                id: UUID(uuidString: String(format: "F3B00000-0000-4000-8000-%012d", index + 10))!,
-                name: name,
-                status: .registered
+    /// One player per position the Overall weights differently, so the rating
+    /// can be tried against every branch of the weighting table without
+    /// editing anyone's profile.
+    private static let rosterSeed: [(name: String, position: String)] = [
+        ("سلمان", "وسط"),
+        ("عبدالعزيز", "هجوم"),
+        ("تركي", "دفاع"),
+        ("ماجد", "حارس"),
+        ("خالد", "وسط"),
+        ("نواف", "دفاع")
+    ]
+
+    static func roster(referenceDate: Date = .now) -> [FeedMember] {
+        rosterSeed.enumerated().map { index, seed in
+            let id = playerID(at: index)
+            return FeedMember(
+                id: id,
+                name: seed.name,
+                status: .registered,
+                // A rating hangs on an account, so these carry one. They are
+                // fixture ids: HomeStore answers for them locally and never
+                // sends them anywhere.
+                userId: id,
+                joinedAt: referenceDate.addingTimeInterval(Double(-index) * 3600 - 7200),
+                position: seed.position
             )
+        }
+    }
+
+    static func playerID(at index: Int) -> UUID {
+        UUID(uuidString: String(format: "F3B00000-0000-4000-8000-%012d", index + 10))!
+    }
+
+    static func isFixturePlayer(_ id: UUID) -> Bool {
+        guard isEnabled else { return false }
+        return (0..<rosterSeed.count).contains { playerID(at: $0) == id }
+            || (0..<ownerRosterSeed.count).contains { ownerPlayerID(at: $0) == id }
+    }
+
+    /// My own rating of each fixture player, for the life of the session. It
+    /// sits beside the seeded ratings rather than on `HomeStore` because it is
+    /// fixture data, not app state, and nothing observes it.
+    nonisolated(unsafe) static var submittedRatings: [UUID: PlayerRatingScores] = [:]
+
+    /// Ratings other people already left, so the average the flow reveals is a
+    /// crowd's rather than an echo of the one rating just submitted. Two per
+    /// player, deterministic, spread wide enough that the six bars differ.
+    static func seededRatings(for player: UUID) -> [PlayerRatingScores] {
+        let index: Int
+        if let i = (0..<rosterSeed.count).first(where: { playerID(at: $0) == player }) {
+            index = i
+        } else if let i = (0..<ownerRosterSeed.count).first(where: { ownerPlayerID(at: $0) == player }) {
+            index = i + rosterSeed.count
+        } else {
+            return []
+        }
+
+        return (0..<2).map { rater in
+            var scores = PlayerRatingScores.neutral
+            for (offset, attribute) in PlayerAttribute.allCases.enumerated() {
+                // A fixed spiral through the range: no randomness, so the same
+                // player shows the same numbers on every launch.
+                let base = 52 + ((index * 13) + (offset * 17) + (rater * 9)) % 44
+                scores[attribute] = base
+            }
+            return scores
         }
     }
 

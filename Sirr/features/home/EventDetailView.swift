@@ -48,6 +48,20 @@ struct EventDetailView: View {
         roster.firstIndex { $0.id == member.id }.map { $0 + 1 }
     }
 
+    /// Nil only for a guest. A player can open their own sheet and read the
+    /// anonymous group average; self-rating is prevented by the submitter.
+    private func ratingLoader(for member: FeedMember) -> (@MainActor () async throws -> PlayerRatingSummary)? {
+        guard member.userId != nil else { return nil }
+        return { try await feed.playerRating(for: member) }
+    }
+
+    private func ratingSubmitter(
+        for member: FeedMember
+    ) -> (@MainActor (PlayerRatingScores) async throws -> SubmitRatingResult)? {
+        guard feed.canRate(member) else { return nil }
+        return { try await feed.submitPlayerRating($0, for: member) }
+    }
+
     var body: some View {
         ZStack {
             GeometryReader { proxy in
@@ -231,6 +245,10 @@ struct EventDetailView: View {
                 avatarImageData: avatarData(for: member),
                 share: occurrence.price,
                 seatNumber: seatNumber(of: member),
+                // A player's share and payment state are organizer-only.
+                showsPayment: feed.isCurrentTeamOwner,
+                loadRating: ratingLoader(for: member),
+                submitRating: ratingSubmitter(for: member),
                 // A free exercise has nothing to chase, a guest or a manually
                 // seated player has no account to notify, and nobody needs to
                 // be reminded of their own share.
@@ -623,6 +641,11 @@ struct EventDetailView: View {
                     // menu, and a button inside a button swallows it.
                     .contentShape(.rect)
                     .onTapGesture { memberInDetails = person }
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityHint("يفتح تفاصيل اللاعب وتقييمه")
+                    .accessibilityAction {
+                        memberInDetails = person
+                    }
                 }
             }
         }
@@ -637,14 +660,9 @@ struct EventDetailView: View {
             Image(systemName: "clock")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.orange)
-        } else if person.status == .paymentPending {
-            if feed.isCurrentTeamOwner, person.userId != nil {
+        } else if person.status == .paymentPending, feed.isCurrentTeamOwner {
+            if person.userId != nil {
                 paymentReviewActions(for: person)
-            } else {
-                Image(systemName: "creditcard.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.orange)
-                    .accessibilityLabel("بانتظار تأكيد الدفع")
             }
         }
     }
