@@ -65,12 +65,12 @@ Returns the promoted `user_id`, or NULL when it declines to act. It no-ops when 
 
 Note it does **not** check `capacity_policy`. `closed` prevents people *joining* the waitlist; it does not strand people already on one. An organizer who switches a live session to `closed` stops new waiters, and the existing queue still drains as seats free. A `closed` session that never had waiters has an empty list, so the helper no-ops on the last condition anyway.
 
-A creator with no payment number on file does **not** block promotion — the snapshotted payment fields are informational for a seat that was never paid for, so they are left null rather than raising the way `submit_payment` does.
+Promotion does **not** touch payment methods. It never resolves a `workspace_payment_methods` row and never returns `payment_method_required`, so an organizer whose payment method was removed still gets their queue drained. The free-event branch of `submit_payment_v2` is the precedent: it already inserts a `confirmed` row carrying only `paid_price_per_person` and `payment_group_size`, with every `payment_method_id` / `paid_to_*` column left null. The promoted row has that same shape.
 
 Otherwise it:
 
 1. Selects the oldest `event_waitlist` row by `joined_at`
-2. Inserts an `event_participants` row with `payment_status = 'confirmed'`, snapshotting the creator's payment fields the way `submit_payment` does
+2. Inserts an `event_participants` row with `payment_status = 'confirmed'`, `paid_price_per_person = price_per_person` and `payment_group_size = 1`, leaving all payment-method columns null
 3. Deletes that waitlist row
 4. Enqueues `push_outbox (user_id, 'waitlist_promoted', event_id)`
 
@@ -92,11 +92,13 @@ Enqueueing inside the freeing transaction is deliberate: the existing client-fir
 
 Gains `insert into public.push_outbox (user_id, type, event_id) values (v_event.creator_id, 'member_declined', p_event_id)` — fixing symptom #5, using the pattern `cancel_event_occurrence` already establishes.
 
-### `submit_payment`
+### `submit_payment_v2`
+
+This is the live registration path (`workspace_payment_methods.sql:707`). The older `submit_payment` in `stcpay_rpcs.sql` survives only as a legacy shim for old clients and is not modified beyond keeping it consistent.
 
 Two changes:
 
-- Seat cap counts `payment_status = 'confirmed'` only, dropping `'pending'`
+- The seat cap counts `payment_status = 'confirmed'` only, dropping `'pending'`. It stays **group-aware** — the existing test is `v_current_seats + v_group_size > max_participants`, because one registration can bring guests
 - When the event is full and `capacity_policy = 'closed'`, return a distinct `'registration_closed_full'` status so the client can render قفل التسجيل rather than offering a waitlist that will never exist
 
 ### `join_waitlist`
