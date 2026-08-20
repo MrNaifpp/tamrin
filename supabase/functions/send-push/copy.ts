@@ -44,6 +44,16 @@ export function copyFor(
         title: "دعوة لتمرين ⚽",
         body: `دعاك المشرف لحضور ${eventName} — افتح التطبيق لتأكيد حضورك.`,
       };
+    case "waitlist_promoted":
+      return {
+        title: "تحرر مقعد — أنت داخل 🎉",
+        body: `انضممت من قائمة الانتظار إلى ${eventName}. نراك هناك! 🙌`,
+      };
+    case "member_declined":
+      return {
+        title: "اعتذار عن التمرين",
+        body: `اعتذر أحد اللاعبين عن ${eventName}. افتح التمرين لمراجعة القائمة.`,
+      };
     case "event_cancelled":
       return {
         title: "تمرين هذا الأسبوع متخطّى",
