@@ -1515,10 +1515,11 @@ private struct InviteStepPage: View {
                     .clipShape(.rect(cornerRadius: 30, style: .continuous))
             } else {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 30, style: .continuous).fill(TamrinTheme.ink)
+                    RoundedRectangle(cornerRadius: 30, style: .continuous)
+                        .fill(team.color.color)
                     Image(systemName: team.symbol)
                         .font(.system(size: 38, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(team.color.symbolColor)
                 }
                 .frame(width: 96, height: 96)
             }

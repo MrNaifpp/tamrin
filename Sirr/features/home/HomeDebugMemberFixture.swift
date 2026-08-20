@@ -48,6 +48,7 @@ enum HomeDebugMemberFixture {
         id: teamID,
         name: "١ — عضو: قبول فوري وتقييم",
         symbol: "figure.soccer",
+        color: .lime,
         avatarData: nil,
         memberCount: 18,
         inviteCode: "DEMO-USER"
@@ -57,6 +58,7 @@ enum HomeDebugMemberFixture {
         id: paidMemberTeamID,
         name: "٢ — عضو: القطة والضيوف",
         symbol: "person.3.fill",
+        color: .orange,
         avatarData: nil,
         memberCount: 16,
         inviteCode: "DEMO-PAID"
@@ -66,6 +68,7 @@ enum HomeDebugMemberFixture {
         id: ownerTeamID,
         name: "٣ — مشرف: كل الحالات",
         symbol: "shield.checkered",
+        color: .purple,
         avatarData: nil,
         memberCount: 16,
         inviteCode: "DEMO-OWNER"
@@ -170,8 +173,8 @@ enum HomeDebugMemberFixture {
         rows.insert(
             FeedMember(
                 id: me,
-                name: myName.isEmpty ? "أنا — مسجل ومطلوب منه القطة" : myName,
-                status: .registered,
+                name: myName.isEmpty ? "أنا — مسجل وباقي القطة" : myName,
+                status: .awaitingPayment,
                 userId: me,
                 joinedAt: referenceDate.addingTimeInterval(-3 * 60 * 60),
                 position: "وسط"
@@ -185,6 +188,28 @@ enum HomeDebugMemberFixture {
                 status: .registered,
                 addedBy: salmanID,
                 joinedAt: referenceDate.addingTimeInterval(-75 * 60)
+            )
+        )
+        // The two states my own seat is not in, so the three are visible at
+        // once: held and unpaid, declared and waiting, and confirmed.
+        rows.append(
+            FeedMember(
+                id: UUID(uuidString: "F3B00000-0000-4000-8000-000000000082")!,
+                name: "طلال — حوّل وينتظر تأكيد المشرف",
+                status: .paymentPending,
+                userId: UUID(uuidString: "F3B00000-0000-4000-8000-000000000082")!,
+                joinedAt: referenceDate.addingTimeInterval(-95 * 60),
+                position: "وسط"
+            )
+        )
+        rows.append(
+            FeedMember(
+                id: UUID(uuidString: "F3B00000-0000-4000-8000-000000000083")!,
+                name: "زياد — قطته مؤكدة",
+                status: .registered,
+                userId: UUID(uuidString: "F3B00000-0000-4000-8000-000000000083")!,
+                joinedAt: referenceDate.addingTimeInterval(-110 * 60),
+                position: "دفاع"
             )
         )
         return rows
@@ -314,7 +339,8 @@ enum HomeDebugMemberFixture {
                 id: playerID(at: index),
                 displayName: seed.name,
                 role: .member,
-                isPending: false
+                isPending: false,
+                position: seed.position
             )
         })
         return result

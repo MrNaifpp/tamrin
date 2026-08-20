@@ -35,6 +35,9 @@ struct PlayerDetailsSheet: View {
     /// Nil hides the reminder button — a free exercise, a player with no
     /// account to reach, or a viewer who is not the organizer.
     var onRemind: (@MainActor () async -> HomeStore.PaymentReminderOutcome)?
+    /// What removing this person means where the sheet was opened from: out of
+    /// this exercise, or out of the group entirely.
+    var removeTitle: String = "إزالة اللاعب من التمرين"
     /// Nil for a member who is not the organizer's to remove.
     var onRemove: (() -> Void)?
 
@@ -53,9 +56,6 @@ struct PlayerDetailsSheet: View {
     @State private var isLoadingRating = true
     @State private var ratingLoadFailed = false
     @State private var isRatingFlowOpen = false
-    /// Holds taps while details and the rating flow replace one another, so a
-    /// tap cannot land on a control moving into the same point mid-transition.
-    @State private var isSurfaceSettling = false
 
     private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
@@ -68,6 +68,7 @@ struct PlayerDetailsSheet: View {
         loadRating: (@MainActor () async throws -> PlayerRatingSummary)? = nil,
         submitRating: (@MainActor (PlayerRatingScores) async throws -> SubmitRatingResult)? = nil,
         registeredByName: String? = nil,
+        removeTitle: String = "إزالة اللاعب من التمرين",
         onRemind: (@MainActor () async -> HomeStore.PaymentReminderOutcome)? = nil,
         onRemove: (() -> Void)? = nil
     ) {
@@ -76,6 +77,7 @@ struct PlayerDetailsSheet: View {
         self.share = share
         self.seatNumber = seatNumber
         self.showsPayment = showsPayment
+        self.removeTitle = removeTitle
         self.loadRating = loadRating
         self.submitRating = submitRating
         self.registeredByName = registeredByName
@@ -94,6 +96,8 @@ struct PlayerDetailsSheet: View {
         switch member.status {
         case .registered:
             return ("مسدّدة", "حالة القطة", "checkmark.seal.fill", TamrinTheme.brandGreen)
+        case .awaitingPayment:
+            return ("لم تُدفع", "حالة القطة", "banknote", .orange)
         case .paymentPending:
             return ("بانتظار تأكيدك", "حالة القطة", "hourglass", .orange)
         case .waitlisted:
@@ -128,66 +132,56 @@ struct PlayerDetailsSheet: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if isRatingFlowOpen, let submitRating, let ratingPosition {
-                    PlayerRatingFlowView(
-                        playerName: member.name,
-                        position: ratingPosition,
-                        initial: rating?.mine,
-                        submit: submitRating,
-                        onFinish: { summary in
-                            rating = summary
-                            showRatingFlow(false)
-                        }
-                    )
-                    .padding(.horizontal, 20)
-                    .padding(.top, 4)
-                    .padding(.bottom, 12)
-                    .transition(.blurReplace)
-                } else {
-                    ScrollView(.vertical, showsIndicators: false) {
-                        details
-                            .padding(.horizontal, 20)
-                            .padding(.top, 8)
-                            .padding(.bottom, 20)
+            details
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 20)
+                .frame(maxWidth: .infinity)
+                .scrollableSheetContent()
+                .frame(maxHeight: .infinity, alignment: .top)
+                .background(Color.clear)
+                .animation(.smooth(duration: 0.3), value: justSent)
+                .animation(.smooth(duration: 0.28), value: errorMessage)
+                .animation(.smooth(duration: 0.3), value: rating?.ratingsCount)
+                .onReceive(ticker) { now = $0 }
+                .task { await fetchRating() }
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("تم") { dismiss() }
+                            .fontWeight(.semibold)
                     }
-                    .scrollBounceBehavior(.basedOnSize)
-                    .transition(.blurReplace)
                 }
-            }
-            .allowsHitTesting(!isSurfaceSettling)
-            .frame(maxWidth: .infinity)
-            .frame(maxHeight: .infinity, alignment: .top)
-            .background(Color.clear)
-            .animation(.smooth(duration: 0.3), value: justSent)
-            .animation(.smooth(duration: 0.28), value: errorMessage)
-            .animation(.smooth(duration: 0.3), value: isRatingFlowOpen)
-            .animation(.smooth(duration: 0.3), value: rating?.ratingsCount)
-            .onReceive(ticker) { now = $0 }
-            .task { await fetchRating() }
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    // Leaving the flow is a step back to the sheet it opened
-                    // from, not out of the sheet altogether.
-                    Button(isRatingFlowOpen ? "إلغاء" : "تم") {
-                        if isRatingFlowOpen {
-                            showRatingFlow(false)
-                        } else {
-                            dismiss()
-                        }
-                    }
-                    .fontWeight(.semibold)
-                }
-            }
         }
         .environment(\.layoutDirection, .rightToLeft)
-        // A single native half-sheet, including the entire six-step flow. It
-        // never grows into a near-full-screen form; longer details scroll
-        // inside the same surface.
-        .presentationDetents([.medium])
-        .presentationDragIndicator(.hidden)
-        .presentationContentInteraction(.scrolls)
-        .presentationBackground(.regularMaterial)
+        // The system's own half sheet, left entirely to the system: at a
+        // non-large detent iOS insets it from the screen edges and paints its
+        // own translucent material. Overriding the presentation background —
+        // which `fittedSheet` does — is what flattened it into an opaque panel
+        // spanning the full width.
+        // Opens at half and pulls up to full: a player's details run longer
+        // than a half sheet once the money and the rating panel are both on it.
+        // Left at the system's default content interaction — `.scrolls` gave
+        // the scroll view first claim on an upward drag, so pulling the sheet
+        // open did nothing and only the grabber could resize it.
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        // The rating flow is its own sheet on top of this one, not a second
+        // face of it: it is a fixed half sheet that never scrolls, while this
+        // one scrolls and expands. One surface could not be both.
+        .sheet(isPresented: $isRatingFlowOpen) {
+            if let submitRating, let ratingPosition {
+                PlayerRatingSheet(
+                    playerName: member.name,
+                    position: ratingPosition,
+                    initial: rating?.mine,
+                    submit: submitRating,
+                    onFinish: { summary in
+                        rating = summary
+                        isRatingFlowOpen = false
+                    }
+                )
+            }
+        }
     }
 
     // MARK: - Details
@@ -234,8 +228,9 @@ struct PlayerDetailsSheet: View {
                 .lineLimit(2)
                 .minimumScaleFactor(0.7)
 
-            PositionPitch(position: positionText)
-                .padding(.top, 4)
+            if !positionText.isEmpty {
+                PositionTag(position: positionText)
+            }
         }
         .frame(maxWidth: .infinity)
     }
@@ -255,7 +250,7 @@ struct PlayerDetailsSheet: View {
                     ? (rating.hasRated ? "عدّل تقييمك" : "قيّم اللاعب")
                     : nil,
                 onAction: ratingPosition != nil && canSubmitRating
-                    ? { showRatingFlow(true) }
+                    ? { isRatingFlowOpen = true }
                     : nil
             )
         } else {
@@ -268,7 +263,7 @@ struct PlayerDetailsSheet: View {
                 canSubmit: canSubmitRating,
                 positionRequired: canSubmitRating && ratingPosition == nil,
                 onRate: canSubmitRating && ratingPosition != nil
-                    ? { showRatingFlow(true) }
+                    ? { isRatingFlowOpen = true }
                     : nil
             )
         }
@@ -376,7 +371,7 @@ struct PlayerDetailsSheet: View {
             dismiss()
             remove()
         } label: {
-            Label("إزالة اللاعب من التمرين", systemImage: "person.badge.minus")
+            Label(removeTitle, systemImage: "person.badge.minus")
                 .font(TamrinFont.font(size: 15, weight: .medium))
                 .frame(maxWidth: .infinity, minHeight: 52)
         }
@@ -387,16 +382,6 @@ struct PlayerDetailsSheet: View {
 
     /// Swaps the content inside the fixed half-sheet and holds taps off until
     /// the replacement animation has settled.
-    private func showRatingFlow(_ open: Bool) {
-        guard isRatingFlowOpen != open else { return }
-        isSurfaceSettling = true
-        isRatingFlowOpen = open
-        Task {
-            try? await Task.sleep(for: .milliseconds(320))
-            isSurfaceSettling = false
-        }
-    }
-
     @MainActor
     private func fetchRating() async {
         guard let loadRating, rating == nil else { return }
@@ -624,7 +609,7 @@ struct AttributeGrid: View {
     ]
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 9) {
+        LazyVGrid(columns: columns, spacing: 7) {
             ForEach(PlayerAttribute.allCases) { attribute in
                 if let onSelect {
                     Button { onSelect(attribute) } label: {
@@ -651,7 +636,7 @@ private struct AttributeBar: View {
     var isEditable = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 5) {
                 Text(attribute.shortTitle)
                     .font(TamrinFont.font(size: 11, weight: .medium))
@@ -675,10 +660,10 @@ private struct AttributeBar: View {
                         .frame(width: max(geo.size.width * CGFloat(value) / 100, 3))
                 }
             }
-            .frame(height: 6)
+            .frame(height: 5)
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.vertical, 6)
         .background(
             isEditable ? TamrinTheme.lime.opacity(0.12) : Color.primary.opacity(0.04),
             in: .rect(cornerRadius: 12, style: .continuous)
@@ -690,106 +675,23 @@ private struct AttributeBar: View {
 
 // MARK: - Position
 
-/// The player's position drawn on a pitch: a pill carrying the position's
-/// name, sitting in the part of the pitch that position holds, lit from
-/// underneath in the position's colour.
-///
-/// Two things say the position at once — where the pill sits and what colour
-/// it is — so it reads at a glance and still survives being looked at closely.
-struct PositionPitch: View {
+/// The player's position: the word, on the colour that identifies it. The
+/// colour is the whole design — a drawn pitch said the same thing in far more
+/// space, and this sheet has none to spare.
+struct PositionTag: View {
     let position: String
 
-    private var trimmedPosition: String {
-        position.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-    private var displayPosition: String {
-        trimmedPosition.isEmpty ? "المركز غير محدد" : trimmedPosition
-    }
-    private var resolved: PlayerPosition? { PlayerPosition.exact(from: position) }
-    private var tint: Color { resolved?.tint ?? .secondary }
-
-    /// Deliberately not full width: the pitch is an inset panel the sheet's
-    /// other cards frame, not a band across it.
-    private static let width: CGFloat = 208
-    private static let height: CGFloat = 116
+    private var tint: Color { PlayerPosition.resolved(from: position).tint }
 
     var body: some View {
-        ZStack {
-            PitchMarkings()
-
-            GeometryReader { geo in
-                let zone = resolved?.pitchZone ?? (0.42...0.58)
-                // The pitch attacks upward, so a zone measured from own goal
-                // is a height measured down from the top.
-                let centre = 1 - (zone.lowerBound + zone.upperBound) / 2
-                let y = geo.size.height * centre
-
-                ZStack {
-                    // A wide, soft pool of colour under the pill rather than a
-                    // halo around it — the glow is what carries across the
-                    // sheet, the pill is what you read up close.
-                    Ellipse()
-                        .fill(
-                            RadialGradient(
-                                colors: [tint.opacity(0.85), tint.opacity(0.35), tint.opacity(0)],
-                                center: .center,
-                                startRadius: 2,
-                                endRadius: 66
-                            )
-                        )
-                        .frame(width: 150, height: 78)
-                        .offset(y: 20)
-                        .blur(radius: 14)
-
-                    Text(displayPosition)
-                        .font(TamrinFont.font(size: 13, weight: .bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                        .background(Capsule(style: .continuous).fill(tint))
-                }
-                .position(x: geo.size.width / 2, y: y)
-            }
-        }
-        .frame(width: Self.width, height: Self.height)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("مركزه: \(displayPosition)")
-    }
-}
-
-/// The pitch itself, drawn faintly enough that the pill stays the subject:
-/// the touchline, the goal area the attack runs at, and the centre circle
-/// breaking the near edge.
-private struct PitchMarkings: View {
-    var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            let h = geo.size.height
-            let line = Color.primary.opacity(0.10)
-            let boxWidth = w * 0.44
-            let boxHeight = h * 0.20
-            let circle = h * 0.34
-
-            ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(line, lineWidth: 1)
-
-                // Goal area at the far end.
-                Rectangle()
-                    .strokeBorder(line, lineWidth: 1)
-                    .frame(width: boxWidth, height: boxHeight)
-                    .position(x: w / 2, y: boxHeight / 2)
-
-                // The centre circle sits on the near edge, so the panel reads
-                // as the half of the pitch being attacked.
-                Circle()
-                    .strokeBorder(line, lineWidth: 1)
-                    .frame(width: circle, height: circle)
-                    .position(x: w / 2, y: h)
-            }
-            .clipShape(.rect(cornerRadius: 10, style: .continuous))
-        }
+        Text(position)
+            .font(TamrinFont.font(size: 13, weight: .bold))
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            .background(tint.opacity(0.14), in: .capsule)
+            .accessibilityLabel("مركزه: \(position)")
     }
 }
 

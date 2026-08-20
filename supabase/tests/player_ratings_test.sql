@@ -72,8 +72,9 @@ begin
     raise exception 'FAIL: defender overall %',
       public.player_rating_overall('دفاع', 60, 90, 70, 80, 50, 85);
   end if;
-  -- No goalkeeper formula was supplied, so it deliberately follows defence.
-  if public.player_rating_overall('حارس', 60, 90, 70, 80, 50, 85) <> 71 then
+  -- Keeper: defend .35 + awareness .25 + stamina .15 + pass .10 + pace .10
+  --         + shoot .05  →  69.25, which rounds up.
+  if public.player_rating_overall('حارس', 60, 90, 70, 80, 50, 85) <> 69 then
     raise exception 'FAIL: goalkeeper overall %',
       public.player_rating_overall('حارس', 60, 90, 70, 80, 50, 85);
   end if;

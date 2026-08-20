@@ -139,6 +139,9 @@ struct ParticipantRecord: Codable, Identifiable {
     let addedBy: UUID?
     /// Nil on a server that predates manual registration.
     let addedManually: Bool?
+    /// When the payer said they transferred. Nil on a seat that is held but
+    /// not yet paid for, and on a server that predates pay-after-registering.
+    let paymentDeclaredAt: String?
     /// Only the organizer receives this; it is what the payment-reminder
     /// cooldown is measured from. Nil on a server that predates reminders.
     let paymentReminderSentAt: String?
@@ -170,6 +173,13 @@ struct ParticipantRecord: Codable, Identifiable {
 
     var paymentReminderSentAtDate: Date? { Self.timestamp(paymentReminderSentAt) }
 
+    var paymentDeclaredAtDate: Date? { Self.timestamp(paymentDeclaredAt) }
+
+    /// The seat is taken but its share has not been declared yet. A server
+    /// that predates the column reports every pending seat as declared, which
+    /// is what it used to mean.
+    var isAwaitingPayment: Bool { isPending && paymentDeclaredAt == nil }
+
     /// True if the row represents a confirmed seat.
     var isConfirmed: Bool { (paymentStatus ?? .confirmed) == .confirmed }
 
@@ -188,6 +198,7 @@ struct ParticipantRecord: Codable, Identifiable {
         case guestName = "guest_name"
         case addedBy = "added_by"
         case addedManually = "added_manually"
+        case paymentDeclaredAt = "payment_declared_at"
         case paymentReminderSentAt = "payment_reminder_sent_at"
     }
 }
@@ -687,6 +698,69 @@ final class EventService {
         let records = try JSONDecoder().decode([ParticipantRecord].self, from: response.data)
         eventLogger.info("API getEventParticipants succeeded (eventId: \(eventId), count: \(records.count))")
         return records
+    }
+
+    /// Takes a seat without paying for it. A paid exercise is now joined first
+    /// and settled later, so this is the only call registration makes.
+    func registerEventSeat(
+        eventId: UUID,
+        guestNames: [String],
+        expectedPricePerPerson: Double?
+    ) async throws -> String {
+        var params: [String: AnyJSON] = [
+            "p_event_id": .string(eventId.uuidString),
+            "p_guest_names": .array(guestNames.map { .string($0) })
+        ]
+        if let expectedPricePerPerson {
+            params["p_expected_price_per_person"] = .double(expectedPricePerPerson)
+        }
+
+        let response = try await client
+            .rpc("register_event_seat", params: params)
+            .execute()
+
+        guard
+            let payload = try JSONSerialization.jsonObject(with: response.data) as? [String: Any],
+            let status = payload["status"] as? String
+        else {
+            throw NSError(
+                domain: "EventService",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "تعذر قراءة رد الخادم."]
+            )
+        }
+        eventLogger.info("API registerEventSeat -> \(status)")
+        return status
+    }
+
+    /// «حوّلت المبلغ»: marks the caller's own seat, and the guest seats they
+    /// are responsible for, as declared — awaiting the organizer's word that it
+    /// arrived. Seats already declared are untouched.
+    func declareEventPayment(
+        eventId: UUID,
+        paymentMethodId: UUID
+    ) async throws -> String {
+        let params: [String: String] = [
+            "p_event_id": eventId.uuidString,
+            "p_payment_method_id": paymentMethodId.uuidString
+        ]
+
+        let response = try await client
+            .rpc("declare_event_payment", params: params)
+            .execute()
+
+        guard
+            let payload = try JSONSerialization.jsonObject(with: response.data) as? [String: Any],
+            let status = payload["status"] as? String
+        else {
+            throw NSError(
+                domain: "EventService",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "تعذر قراءة رد الخادم."]
+            )
+        }
+        eventLogger.info("API declareEventPayment -> \(status)")
+        return status
     }
 
     /// Registers a person by name on behalf of the organizer. The seat is real:

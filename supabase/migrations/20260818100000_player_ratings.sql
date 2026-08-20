@@ -42,10 +42,11 @@ revoke all on table public.player_ratings from public, anon, authenticated;
 -- Weights are per position and each set sums to 1.00. Anything outside the
 -- known positions — a custom position typed into the profile, or a blank one —
 -- is scored on the defender's set for read-only legacy data. New writes reject
--- a missing/unknown position. A goalkeeper also follows the supplied defender
--- weights until a dedicated goalkeeper formula is defined. The Swift side
--- mirrors this table so the flow can show a live Overall
--- before it submits; the two must be changed together.
+-- a missing/unknown position. The goalkeeper has his own set: he is judged on
+-- stopping and reading the ball, so defending and awareness carry more than
+-- they do for an outfield defender and shooting is left a token weight. The
+-- Swift side mirrors this table so the flow can show a live Overall before it
+-- submits; the two must be changed together.
 -- --------------------------------------------------------------------------
 create or replace function public.player_rating_overall(
   p_position text,
@@ -71,8 +72,8 @@ as $$
       + p_stamina * 0.15 + p_defending * 0.10 + p_pace * 0.10
     )
     when 'حارس' then round(
-      p_defending * 0.30 + p_awareness * 0.20 + p_passing * 0.15
-      + p_stamina * 0.15 + p_shooting * 0.10 + p_pace * 0.10
+      p_defending * 0.35 + p_awareness * 0.25 + p_stamina * 0.15
+      + p_passing * 0.10 + p_pace * 0.10 + p_shooting * 0.05
     )
     else round(
       p_defending * 0.30 + p_awareness * 0.20 + p_passing * 0.15

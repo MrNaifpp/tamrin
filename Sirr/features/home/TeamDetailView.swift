@@ -8,6 +8,9 @@ struct TeamDetailView: View {
     @Bindable var feed: HomeStore
     @Environment(\.dismiss) private var dismiss
     @State private var selectedPlanID: UUID?
+    /// The member whose details sheet is open, if any.
+    @State private var memberInDetails: FeedTeamMember?
+    @State private var memberAwaitingRemoval: FeedTeamMember?
     @State private var didCopyCode = false
     @State private var showDeleteConfirm = false
     @State private var showAddSession = false
@@ -45,11 +48,15 @@ struct TeamDetailView: View {
     /// A neutral surface rather than Home's blurred photograph. The artwork is
     /// warm, and behind this much text and this many cards it washed the whole
     /// page out to a muddy brown instead of letting the content read.
+    /// The group's own colour, falling back to the palette's first entry while
+    /// the group is still loading.
+    private var teamColor: TeamColor { team?.color ?? TeamColor.allCases[0] }
+
     private var backdrop: some View {
         ZStack {
             Color(white: 0.07)
             Circle()
-                .fill(TamrinTheme.lime.opacity(0.14))
+                .fill(teamColor.color.opacity(0.14))
                 .frame(width: 300, height: 300)
                 .blur(radius: 120)
                 .offset(y: -320)
@@ -157,6 +164,36 @@ struct TeamDetailView: View {
                  ? "بيُحذف التمرين وكل مواعيده وأعضائه وطرق الدفع من عندك. تقدر تنشئ تمرينًا جديدًا أي وقت."
                  : "بتغادر التمرين وتختفي مواعيده من عندك. تقدر ترجع أي وقت برمز الدعوة.")
         }
+        .sheet(item: $memberInDetails) { member in
+            let shape = rosterShape(of: member)
+            PlayerDetailsSheet(
+                member: shape,
+                avatarImageData: member.id == feed.currentUserID ? feed.avatarData : nil,
+                share: 0,
+                loadRating: feed.canRate(shape)
+                    ? { try await feed.playerRating(for: shape) }
+                    : nil,
+                submitRating: feed.canRate(shape)
+                    ? { try await feed.submitPlayerRating($0, for: shape) }
+                    : nil,
+                removeTitle: "إزالة من المجموعة",
+                onRemove: feed.isCurrentTeamOwner && member.id != feed.currentUserID
+                    ? { memberAwaitingRemoval = member }
+                    : nil
+            )
+        }
+        .alert("إزالة من المجموعة؟", isPresented: Binding(
+            get: { memberAwaitingRemoval != nil },
+            set: { if !$0 { memberAwaitingRemoval = nil } }
+        )) {
+            Button("إزالة", role: .destructive) {
+                if let member = memberAwaitingRemoval { removeFromGroup(member) }
+                memberAwaitingRemoval = nil
+            }
+            Button("تراجع", role: .cancel) { memberAwaitingRemoval = nil }
+        } message: {
+            Text("سيُزال \(memberAwaitingRemoval?.displayName ?? "العضو") من المجموعة وتختفي مواعيدها من عنده.")
+        }
         .sheet(isPresented: $showAddSession) {
             AddSessionSheet(feed: feed,
                             isPresented: $showAddSession,
@@ -197,10 +234,10 @@ struct TeamDetailView: View {
                 symbol: team?.symbol ?? "figure.run",
                 size: 78,
                 cornerRadiusRatio: 0.5,
-                fallbackBackground: AnyShapeStyle(TamrinTheme.lime),
-                symbolColor: TamrinTheme.ink
+                fallbackBackground: AnyShapeStyle(teamColor.color),
+                symbolColor: teamColor.symbolColor
             )
-            .shadow(color: TamrinTheme.lime.opacity(0.3), radius: 24, y: 10)
+            .shadow(color: teamColor.color.opacity(0.3), radius: 24, y: 10)
 
             VStack(spacing: 4) {
                 Text(team?.name ?? "التمرين")
@@ -364,6 +401,24 @@ struct TeamDetailView: View {
 
     // MARK: - Members
 
+    /// A team member seen as the player sheet sees people. There is no
+    /// exercise behind this page, so there is no seat and no share — the sheet
+    /// shows who they are and how the group rates them.
+    private func removeFromGroup(_ member: FeedTeamMember) {
+        Task { await feed.removeMember(member.id) }
+    }
+
+    private func rosterShape(of member: FeedTeamMember) -> FeedMember {
+        FeedMember(
+            id: member.id,
+            name: member.displayName,
+            status: .registered,
+            userId: member.id,
+            avatarUrl: member.avatarUrl,
+            position: member.position
+        )
+    }
+
     private var membersCard: some View {
         PlanGlassSection(
             title: "الأعضاء",
@@ -387,6 +442,10 @@ struct TeamDetailView: View {
                             subtitle: member.isPending
                                 ? "بانتظار الانضمام"
                                 : (member.role == .admin ? "مشرف التمرين" : "عضو"),
+                            avatarImageData: member.id == feed.currentUserID
+                                ? feed.avatarData
+                                : nil,
+                            avatarImageUrl: member.avatarUrl,
                             avatarTint: member.role == .admin
                                 ? TamrinTheme.lime
                                 : .white.opacity(0.28),
@@ -402,7 +461,14 @@ struct TeamDetailView: View {
                                     .foregroundStyle(.orange)
                             }
                         }
+                        // The same card opens the same sheet it opens on the
+                        // exercise roster: a person is a person on both pages.
+                        .contentShape(.rect)
+                        .onTapGesture { memberInDetails = member }
                         .accessibilityElement(children: .combine)
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityHint("يفتح تفاصيل اللاعب وتقييمه")
+                        .accessibilityAction { memberInDetails = member }
                     }
                 }
             }

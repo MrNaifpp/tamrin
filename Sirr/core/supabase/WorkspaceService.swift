@@ -20,10 +20,12 @@ struct WorkspaceRecord: Codable, Identifiable, Hashable {
     let inviteCode: String?
     let imageUrl: String?
     let symbol: String?
+    /// The colour picked beside the symbol. Nil on a server that predates it.
+    let color: String?
     let memberCount: Int?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, symbol
+        case id, name, symbol, color
         case ownerId = "owner_id"
         case inviteCode = "invite_code"
         case imageUrl = "image_url"
@@ -42,6 +44,8 @@ struct WorkspaceMemberRecord: Codable, Identifiable, Hashable {
     let userId: UUID
     let displayName: String?
     let avatarUrl: String?
+    /// Their profile position, misspelled in the schema since the baseline.
+    let position: String?
     let isOwner: Bool
 
     var id: UUID { userId }
@@ -50,6 +54,7 @@ struct WorkspaceMemberRecord: Codable, Identifiable, Hashable {
         case userId = "user_id"
         case displayName = "display_name"
         case avatarUrl = "avatar_url"
+        case position = "postion"
         case isOwner = "is_owner"
     }
 }
@@ -80,10 +85,17 @@ final class WorkspaceService {
     static let shared = WorkspaceService()
     private let client = SupabaseClientManager.shared.client
 
-    func createWorkspace(name: String, symbol: String? = nil) async throws -> WorkspaceRecord {
+    func createWorkspace(
+        name: String,
+        symbol: String? = nil,
+        color: String? = nil
+    ) async throws -> WorkspaceRecord {
         var params = ["p_name": name]
         if let symbol {
             params["p_symbol"] = symbol
+        }
+        if let color {
+            params["p_color"] = color
         }
         let response = try await client
             .rpc("create_workspace", params: params)

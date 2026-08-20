@@ -525,6 +525,17 @@ struct DesignerHomeView: View {
                 isEnabled: false,
                 action: {}
             )
+        case .awaitingPayment:
+            // The seat is held; the card's job is to get the share paid.
+            primary = EventPosterCardAction(
+                id: "pay",
+                title: "دفع القطة",
+                systemImage: "banknote.fill",
+                kind: .primary
+            ) {
+                registrationEntryEventID = occurrence.id
+                selected = occurrence
+            }
         case .paymentPending:
             primary = EventPosterCardAction(
                 id: "pending",

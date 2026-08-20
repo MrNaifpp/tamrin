@@ -95,8 +95,8 @@ enum PlayerPosition: String, CaseIterable {
     }
 
     /// The colour that identifies the position at a glance: forward green,
-    /// midfield amber, defence red. The keeper keeps a distinct blue visually,
-    /// even while using defence weights until product defines keeper weights.
+    /// midfield amber, defence red, keeper blue — he has his own weights, so
+    /// he gets his own colour rather than borrowing the defender's.
     var tint: Color {
         switch self {
         case .forward: return Color(red: 0.42, green: 0.78, blue: 0.35)
@@ -118,10 +118,14 @@ enum PlayerPosition: String, CaseIterable {
         case .forward:
             return [.shooting: 30, .awareness: 20, .passing: 15,
                     .stamina: 15, .defending: 10, .pace: 10]
-        case .goalkeeper, .defender:
-            // No goalkeeper formula was supplied. Until product defines one,
-            // a keeper follows the provided defensive formula rather than an
-            // invented fourth set of weights.
+        case .goalkeeper:
+            // A keeper is judged on the two things that decide his game —
+            // stopping the ball and reading it — so defending and awareness
+            // carry more than they do for an outfield defender, and shooting
+            // is left as the token weight it deserves.
+            return [.defending: 35, .awareness: 25, .stamina: 15,
+                    .passing: 10, .pace: 10, .shooting: 5]
+        case .defender:
             return [.defending: 30, .awareness: 20, .passing: 15,
                     .stamina: 15, .shooting: 10, .pace: 10]
         }

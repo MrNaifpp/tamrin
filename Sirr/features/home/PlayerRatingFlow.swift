@@ -1,5 +1,53 @@
 import SwiftUI
 
+/// The colour this flow moves forward on, shared by its progress track and its
+/// primary button so they read as one motion.
+private let ratingForward = Color(red: 0.20, green: 0.47, blue: 0.96)
+
+/// The rating flow as its own surface: a half sheet over the player's sheet,
+/// fixed at that height and never scrolling. Every step is built to fit it, so
+/// the flow reads as one screen you answer rather than a page you hunt through
+/// — which is why it cannot share the player's sheet, that one grows and
+/// scrolls.
+struct PlayerRatingSheet: View {
+    let playerName: String
+    let position: PlayerPosition
+    var initial: PlayerRatingScores?
+    let submit: @MainActor (PlayerRatingScores) async throws -> SubmitRatingResult
+    let onFinish: (PlayerRatingSummary) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            PlayerRatingFlowView(
+                playerName: playerName,
+                position: position,
+                initial: initial,
+                submit: submit,
+                onFinish: onFinish
+            )
+            .padding(.horizontal, 20)
+            .padding(.top, 4)
+            .padding(.bottom, 12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    // Leaving the flow is a step back to the player's sheet
+                    // underneath, not out of the player altogether.
+                    Button("إلغاء") { dismiss() }
+                        .fontWeight(.semibold)
+                }
+            }
+        }
+        .environment(\.layoutDirection, .rightToLeft)
+        // One detent, no scroll view anywhere inside: the six steps and the
+        // summary are each sized to sit inside a half sheet.
+        .presentationDetents([.medium])
+        .presentationDragIndicator(.visible)
+    }
+}
+
 /// Rating a player, six attributes at a time, without ever leaving the player's
 /// sheet. One attribute fills the sheet at a time — a number that large is hard
 /// to answer carelessly — and the seventh screen is the Overall those six blend
@@ -49,16 +97,15 @@ struct PlayerRatingFlowView: View {
         VStack(spacing: 12) {
             header
 
+            // No scroll view anywhere in here: both steps are sized to fit the
+            // half sheet, and each takes the room the sheet offers so the
+            // primary button stays on its bottom edge.
             if let attribute {
                 attributeStep(attribute)
                     .frame(maxHeight: .infinity)
             } else {
-                ScrollView(.vertical, showsIndicators: false) {
-                    summaryStep
-                        .padding(.vertical, 2)
-                }
-                .scrollBounceBehavior(.basedOnSize)
-                .frame(maxHeight: .infinity)
+                summaryStep
+                    .frame(maxHeight: .infinity, alignment: .top)
             }
 
             if let errorMessage {
@@ -79,16 +126,18 @@ struct PlayerRatingFlowView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 7) {
-            // Keep both labels on the player's side of the header. The native
-            // navigation-bar Cancel action owns the opposite corner, and a
-            // split HStack let the step count drift underneath that glass pill.
-            VStack(alignment: .leading, spacing: 2) {
-                Text(isSummary ? "تقييمك لـ \(playerName)" : "قيّم \(playerName)")
-                    .font(TamrinFont.font(size: 15, weight: .medium))
-                    .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Text(playerName)
+                    .font(TamrinFont.font(size: 15, weight: .bold))
                     .lineLimit(1)
 
-                Text(isSummary ? "النتيجة" : "\((stepIndex + 1).tamrinNumber) من \(PlayerAttribute.allCases.count.tamrinNumber)")
+                PositionTag(position: position.rawValue)
+
+                Spacer(minLength: 6)
+
+                Text(isSummary
+                     ? "النتيجة"
+                     : "\((stepIndex + 1).tamrinNumber) من \(PlayerAttribute.allCases.count.tamrinNumber)")
                     .font(TamrinFont.font(size: 13, weight: .bold))
                     .foregroundStyle(.secondary)
                     .contentTransition(.numericText())
@@ -122,12 +171,6 @@ struct PlayerRatingFlowView: View {
                 .contentTransition(.numericText(value: Double(scores[attribute])))
                 .animation(.smooth(duration: 0.35), value: scores[attribute])
 
-            Label(
-                "تقييمك مجهول، ولن يظهر اسمك للاعب.",
-                systemImage: "eye.slash.fill"
-            )
-            .font(TamrinFont.font(size: 11, weight: .regular))
-            .foregroundStyle(.secondary)
 
             RatingRuler(
                 value: Binding(
@@ -140,26 +183,32 @@ struct PlayerRatingFlowView: View {
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 14)
         .padding(.vertical, 16)
-        .background(TamrinTheme.card, in: .rect(cornerRadius: 24, style: .continuous))
     }
 
     // MARK: - Summary
 
+    /// Cut to the half sheet it has to fit: the crest sits beside its band
+    /// instead of above it, which is the row that bought the six bars their
+    /// room back.
     private var summaryStep: some View {
-        VStack(spacing: 16) {
-            VStack(spacing: 8) {
-                RatingCrest(value: overall, size: 104)
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
+                RatingCrest(value: overall, size: 60)
 
-                Text(RatingBand.label(for: overall))
-                    .font(TamrinFont.font(size: 17, weight: .bold))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(RatingBand.label(for: overall))
+                        .font(TamrinFont.font(size: 17, weight: .bold))
 
-                // Naming the weighting is what keeps the number from looking
-                // arbitrary: a defender's Overall is not a striker's average.
-                Text("محسوب بأوزان مركز \(position.rawValue)")
-                    .font(TamrinFont.font(size: 13, weight: .regular))
-                    .foregroundStyle(.secondary)
+                    // Naming the weighting is what keeps the number from looking
+                    // arbitrary: a defender's Overall is not a striker's average.
+                    Text("محسوب بأوزان مركز \(position.rawValue)")
+                        .font(TamrinFont.font(size: 12, weight: .regular))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity)
 
             AttributeGrid(scores: scores, onSelect: { attribute in
                 Haptics.selection()
@@ -167,16 +216,16 @@ struct PlayerRatingFlowView: View {
             })
 
             Label(
-                "التقييمات مجهولة — اللاعب يشوف متوسط تقييمه فقط، وما يعرف مين قيّمه.",
+                "التقييمات مجهولة — اللاعب يشوف متوسط تقييمه فقط.",
                 systemImage: "eye.slash.fill"
             )
-            .font(TamrinFont.font(size: 12, weight: .regular))
+            .font(TamrinFont.font(size: 11, weight: .regular))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(18)
-        .background(TamrinTheme.card, in: .rect(cornerRadius: 24, style: .continuous))
+        .padding(12)
+        .background(TamrinTheme.card, in: .rect(cornerRadius: 22, style: .continuous))
     }
 
     // MARK: - Controls
@@ -184,15 +233,19 @@ struct PlayerRatingFlowView: View {
     private var controls: some View {
         HStack(spacing: 10) {
             if stepIndex > 0 {
+                // A circular icon button, sized by the system rather than by a
+                // frame of mine: asking a capsule to hold one glyph is what
+                // produced a ball taller than the primary beside it.
                 Button {
                     Haptics.selection()
                     stepIndex -= 1
                 } label: {
                     Image(systemName: "chevron.backward")
                         .font(.system(size: 15, weight: .semibold))
-                        .frame(width: 42, height: 42)
                 }
-                .tamrinSecondaryAction()
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .controlSize(.large)
                 .accessibilityLabel("رجوع")
             }
 
@@ -201,14 +254,15 @@ struct PlayerRatingFlowView: View {
             } label: {
                 HStack(spacing: 8) {
                     if isSubmitting {
-                        ProgressView().controlSize(.small).tint(TamrinTheme.ink)
+                        ProgressView().controlSize(.small).tint(.white)
                     }
                     Text(primaryTitle)
                         .font(TamrinFont.font(size: 16, weight: .bold))
                 }
                 .frame(maxWidth: .infinity)
             }
-            .tamrinPrimaryAction(tint: TamrinTheme.lime)
+            // Blue: the same forward motion the registration flow uses.
+            .tamrinPrimaryAction(tint: ratingForward)
             .disabled(isSubmitting)
         }
     }
@@ -267,7 +321,7 @@ private struct StepTrack: View {
         HStack(spacing: 5) {
             ForEach(0..<total, id: \.self) { index in
                 Capsule()
-                    .fill(index <= current ? TamrinTheme.lime : Color.primary.opacity(0.12))
+                    .fill(index <= current ? ratingForward : Color.primary.opacity(0.12))
                     .frame(height: 5)
             }
         }
