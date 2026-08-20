@@ -1937,13 +1937,15 @@ struct RegistrationFlowSheet: View {
 
     private var successStep: some View {
         VStack(spacing: 14) {
-            Color.clear.frame(height: 26)
+            Color.clear.frame(height: 4)
 
             ZStack {
-                Circle().fill(TamrinTheme.lime)
+                // The flow's own accent, so the seal on the last screen is the
+                // colour of the button that got you here.
+                Circle().fill(Self.accent)
                 Image(systemName: successSymbol)
                     .font(.system(size: 31, weight: .bold))
-                    .foregroundStyle(TamrinTheme.ink)
+                    .foregroundStyle(.white)
             }
             .frame(width: 76, height: 76)
 
@@ -1956,6 +1958,11 @@ struct RegistrationFlowSheet: View {
                 .foregroundStyle(.white.opacity(0.62))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 28)
+
+            // The slack sits under the seal rather than over it: the news
+            // reads from the top of the sheet, and the button keeps its
+            // distance from it.
+            Color.clear.frame(height: 22)
 
             primaryButton(title: "تم", color: .white, foregroundColor: .black) {
                 dismiss()
