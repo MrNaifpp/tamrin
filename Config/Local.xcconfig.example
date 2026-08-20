@@ -5,5 +5,8 @@
 // the project file can finally be committed.
 //
 // Find your team id at developer.apple.com ▸ Membership.
+//
+// This id is used by Debug and Release. Staging.xcconfig hardcodes its own
+// (`com.businessech.tmrin.staging`) and ignores whatever is set here.
 DEVELOPMENT_TEAM =
 PRODUCT_BUNDLE_IDENTIFIER =
