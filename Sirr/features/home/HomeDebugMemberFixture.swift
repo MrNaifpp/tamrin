@@ -46,7 +46,7 @@ enum HomeDebugMemberFixture {
 
     static let team = FeedTeam(
         id: teamID,
-        name: "١ — عضو: قبول فوري وتقييم",
+        name: "١ — عضو: قبول فوري",
         symbol: "figure.soccer",
         color: .lime,
         avatarData: nil,
@@ -385,12 +385,11 @@ enum HomeDebugMemberFixture {
         return result
     }
 
-    /// One player per position the Overall weights differently, so the rating
-    /// can be tried against every branch of the weighting table without
-    /// editing anyone's profile.
+    /// One player per position, so a roster in the fixture covers every
+    /// position the app offers without editing anyone's profile.
     private static let rosterSeed: [(name: String, position: String)] = [
-        ("سلمان — بلا تقييم حتى الآن", "وسط"),
-        ("عبدالعزيز — سبق وقيّمته", "هجوم"),
+        ("سلمان — وسط", "وسط"),
+        ("عبدالعزيز — مهاجم", "هجوم"),
         ("تركي — مدافع", "دفاع"),
         ("ماجد — حارس", "حارس"),
         ("خالد — وسط", "وسط"),
@@ -408,9 +407,9 @@ enum HomeDebugMemberFixture {
                 id: id,
                 name: seed.name,
                 status: .registered,
-                // A rating hangs on an account, so these carry one. They are
-                // fixture ids: HomeStore answers for them locally and never
-                // sends them anywhere.
+                // These carry an account id of their own. They are fixture
+                // ids: HomeStore answers for them locally and never sends them
+                // anywhere.
                 userId: id,
                 joinedAt: referenceDate.addingTimeInterval(Double(-index) * 3600 - 7200),
                 position: seed.position
@@ -427,49 +426,6 @@ enum HomeDebugMemberFixture {
         guard isEnabled else { return false }
         return (0..<rosterSeed.count).contains { playerID(at: $0) == id }
             || (0..<ownerAccountSeed.count).contains { ownerPlayerID(at: $0) == id }
-    }
-
-    /// My own rating of each fixture player, for the life of the session. It
-    /// sits beside the seeded ratings rather than on `HomeStore` because it is
-    /// fixture data, not app state, and nothing observes it.
-    nonisolated(unsafe) static var submittedRatings: [UUID: PlayerRatingScores] = [
-        playerID(at: 1): PlayerRatingScores(
-            pace: 82,
-            passing: 76,
-            shooting: 91,
-            stamina: 79,
-            defending: 54,
-            awareness: 87
-        )
-    ]
-
-    /// Ratings other people already left, so the average the flow reveals is a
-    /// crowd's rather than an echo of the one rating just submitted. Two per
-    /// player, deterministic, spread wide enough that the six bars differ.
-    static func seededRatings(for player: UUID) -> [PlayerRatingScores] {
-        let index: Int
-        if let i = (0..<rosterSeed.count).first(where: { playerID(at: $0) == player }) {
-            index = i
-        } else if let i = (0..<ownerAccountSeed.count).first(where: { ownerPlayerID(at: $0) == player }) {
-            index = i + rosterSeed.count
-        } else {
-            return []
-        }
-
-        // The first player's empty aggregate exercises the exact
-        // "باقي ما قُيم" state. Every other account starts with a crowd average.
-        if player == playerID(at: 0) { return [] }
-
-        return (0..<2).map { rater in
-            var scores = PlayerRatingScores.neutral
-            for (offset, attribute) in PlayerAttribute.allCases.enumerated() {
-                // A fixed spiral through the range: no randomness, so the same
-                // player shows the same numbers on every launch.
-                let base = 52 + ((index * 13) + (offset * 17) + (rater * 9)) % 44
-                scores[attribute] = base
-            }
-            return scores
-        }
     }
 
     static func destination(for occurrence: FeedOccurrence) -> PaymentDestination {

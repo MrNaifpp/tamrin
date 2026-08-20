@@ -59,20 +59,6 @@ struct EventDetailView: View {
         roster.firstIndex { $0.id == member.id }.map { $0 + 1 }
     }
 
-    /// Nil only for a guest. A player can open their own sheet and read the
-    /// anonymous group average; self-rating is prevented by the submitter.
-    private func ratingLoader(for member: FeedMember) -> (@MainActor () async throws -> PlayerRatingSummary)? {
-        guard member.userId != nil else { return nil }
-        return { try await feed.playerRating(for: member) }
-    }
-
-    private func ratingSubmitter(
-        for member: FeedMember
-    ) -> (@MainActor (PlayerRatingScores) async throws -> SubmitRatingResult)? {
-        guard feed.canRate(member) else { return nil }
-        return { try await feed.submitPlayerRating($0, for: member) }
-    }
-
     /// Guests carry the account id that registered them. Resolve it through
     /// the exercise membership list so every viewer sees a human name without
     /// exposing an opaque UUID in the roster.
@@ -324,8 +310,6 @@ struct EventDetailView: View {
                 seatNumber: seatNumber(of: member),
                 // A player's share and payment state are organizer-only.
                 showsPayment: feed.isCurrentTeamOwner,
-                loadRating: ratingLoader(for: member),
-                submitRating: ratingSubmitter(for: member),
                 registeredByName: registeredByName(for: member),
                 // A free exercise has nothing to chase, a guest or a manually
                 // seated player has no account to notify, and nobody needs to

@@ -17,7 +17,6 @@ struct ArabicNoun {
     static let member = ArabicNoun(singular: "عضو", dual: "عضوان", plural: "أعضاء")
     static let seat = ArabicNoun(singular: "مقعد", dual: "مقعدين", plural: "مقاعد")
     static let session = ArabicNoun(singular: "موعد", dual: "موعدين", plural: "مواعيد")
-    static let rating = ArabicNoun(singular: "تقييم", dual: "تقييمين", plural: "تقييمات")
 }
 
 extension Int {

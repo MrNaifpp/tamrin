@@ -170,12 +170,6 @@ struct TeamDetailView: View {
                 member: shape,
                 avatarImageData: member.id == feed.currentUserID ? feed.avatarData : nil,
                 share: 0,
-                loadRating: feed.canRate(shape)
-                    ? { try await feed.playerRating(for: shape) }
-                    : nil,
-                submitRating: feed.canRate(shape)
-                    ? { try await feed.submitPlayerRating($0, for: shape) }
-                    : nil,
                 removeTitle: "إزالة من المجموعة",
                 onRemove: feed.isCurrentTeamOwner && member.id != feed.currentUserID
                     ? { memberAwaitingRemoval = member }
