@@ -73,6 +73,22 @@ Deno.test("registration_reminder copy interpolates the event name", () => {
   });
 });
 
+Deno.test("waitlist_promoted copy interpolates the event name", () => {
+  const c = copyFor("waitlist_promoted", "تمرين الخميس");
+  assertEquals(c, {
+    title: "تحرر مقعد — أنت داخل 🎉",
+    body: "انضممت من قائمة الانتظار إلى تمرين الخميس. نراك هناك! 🙌",
+  });
+});
+
+Deno.test("member_declined copy interpolates the event name", () => {
+  const c = copyFor("member_declined", "تمرين الخميس");
+  assertEquals(c, {
+    title: "اعتذار عن التمرين",
+    body: "اعتذر أحد اللاعبين عن تمرين الخميس. افتح التمرين لمراجعة القائمة.",
+  });
+});
+
 Deno.test("unknown type returns null", () => {
   assertEquals(copyFor("nope", "x"), null);
 });

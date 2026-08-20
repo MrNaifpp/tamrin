@@ -1117,6 +1117,10 @@ struct EnrollmentSheetView: View {
                     case .seatsFull:
                         onSeatsFull?()
                         dismiss()
+                    case .closedAtCapacity:
+                        // No queue to offer on a session that closes at capacity.
+                        paymentError = "اكتمل العدد، وهذا الموعد يقفل التسجيل عند الاكتمال"
+
                     case .alreadyJoined(let status):
                         switch status {
                         case .confirmed: paymentError = "أنت مسجل بالفعل في هذه الفعالية"
