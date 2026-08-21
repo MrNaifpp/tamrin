@@ -2,8 +2,11 @@ import Combine
 import SwiftUI
 
 /// Who this player is on this exercise. The sheet opens on the player
-/// themselves — photo and name, no chrome above it — and everything the
-/// organizer might act on follows underneath.
+/// themselves — photo, position and name, no chrome above it — and everything
+/// anyone might act on follows underneath.
+///
+/// Two audiences read the same sheet. Everyone sees who the player is and how
+/// the group rates him; only the organizer sees the money.
 struct PlayerDetailsSheet: View {
     let member: FeedMember
     /// A photo already in memory — mine, before its upload has landed.
@@ -12,9 +15,18 @@ struct PlayerDetailsSheet: View {
     let share: Double
     /// 1-based position in the roster: who took the third seat, and so on.
     var seatNumber: Int?
+    /// The share and its status are the organizer's business. Everyone else
+    /// reads the sheet without them, including the player themselves.
+    var showsPayment: Bool = false
+    /// Guests have no account of their own; this names the member who reserved
+    /// their seat instead of leaving the relationship hidden behind an id.
+    var registeredByName: String?
     /// Nil hides the reminder button — a free exercise, a player with no
     /// account to reach, or a viewer who is not the organizer.
     var onRemind: (@MainActor () async -> HomeStore.PaymentReminderOutcome)?
+    /// What removing this person means where the sheet was opened from: out of
+    /// this exercise, or out of the group entirely.
+    var removeTitle: String = "إزالة اللاعب من التمرين"
     /// Nil for a member who is not the organizer's to remove.
     var onRemove: (() -> Void)?
 
@@ -35,6 +47,9 @@ struct PlayerDetailsSheet: View {
         avatarImageData: Data? = nil,
         share: Double,
         seatNumber: Int? = nil,
+        showsPayment: Bool = false,
+        registeredByName: String? = nil,
+        removeTitle: String = "إزالة اللاعب من التمرين",
         onRemind: (@MainActor () async -> HomeStore.PaymentReminderOutcome)? = nil,
         onRemove: (() -> Void)? = nil
     ) {
@@ -42,6 +57,9 @@ struct PlayerDetailsSheet: View {
         self.avatarImageData = avatarImageData
         self.share = share
         self.seatNumber = seatNumber
+        self.showsPayment = showsPayment
+        self.removeTitle = removeTitle
+        self.registeredByName = registeredByName
         self.onRemind = onRemind
         self.onRemove = onRemove
         _cooldownEndsAt = State(
@@ -53,22 +71,22 @@ struct PlayerDetailsSheet: View {
     /// useful on the day of the exercise.
     private static let cooldown: TimeInterval = 3600
 
-    private var isPaid: Bool {
-        switch member.status {
-        case .registered: return true
-        case .paymentPending, .waitlisted: return false
-        }
-    }
-
     private var paymentTile: (value: String, caption: String, symbol: String, tint: Color) {
         switch member.status {
         case .registered:
             return ("مسدّدة", "حالة القطة", "checkmark.seal.fill", TamrinTheme.brandGreen)
+        case .awaitingPayment:
+            return ("لم تُدفع", "حالة القطة", "banknote", .orange)
         case .paymentPending:
             return ("بانتظار تأكيدك", "حالة القطة", "hourglass", .orange)
         case .waitlisted:
             return ("في الانتظار", "مكانه بالقائمة", "person.badge.clock.fill", .orange)
         }
+    }
+
+
+    private var positionText: String {
+        member.position.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var remaining: TimeInterval {
@@ -87,49 +105,69 @@ struct PlayerDetailsSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 22) {
-                identity
-                facts
-
-                if let errorMessage {
-                    Label(errorMessage, systemImage: "exclamationmark.circle.fill")
-                        .font(TamrinFont.footnote)
-                        .foregroundStyle(.red)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .transition(.blurReplace)
+            details
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 20)
+                .frame(maxWidth: .infinity)
+                .scrollableSheetContent()
+                .frame(maxHeight: .infinity, alignment: .top)
+                .background(Color.clear)
+                .animation(.smooth(duration: 0.3), value: justSent)
+                .animation(.smooth(duration: 0.28), value: errorMessage)
+                .onReceive(ticker) { now = $0 }
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("تم") { dismiss() }
+                            .fontWeight(.semibold)
+                    }
                 }
-
-                VStack(spacing: 10) {
-                    if onRemind != nil { reminderButton }
-                    if let onRemove { removeButton(onRemove) }
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
-            .padding(.bottom, 20)
-            .frame(maxWidth: .infinity)
-            .sheetContentHeight()
-            .frame(maxHeight: .infinity, alignment: .top)
-            .background(TamrinTheme.sheet)
-            .animation(.smooth(duration: 0.3), value: justSent)
-            .animation(.smooth(duration: 0.28), value: errorMessage)
-            .onReceive(ticker) { now = $0 }
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("تم") { dismiss() }
-                        .fontWeight(.semibold)
-                }
-            }
         }
         .environment(\.layoutDirection, .rightToLeft)
-        .fittedSheet(minHeight: 320, includesNavigationBar: true)
+        // The system's own half sheet, left entirely to the system: at a
+        // non-large detent iOS insets it from the screen edges and paints its
+        // own translucent material. Overriding the presentation background —
+        // which `fittedSheet` does — is what flattened it into an opaque panel
+        // spanning the full width.
+        // It opens at half and pulls up to full: a player's details run longer
+        // than a half sheet once the money is on it. Left at the system's
+        // default content interaction — `.scrolls` gave the scroll view first
+        // claim on an upward drag, so pulling the sheet open did nothing and
+        // only the grabber could resize it.
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    // MARK: - Details
+
+    private var details: some View {
+        VStack(spacing: 22) {
+            identity
+
+            facts
+
+            if let errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.circle.fill")
+                    .font(TamrinFont.footnote)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .transition(.blurReplace)
+            }
+
+            VStack(spacing: 10) {
+                if onRemind != nil { reminderButton }
+                if let onRemove { removeButton(onRemove) }
+            }
+        }
     }
 
     // MARK: - Identity
 
+    /// The photo, with the player's position pinned to its lower edge the way
+    /// a squad list marks a shirt, then the name.
     private var identity: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             PlayerPortrait(
                 name: member.name,
                 avatarData: avatarImageData,
@@ -141,6 +179,10 @@ struct PlayerDetailsSheet: View {
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .minimumScaleFactor(0.7)
+
+            if !positionText.isEmpty {
+                PositionTag(position: positionText)
+            }
         }
         .frame(maxWidth: .infinity)
     }
@@ -151,18 +193,20 @@ struct PlayerDetailsSheet: View {
     /// the team page, so the player's numbers are not a second visual language.
     private var facts: some View {
         VStack(spacing: 10) {
-            HStack(spacing: 10) {
-                FactTile(
-                    symbol: "banknote.fill",
-                    value: share == 0 ? "مجاني" : "\(share.cleanAmount) ﷼",
-                    caption: "قطته"
-                )
-                FactTile(
-                    symbol: paymentTile.symbol,
-                    value: paymentTile.value,
-                    caption: paymentTile.caption,
-                    tint: paymentTile.tint
-                )
+            if showsPayment {
+                HStack(spacing: 10) {
+                    FactTile(
+                        symbol: "banknote.fill",
+                        value: share == 0 ? "مجاني" : "\(share.cleanAmount) ﷼",
+                        caption: "قطته"
+                    )
+                    FactTile(
+                        symbol: paymentTile.symbol,
+                        value: paymentTile.value,
+                        caption: paymentTile.caption,
+                        tint: paymentTile.tint
+                    )
+                }
             }
 
             if let seatNumber {
@@ -170,6 +214,14 @@ struct PlayerDetailsSheet: View {
                     symbol: "flag.checkered",
                     caption: "ترتيبه في التسجيل",
                     value: seatNumber.arabicOrdinal
+                )
+            }
+
+            if let registeredByName {
+                FactRow(
+                    symbol: "person.badge.plus",
+                    caption: "سجّله",
+                    value: registeredByName
                 )
             }
 
@@ -237,7 +289,7 @@ struct PlayerDetailsSheet: View {
             dismiss()
             remove()
         } label: {
-            Label("إزالة اللاعب من التمرين", systemImage: "person.badge.minus")
+            Label(removeTitle, systemImage: "person.badge.minus")
                 .font(TamrinFont.font(size: 15, weight: .medium))
                 .frame(maxWidth: .infinity, minHeight: 52)
         }
@@ -272,6 +324,31 @@ struct PlayerDetailsSheet: View {
         }
     }
 }
+
+
+// MARK: - Position
+
+/// The player's position: the word, on the colour that identifies it. The
+/// colour is the whole design — a drawn pitch said the same thing in far more
+/// space, and this sheet has none to spare.
+struct PositionTag: View {
+    let position: String
+
+    private var tint: Color { PlayerPosition.resolved(from: position).tint }
+
+    var body: some View {
+        Text(position)
+            .font(TamrinFont.font(size: 13, weight: .bold))
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            .background(tint.opacity(0.14), in: .capsule)
+            .accessibilityLabel("مركزه: \(position)")
+    }
+}
+
+// MARK: - Building blocks
 
 /// The player's photo at the size the sheet opens on, on the same avatar the
 /// roster rows draw so a photo added anywhere shows here too.
@@ -360,7 +437,7 @@ private struct FactRow: View {
     }
 }
 
-private extension Int {
+extension Int {
     /// «الثالث» rather than «#3»: the roster position reads as a sentence, and
     /// past tenth it falls back to the numeral, which is how it is said aloud.
     var arabicOrdinal: String {
@@ -372,6 +449,7 @@ private extension Int {
         if self <= names.count { return names[self - 1] }
         return "رقم \(formatted(.number.locale(.tamrin).grouping(.never)))"
     }
+
 }
 
 #Preview {
@@ -382,11 +460,14 @@ private extension Int {
                     id: UUID(),
                     name: "أبو صقر",
                     status: .paymentPending,
+                    userId: UUID(),
                     isManual: false,
-                    joinedAt: .now
+                    joinedAt: .now,
+                    position: "وسط"
                 ),
                 share: 312.5,
                 seatNumber: 3,
+                showsPayment: true,
                 onRemind: { .sent(nextAllowedAt: Date().addingTimeInterval(3600)) },
                 onRemove: {}
             )

@@ -1127,6 +1127,8 @@ struct EnrollmentSheetView: View {
                         case .pending: paymentError = "لديك طلب دفع قيد التأكيد"
                         case .rejected: paymentError = "رُفض طلبك سابقًا"
                         }
+                    case .pendingGuestRequest:
+                        paymentError = "لديك طلب ضيوف بانتظار التأكيد. انتظر حسمه قبل تسجيل نفسك."
                     case .creatorMissingNumber:
                         paymentError = "صاحب الفعالية لم يضف رقم STC Pay بعد"
                     case .registrationClosed:

@@ -15,6 +15,12 @@ enum AuthScreen: Hashable {
 struct ContentView: View {
     @StateObject private var appState = AppState()
     @StateObject private var updateGate = AppUpdateGate()
+    #if DEBUG
+    @State private var paymentRequestPreview = HomeStore.paymentRequestPreview
+    @State private var guestOnlyRegistrationPreview = HomeStore.guestOnlyRegistrationPreview
+    @State private var guestAttributionPreview = HomeStore.guestAttributionPreview
+    @State private var teamIconPreview = HomeStore.preview
+    #endif
     @Environment(\.scenePhase) private var scenePhase
     @State private var authPath = NavigationPath()
     /// Event the user was trying to join when prompted to log in. Held across
@@ -24,13 +30,57 @@ struct ContentView: View {
     @State private var pendingJoinCode: String?
 
     var body: some View {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-demoGuestOnlyDetailScreen") {
+            EventDetailView(
+                feed: guestOnlyRegistrationPreview,
+                occurrence: guestOnlyRegistrationPreview.occurrences[0],
+                artName: "ExerciseArt3"
+            )
+        } else if ProcessInfo.processInfo.arguments.contains("-demoGuestOnlyRegistrationScreen") {
+            EventDetailView(
+                feed: guestOnlyRegistrationPreview,
+                occurrence: guestOnlyRegistrationPreview.occurrences[0],
+                artName: "ExerciseArt3",
+                initiallyShowsGuestOnlyRegistration: true
+            )
+        } else if ProcessInfo.processInfo.arguments.contains("-demoGuestRegistrationScreen") {
+            EventDetailView(
+                feed: paymentRequestPreview,
+                occurrence: paymentRequestPreview.occurrences[0],
+                artName: "ExerciseArt3",
+                initiallyShowsGuestRegistration: true
+            )
+        } else if ProcessInfo.processInfo.arguments.contains("-demoGuestAttributionScreen") {
+            EventDetailView(
+                feed: guestAttributionPreview,
+                occurrence: guestAttributionPreview.occurrences[0],
+                artName: "ExerciseArt3"
+            )
+        } else if ProcessInfo.processInfo.arguments.contains("-demoTeamIconScreen") {
+            TeamDetailView(feed: teamIconPreview)
+        } else if ProcessInfo.processInfo.arguments.contains("-demoPaymentRequestScreen") {
+            EventDetailView(
+                feed: paymentRequestPreview,
+                occurrence: paymentRequestPreview.occurrences[0],
+                artName: "ExerciseArt3"
+            )
+        } else {
+            productionContent
+        }
+        #else
+        productionContent
+        #endif
+    }
+
+    private var productionContent: some View {
         ZStack {
             Group {
                 if appState.isLoggedIn, appState.authVM.isNewUserAfterOTP {
                     SignupView(vm: appState.authVM, onBack: nil, isPostOTP: true, onComplete: {
                         appState.authVM.clearNewUserAfterOTP()
                     })
-                } else if appState.isLoggedIn {
+                } else if appState.isLoggedIn || isDebugMemberFixtureEnabled {
                     // Designer Home feed, now wired to Supabase via HomeStore
                     // (workspaces / events / participants / profile).
                     DesignerHomeView(appState: appState)
@@ -134,6 +184,17 @@ struct ContentView: View {
             guard phase == .active else { return }
             Task { await updateGate.refresh() }
         }
+    }
+
+    /// The deterministic Home fixture is an explicit launch-only testing mode.
+    /// Let it reach Home without creating a real Supabase session so the member
+    /// journey — including anonymous ratings — can be exercised safely offline.
+    private var isDebugMemberFixtureEnabled: Bool {
+        #if DEBUG
+        HomeDebugMemberFixture.isEnabled
+        #else
+        false
+        #endif
     }
 }
 

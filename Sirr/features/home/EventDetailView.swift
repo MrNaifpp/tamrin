@@ -7,9 +7,20 @@ struct EventDetailView: View {
     let occurrence: FeedOccurrence
     var artName: String = "ExerciseArt1"
     var initiallyShowsRegistration = false
+    #if DEBUG
+    /// Opens the post-registration guest flow for deterministic simulator QA.
+    var initiallyShowsGuestRegistration = false
+    /// Opens the guest-without-self flow for deterministic simulator QA.
+    var initiallyShowsGuestOnlyRegistration = false
+    #endif
     @Environment(\.dismiss) private var dismiss
     @State private var showWithdrawConfirm = false
     @State private var showRegisterFlow = false
+    @State private var guestRegistrationMode: RegistrationFlowSheet.Mode?
+    /// Adding one companion to a free exercise asks a single question, so it
+    /// gets the one-field sheet rather than the whole registration flow. A
+    /// paid one still has to walk the payment steps.
+    @State private var showCompanionSheet = false
     @State private var showPaymentReview = false
     @State private var paymentActionInFlight: UUID?
     @State private var memberAwaitingRejection: FeedMember?
@@ -51,6 +62,26 @@ struct EventDetailView: View {
     /// already arrives sorted by `joined_at`.
     private func seatNumber(of member: FeedMember) -> Int? {
         seatedRoster.firstIndex { $0.id == member.id }.map { $0 + 1 }
+    }
+
+    /// Guests carry the account id that registered them. Resolve it through
+    /// the exercise membership list so every viewer sees a human name without
+    /// exposing an opaque UUID in the roster.
+    private func registeredByName(for member: FeedMember) -> String? {
+        guard member.isGuest, !member.isManual, let addedBy = member.addedBy else {
+            return nil
+        }
+        if let registrar = feed.teamMembers.first(where: { $0.id == addedBy }) {
+            return registrar.displayName
+        }
+        guard addedBy == feed.currentUserID else { return nil }
+        let ownName = feed.profileName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ownName.isEmpty ? nil : ownName
+    }
+
+    private func rosterSubtitle(for member: FeedMember) -> String? {
+        if member.isManual { return "سجّله المشرف" }
+        return registeredByName(for: member).map { "سجّله \($0)" }
     }
 
     var body: some View {
@@ -151,6 +182,24 @@ struct EventDetailView: View {
         .sheet(isPresented: $showRegisterFlow) {
             RegistrationFlowSheet(feed: feed, occurrence: occurrence, artName: artName)
         }
+        .sheet(isPresented: $showCompanionSheet) {
+            ManualParticipantSheet(
+                isPaid: false,
+                title: "سجّل معك أحد",
+                subtitle: "أضف لاعبًا يحضر معك في هذا الموعد",
+                footnote: "يحجز له مقعدًا في هذا الموعد فقط، ولا يحتاج حساب في التطبيق."
+            ) { name in
+                await addCompanion(named: name)
+            }
+        }
+        .sheet(item: $guestRegistrationMode) { mode in
+            RegistrationFlowSheet(
+                feed: feed,
+                occurrence: occurrence,
+                artName: artName,
+                mode: mode
+            )
+        }
         .sheet(isPresented: $showPaymentReview) {
             RegistrationFlowSheet(
                 feed: feed,
@@ -160,8 +209,32 @@ struct EventDetailView: View {
             )
         }
         .task {
+            await feed.reloadOccurrence(occurrence.id)
             await feed.reloadRoster(occurrence.id)
             await feed.reloadMemberResponses(occurrence.id)
+            #if DEBUG
+            if initiallyShowsGuestOnlyRegistration,
+               !handledInitialRegistration,
+               !feed.isCurrentTeamOwner,
+               [.available, .declined].contains(feed.participationState(for: occurrence)),
+               !occurrence.isCancelled {
+                handledInitialRegistration = true
+                await Task.yield()
+                guestRegistrationMode = .guestOnly
+                return
+            }
+            if initiallyShowsGuestRegistration,
+               !handledInitialRegistration,
+               !feed.isCurrentTeamOwner,
+               feed.participationState(for: occurrence) == .registered
+                 || feed.participationState(for: occurrence) == .awaitingPayment,
+               !occurrence.isCancelled {
+                handledInitialRegistration = true
+                await Task.yield()
+                guestRegistrationMode = .additionalGuests
+                return
+            }
+            #endif
             guard initiallyShowsRegistration,
                   !handledInitialRegistration,
                   !feed.isCurrentTeamOwner,
@@ -185,7 +258,11 @@ struct EventDetailView: View {
             }
             Button("تراجع", role: .cancel) { memberAwaitingRejection = nil }
         } message: {
-            Text("سيُلغى حجز اللاعب وكل الضيوف المسجلين معه وتتحرر مقاعدهم.")
+            Text(
+                memberAwaitingRejection?.userId == nil
+                    ? "سيُلغى طلب الضيوف المعلّق وتتحرر مقاعدهم، ويبقى تسجيل العضو محفوظًا."
+                    : "سيُلغى حجز اللاعب وكل الضيوف المسجلين معه وتتحرر مقاعدهم."
+            )
         }
         .fullScreenCover(isPresented: $showDeclinedResponses) {
             DeclinedResponsesPage(
@@ -236,6 +313,9 @@ struct EventDetailView: View {
                 avatarImageData: avatarData(for: member),
                 share: occurrence.price,
                 seatNumber: seatNumber(of: member),
+                // A player's share and payment state are organizer-only.
+                showsPayment: feed.isCurrentTeamOwner,
+                registeredByName: registeredByName(for: member),
                 // A free exercise has nothing to chase, a guest or a manually
                 // seated player has no account to notify, and nobody needs to
                 // be reminded of their own share.
@@ -474,26 +554,75 @@ struct EventDetailView: View {
                 .padding(16)
                 .tamrinGlassCard()
             } else {
-                Button { showWithdrawConfirm = true } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: mine.status == .registered ? "checkmark.circle.fill" : "clock.fill")
-                            .foregroundStyle(mine.status == .registered ? TamrinTheme.lime : .orange)
-                        Text(mine.status == .registered ? "مكانك محفوظ" : "أنت في قائمة الانتظار")
-                            .font(TamrinFont.font(size: 15, weight: .bold))
-                            .foregroundStyle(.white)
-                        Spacer()
-                        Text(mine.status == .registered ? "اعتذر" : "انسحب")
-                            .font(TamrinFont.font(size: 13, weight: .medium))
-                            .foregroundStyle(.red.opacity(0.95))
+                VStack(spacing: 10) {
+                    if mine.status == .awaitingPayment, occurrence.price > 0 {
+                        Button {
+                            Haptics.impact(.light)
+                            showPaymentReview = true
+                        } label: {
+                            Label("دفع القطة", systemImage: "banknote.fill")
+                                .font(TamrinFont.font(size: 16, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: TamrinControlMetrics.glassActionHeight)
+                                .contentShape(.capsule)
+                        }
+                        .buttonStyle(.glassProminent)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.regular)
+                        // Banknote green rather than the app's lime: this is
+                        // the one button in the app that moves money, and it
+                        // should read as money rather than as another accent.
+                        .tint(Self.moneyGreen)
+                        .accessibilityHint("يفتح مبلغ القطة ووسائل الدفع المتاحة")
                     }
-                    .padding(.horizontal, 18)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: TamrinControlMetrics.glassActionHeight)
+
+                    if mine.status == .paymentPending, occurrence.price > 0 {
+                        paymentStateRow(
+                            title: "بانتظار تأكيد وصول القطة",
+                            systemImage: "hourglass",
+                            tint: .orange
+                        )
+                    }
+
+                    if mine.status == .registered, occurrence.price > 0 {
+                        paymentStateRow(
+                            title: "القطة مدفوعة",
+                            systemImage: "checkmark.seal.fill",
+                            tint: Self.moneyGreen
+                        )
+                    }
+
+                    if mine.status == .registered || mine.status == .awaitingPayment,
+                       occurrence.isPublished,
+                       !occurrence.isCancelled {
+                        Button {
+                            Haptics.impact(.medium)
+                            if occurrence.price > 0 {
+                                guestRegistrationMode = .additionalGuests
+                            } else {
+                                showCompanionSheet = true
+                            }
+                        } label: {
+                            // The quiet glass capsule, not the filled one:
+                            // adding guests is a secondary action beside the
+                            // registration state above it.
+                            Label("سجّل معك أحد", systemImage: "person.badge.plus")
+                                .font(TamrinFont.font(size: 15, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: TamrinControlMetrics.glassActionHeight)
+                                .contentShape(.capsule)
+                        }
+                        .buttonStyle(.glass)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.regular)
+                        .accessibilityLabel("إضافة لاعبين معك")
+                        .accessibilityHint("يفتح تسجيل ضيوف جدد دون تغيير تسجيلك")
+                    }
+
+                    participationStatusButton(for: mine)
                 }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.capsule)
-                .controlSize(.regular)
-                .accessibilityHint("يفتح تأكيد الاعتذار عن الموعد")
             }
         } else {
             let full = occurrence.capacity > 0 && confirmedCount >= occurrence.capacity
@@ -501,29 +630,106 @@ struct EventDetailView: View {
             // label used to promise a waiting list that the server would then
             // refuse to seat anyone on.
             let closed = full && occurrence.capacityPolicy == .closed
-            Button {
-                Haptics.impact(.medium)
-                showRegisterFlow = true
-            } label: {
-                Label(
-                    closed ? "قفل التسجيل" : (full ? "انضم لقائمة الانتظار" : "سجل في التمرين"),
-                    systemImage: closed ? "lock.fill" : "plus"
-                )
-                    .font(TamrinFont.font(size: 16, weight: .bold))
-                    .foregroundStyle(TamrinTheme.ink)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: TamrinControlMetrics.glassActionHeight)
-                    .contentShape(.capsule)
+            VStack(spacing: 10) {
+                if closed {
+                    // Nothing to press: every seat is taken and the organizer
+                    // did not open a reserve list.
+                    Label("التسجيل مغلق", systemImage: "lock.fill")
+                        .font(TamrinFont.font(size: 16, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.55))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: TamrinControlMetrics.glassActionHeight)
+                        .background(.white.opacity(0.08), in: .capsule)
+                        .accessibilityLabel("التسجيل مغلق، اكتمل العدد")
+                        .accessibilityHint("اكتمل العدد وهذا الموعد يقفل التسجيل عند الاكتمال")
+                } else {
+                    Button {
+                        Haptics.impact(.medium)
+                        showRegisterFlow = true
+                    } label: {
+                        Label(
+                            full ? "سجل كاحتياط" : "سجل في التمرين",
+                            systemImage: full ? "person.badge.clock.fill" : "plus"
+                        )
+                        .font(TamrinFont.font(size: 16, weight: .bold))
+                        .foregroundStyle(TamrinTheme.ink)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: TamrinControlMetrics.glassActionHeight)
+                        .contentShape(.capsule)
+                    }
+                    .buttonStyle(.glassProminent)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.regular)
+                    .tint(.white.opacity(0.94))
+                }
             }
-            .buttonStyle(.glassProminent)
-            .buttonBorderShape(.capsule)
-            .controlSize(.regular)
-            .tint(.white.opacity(0.94))
-            .disabled(closed)
-            .accessibilityHint(closed
-                               ? "اكتمل العدد وهذا الموعد يقفل التسجيل عند الاكتمال"
-                               : "")
         }
+    }
+
+    /// Adds one companion to a free exercise. Returns nil on success, or the
+    /// reason it did not happen, which the sheet shows in place.
+    @MainActor
+    private func addCompanion(named name: String) async -> String? {
+        do {
+            let destination = try await feed.paymentDestination(for: occurrence)
+            let outcome = await feed.addGuests(
+                [name],
+                to: occurrence,
+                expectedDestination: destination
+            )
+            if case .failure(let message) = outcome { return message }
+            await feed.reloadRoster(occurrence.id)
+            return nil
+        } catch {
+            return "تعذر إضافة اللاعب. تحقق من اتصالك وحاول مرة أخرى."
+        }
+    }
+
+    /// A statement of where the money stands. Not a button: neither state has
+    /// anything for the player to do — one is waiting on the organizer, the
+    /// other is finished.
+    private func paymentStateRow(
+        title: String,
+        systemImage: String,
+        tint: Color
+    ) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(tint)
+            Text(title)
+                .font(TamrinFont.font(size: 15, weight: .bold))
+                .foregroundStyle(.white)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 18)
+        .frame(maxWidth: .infinity)
+        .frame(height: TamrinControlMetrics.glassActionHeight)
+        .background(.white.opacity(0.08), in: .capsule)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func participationStatusButton(for member: FeedMember) -> some View {
+        Button { showWithdrawConfirm = true } label: {
+            HStack(spacing: 10) {
+                Image(systemName: member.status == .waitlisted ? "clock.fill" : "checkmark.circle.fill")
+                    .foregroundStyle(member.status == .waitlisted ? .orange : TamrinTheme.lime)
+                Text(member.status == .waitlisted ? "أنت في قائمة الانتظار" : "مكانك محفوظ")
+                    .font(TamrinFont.font(size: 15, weight: .bold))
+                    .foregroundStyle(.white)
+                Spacer()
+                Text(member.status == .waitlisted ? "انسحب" : "اعتذر")
+                    .font(TamrinFont.font(size: 13, weight: .medium))
+                    .foregroundStyle(.red.opacity(0.95))
+            }
+            .padding(.horizontal, 18)
+            .frame(maxWidth: .infinity)
+            .frame(height: TamrinControlMetrics.glassActionHeight)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.capsule)
+        .controlSize(.regular)
+        .accessibilityHint("يفتح تأكيد الاعتذار عن الموعد")
     }
 
     /// Clamped so an over-subscribed list cannot draw past the track.
@@ -628,23 +834,7 @@ struct EventDetailView: View {
             // stays visibly apart from the people.
             VStack(spacing: 8) {
                 ForEach(seatedRoster) { person in
-                    MemberRowCard(
-                        name: person.name,
-                        subtitle: person.isManual ? "سجّله المشرف" : nil,
-                        avatarImageData: avatarData(for: person),
-                        avatarImageUrl: person.avatarUrl
-                    ) {
-                        HStack(spacing: 6) {
-                            rosterStatusAccessory(for: person)
-                            if feed.isCurrentTeamOwner {
-                                rosterMenu(for: person)
-                            }
-                        }
-                    }
-                    // A tap gesture rather than a Button: the card holds its own
-                    // menu, and a button inside a button swallows it.
-                    .contentShape(.rect)
-                    .onTapGesture { memberInDetails = person }
+                    rosterRow(for: person)
                 }
             }
         }
@@ -688,6 +878,48 @@ struct EventDetailView: View {
         }
     }
 
+    /// The colour money wears in this app, on both ends of the transfer.
+    static let moneyGreen = Color(red: 0.15, green: 0.56, blue: 0.38)
+
+    private func rosterRow(for person: FeedMember) -> some View {
+        let isReviewing = showsPaymentReview(for: person)
+        return VStack(spacing: 0) {
+            MemberRowCard(
+                name: person.name,
+                subtitle: rosterSubtitle(for: person),
+                avatarImageData: avatarData(for: person),
+                avatarImageUrl: person.avatarUrl,
+                // One card, not two stacked: the question belongs to this row.
+                drawsCard: !isReviewing
+            ) {
+                HStack(spacing: 6) {
+                    rosterStatusAccessory(for: person)
+                    if feed.isCurrentTeamOwner {
+                        rosterMenu(for: person)
+                    }
+                }
+            }
+
+            // A declared transfer is a question put to the organizer, so the
+            // card grows to ask it in words rather than leaving two glyphs to
+            // carry the decision.
+            if isReviewing {
+                paymentReviewPanel(for: person)
+            }
+        }
+        .modifier(RosterCardBackground(isOn: isReviewing))
+        .animation(.snappy(duration: 0.34, extraBounce: 0.08), value: person.status)
+        .animation(.snappy(duration: 0.28), value: paymentActionInFlight)
+        // A tap gesture rather than a Button: the card holds its own menu, and
+        // a button inside a button swallows it. While the card is asking about
+        // a payment it stops being one big target — the two answers are.
+        .contentShape(.rect)
+        .onTapGesture { if !isReviewing { memberInDetails = person } }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("يفتح تفاصيل اللاعب وتقييمه")
+        .accessibilityAction { memberInDetails = person }
+    }
+
     /// Only the states that need acting on carry a mark. A confirmed seat is
     /// the norm on this list, so it shows nothing — being in the list is
     /// already what says it.
@@ -697,16 +929,25 @@ struct EventDetailView: View {
             Image(systemName: "clock")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.orange)
-        } else if person.status == .paymentPending {
-            if feed.isCurrentTeamOwner, person.userId != nil {
-                paymentReviewActions(for: person)
-            } else {
-                Image(systemName: "creditcard.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.orange)
-                    .accessibilityLabel("بانتظار تأكيد الدفع")
-            }
+        } else if person.status == .paymentPending, !feed.isCurrentTeamOwner {
+            Image(systemName: "hourglass")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.orange)
+                .accessibilityLabel("بانتظار تأكيد وصول القطة")
         }
+    }
+
+    /// One follow-up payment may contain several guest rows. Show a single
+    /// confirm/reject control for their shared registrar instead of repeating
+    /// the same destructive action on every name.
+    private func isPrimaryPendingPaymentRow(_ member: FeedMember) -> Bool {
+        guard let ownerID = member.paymentOwnerId else { return false }
+        let pendingRows = roster.filter {
+            $0.status == .paymentPending && $0.paymentOwnerId == ownerID
+        }
+        let primaryRow = pendingRows.first { $0.userId == ownerID }
+            ?? pendingRows.first
+        return primaryRow?.id == member.id
     }
 
     /// Manual registration is a real seat, so it follows the same rules as a
@@ -930,9 +1171,78 @@ struct EventDetailView: View {
         }
     }
 
+    /// Only the organizer decides, once per payer — a follow-up request can
+    /// carry several guest rows that share one transfer.
+    private func showsPaymentReview(for member: FeedMember) -> Bool {
+        feed.isCurrentTeamOwner
+            && member.status == .paymentPending
+            && isPrimaryPendingPaymentRow(member)
+    }
+
+    /// The question and its two answers, filling the card's width.
+    private func paymentReviewPanel(for member: FeedMember) -> some View {
+        VStack(spacing: 10) {
+            Text("هل وصلتك قطة «\(member.name.firstNameOnly)»؟")
+                .font(TamrinFont.font(size: 14, weight: .medium))
+                .foregroundStyle(.white.opacity(0.9))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if paymentActionInFlight == member.paymentOwnerId {
+                ProgressView()
+                    .tint(.white)
+                    .frame(maxWidth: .infinity, minHeight: 34)
+            } else {
+                HStack(spacing: 10) {
+                    paymentAnswerButton(
+                        title: "وصلت",
+                        isAffirmative: true
+                    ) { confirmPayment(member) }
+                    .accessibilityLabel("تأكيد وصول قطة \(member.name)")
+
+                    paymentAnswerButton(
+                        title: "باقي",
+                        isAffirmative: false
+                    ) { memberAwaitingRejection = member }
+                    .accessibilityLabel("قطة \(member.name) لم تصل بعد")
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.bottom, 12)
+    }
+
+    /// The system's own glass capsules, the same pair of styles every other
+    /// decision in the app is offered with.
+    @ViewBuilder
+    private func paymentAnswerButton(
+        title: String,
+        isAffirmative: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        let label = Text(title)
+            .font(TamrinFont.font(size: 14, weight: .bold))
+            .frame(maxWidth: .infinity)
+            .frame(height: 34)
+            .contentShape(.capsule)
+
+        if isAffirmative {
+            Button(action: action) { label.foregroundStyle(.white) }
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.capsule)
+                .controlSize(.regular)
+                .tint(Self.moneyGreen)
+        } else {
+            Button(action: action) { label.foregroundStyle(.white) }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
+                .controlSize(.regular)
+        }
+    }
+
     private func paymentReviewActions(for member: FeedMember) -> some View {
         HStack(spacing: 6) {
-            if paymentActionInFlight == member.userId {
+            if paymentActionInFlight == member.paymentOwnerId {
                 ProgressView()
                     .tint(.white)
                     .frame(width: TamrinControlMetrics.touchTarget, height: TamrinControlMetrics.touchTarget)
@@ -969,11 +1279,13 @@ struct EventDetailView: View {
     }
 
     private func confirmPayment(_ member: FeedMember) {
-        guard let joinerId = member.userId, paymentActionInFlight == nil else { return }
+        guard let joinerId = member.paymentOwnerId, paymentActionInFlight == nil else { return }
         paymentActionInFlight = joinerId
         Task {
             let outcome = await feed.confirmPayment(for: member, in: occurrence)
-            paymentActionInFlight = nil
+            withAnimation(.snappy(duration: 0.34, extraBounce: 0.08)) {
+                paymentActionInFlight = nil
+            }
             switch outcome {
             case .success:
                 Haptics.success()
@@ -988,7 +1300,7 @@ struct EventDetailView: View {
     }
 
     private func rejectPayment(_ member: FeedMember) {
-        guard let joinerId = member.userId, paymentActionInFlight == nil else { return }
+        guard let joinerId = member.paymentOwnerId, paymentActionInFlight == nil else { return }
         paymentActionInFlight = joinerId
         Task {
             let outcome = await feed.rejectPayment(for: member, in: occurrence)
@@ -1097,15 +1409,31 @@ private struct DeclinedResponsesPage: View {
 /// submitted only after the player reviews the destination and confirms from
 /// the detail step.
 struct RegistrationFlowSheet: View {
+    enum Mode: String, Identifiable {
+        case selfAndGuests
+        case additionalGuests
+        case guestOnly
+
+        var id: String { rawValue }
+    }
+
     @Bindable var feed: HomeStore
     let occurrence: FeedOccurrence
     var artName: String = "ExerciseArt1"
+    var mode: Mode = .selfAndGuests
     var reviewOnly = false
 
     @Environment(\.dismiss) private var dismiss
     @State private var step: Step
     @State private var guestNames: [String] = []
     @State private var showGuestSection = false
+    /// Whether the member has claimed a seat for themselves. Starts off, so
+    /// registering is a deliberate tap on your own card rather than something
+    /// that already happened when the sheet opened.
+    @State private var includesSelf = false
+    /// Set when the member chooses to bring guests without taking a seat: the
+    /// request reserves no seat for them and charges them nothing.
+    @State private var guestsWithoutSelf = false
     @State private var destination: PaymentDestination?
     @State private var isLoadingDestination = false
     @State private var submitting = false
@@ -1131,13 +1459,80 @@ struct RegistrationFlowSheet: View {
         feed: HomeStore,
         occurrence: FeedOccurrence,
         artName: String = "ExerciseArt1",
+        mode: Mode = .selfAndGuests,
         reviewOnly: Bool = false
     ) {
         self.feed = feed
         self.occurrence = occurrence
         self.artName = artName
+        self.mode = mode
         self.reviewOnly = reviewOnly
         _step = State(initialValue: reviewOnly ? .paymentMethod : .selection)
+        _guestNames = State(initialValue: mode == .selfAndGuests ? [] : [""])
+        _showGuestSection = State(initialValue: mode != .selfAndGuests)
+    }
+
+    /// The flow's accent, shared by the submit button and the seat marker so
+    /// the thing you tick and the thing it enables are visibly one action.
+    private static let accent = Color(red: 0.20, green: 0.47, blue: 0.96)
+
+    private var isGuestRequest: Bool { mode != .selfAndGuests || guestsWithoutSelf }
+    private var registersWithoutSelf: Bool { mode == .guestOnly || guestsWithoutSelf }
+
+    /// The member's own card is only a choice on the plain registration; the
+    /// guest-only entries arrive with that decision already made.
+    private var offersSelfSeat: Bool { mode == .selfAndGuests }
+
+    /// Nothing can be submitted until the request has someone in it: either a
+    /// seat for the member, or at least one named guest.
+    private var canContinue: Bool {
+        if offersSelfSeat && !guestsWithoutSelf { return includesSelf }
+        return !validGuests.isEmpty
+    }
+
+
+    private var memberSummaryTitle: String {
+        switch mode {
+        case .selfAndGuests:
+            feed.profileName.isEmpty ? "أنا" : feed.profileName
+        case .additionalGuests:
+            "تسجيلك محفوظ مسبقًا"
+        case .guestOnly:
+            "لن تُسجَّل أنت"
+        }
+    }
+
+    private var memberSummarySubtitle: String {
+        switch mode {
+        case .selfAndGuests: "اللاعب الأساسي"
+        case .additionalGuests: "الطلب الجديد للضيوف فقط"
+        case .guestOnly: "المقاعد والمبلغ للضيوف فقط"
+        }
+    }
+
+    private var memberSummaryIcon: String {
+        registersWithoutSelf ? "minus.circle.fill" : "checkmark.circle.fill"
+    }
+
+    private var memberSummaryTint: Color {
+        registersWithoutSelf ? .white.opacity(0.58) : TamrinTheme.lime
+    }
+
+    private var memberSummaryBackground: Color {
+        registersWithoutSelf
+            ? Color(red: 0.20, green: 0.47, blue: 0.96).opacity(0.14)
+            : TamrinTheme.lime.opacity(0.2)
+    }
+
+    private var memberSummaryAccessibilityLabel: String {
+        switch mode {
+        case .selfAndGuests:
+            "\(feed.profileName.isEmpty ? "أنا" : feed.profileName)، اللاعب الأساسي، مشمول"
+        case .additionalGuests:
+            "تسجيلك محفوظ، ولن تُحسب ضمن الطلب الجديد"
+        case .guestOnly:
+            "لن تُسجّل أنت، والمقاعد والمبلغ للضيوف فقط"
+        }
     }
 
     private var validGuests: [String] {
@@ -1146,8 +1541,8 @@ struct RegistrationFlowSheet: View {
             .filter { !$0.isEmpty }
     }
 
-    /// submit_payment_v2 always includes the payer, then adds their guests.
-    private var groupSize: Int { 1 + validGuests.count }
+    /// A follow-up guest request never charges for the already-seated member.
+    private var groupSize: Int { (isGuestRequest ? 0 : 1) + validGuests.count }
 
     private var displayedGroupSize: Int {
         reviewOnly ? max(1, destination?.groupSize ?? 1) : groupSize
@@ -1165,11 +1560,18 @@ struct RegistrationFlowSheet: View {
         return max(0, destination?.pricePerPerson ?? occurrence.price) * Double(displayedGroupSize)
     }
 
+    /// A pending payer has an immutable destination snapshot. A previously
+    /// registered player opening the T-40 contribution entry point does not,
+    /// so that player is browsing the organizer's current choices instead.
+    private var isSubmittedPaymentReview: Bool {
+        reviewOnly && destination?.selectedMethod != nil
+    }
+
     /// Title for the step currently on screen — shown by the navigation bar
     /// rather than a hand-drawn header row.
     private var stepTitle: String {
         switch step {
-        case .selection: "سجّل في الموعد"
+        case .selection: isGuestRequest ? "سجّل ضيوفك" : "سجّل في الموعد"
         case .paymentMethod: reviewOnly ? "وسيلة الدفع" : "وسائل الدفع"
         case .details: "تفاصيل الدفع"
         case .success: "تم"
@@ -1186,6 +1588,15 @@ struct RegistrationFlowSheet: View {
         case .paymentMethod: reviewOnly ? nil : .selection
         case .details: .paymentMethod
         }
+    }
+
+    /// The home-indicator strip `fittedSheet` adds to every sheet's height. It
+    /// is cancelled below so the submit button's bottom margin is the one this
+    /// sheet sets, not that strip plus it.
+    private var bottomSafeInset: CGFloat {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first?.keyWindow?.safeAreaInsets.bottom ?? 0
     }
 
     var body: some View {
@@ -1214,6 +1625,12 @@ struct RegistrationFlowSheet: View {
                 .sheetContentHeight()
             }
             .scrollBounceBehavior(.basedOnSize)
+            // The content may reach the screen's bottom edge; its own padding
+            // is what keeps the last control clear of it. The scroll view also
+            // reserves the safe area as a content margin, which is a second
+            // helping of the same strip — hence both lines.
+            .ignoresSafeArea(.container, edges: .bottom)
+            .contentMargins(.bottom, 0, for: .scrollContent)
             .navigationTitle(stepTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1247,7 +1664,8 @@ struct RegistrationFlowSheet: View {
         .fittedSheet(
             minHeight: 300,
             includesNavigationBar: true,
-            background: TamrinTheme.sheet
+            background: TamrinTheme.sheet,
+            extraHeight: -bottomSafeInset
         )
         .task {
             if reviewOnly, destination == nil {
@@ -1269,58 +1687,53 @@ struct RegistrationFlowSheet: View {
         VStack(spacing: 0) {
             Group {
                 VStack(spacing: 12) {
-                    HStack(spacing: 12) {
-                        Image(artName)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 68, height: 52)
-                            .clipShape(.rect(cornerRadius: 14, style: .continuous))
-
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(occurrence.title)
-                                .font(TamrinFont.font(size: 17, weight: .bold))
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
-                            Text("يوم \(occurrence.startAt.arabicDay)، \(occurrence.startAt.arabicTime)")
-                                .font(TamrinFont.font(size: 12, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.55))
-                            if occurrence.price > 0 {
-                                Text("\(currency(occurrence.price)) للشخص")
-                                    .font(TamrinFont.font(size: 12, weight: .bold))
-                                    .foregroundStyle(TamrinTheme.lime)
+                    // The member's own row, drawn as the app's member card so
+                    // it is the same object here as on the roster. The circle
+                    // on the far side is the seat: empty until it is claimed.
+                    if offersSelfSeat {
+                        Button {
+                            Haptics.selection()
+                            includesSelf.toggle()
+                            if includesSelf { guestsWithoutSelf = false }
+                        } label: {
+                            MemberRowCard(
+                                name: feed.profileName.isEmpty ? "أنا" : feed.profileName,
+                                subtitle: includesSelf ? "اللاعب الأساسي" : "اضغط لتحجز مقعدك",
+                                avatarImageData: feed.avatarData,
+                                avatarImageUrl: feed.avatarUrl
+                            ) {
+                                // Palette rendering both ways, so one image can
+                                // morph into the other: layer one is the ring
+                                // or the tick, layer two the disc behind it.
+                                Image(systemName: includesSelf ? "checkmark.circle.fill" : "circle")
+                                    .font(.system(size: 22, weight: .semibold))
+                                    .symbolRenderingMode(.palette)
+                                    .foregroundStyle(
+                                        includesSelf ? Color.white : Color.white.opacity(0.3),
+                                        includesSelf ? Self.accent : Color.clear
+                                    )
+                                    .contentTransition(.symbolEffect(.replace))
                             }
                         }
-                        Spacer(minLength: 0)
-                    }
-                    .padding(12)
-                    .tamrinGlassCard()
-
-                    HStack(spacing: 12) {
-                        MemberAvatar(
-                            name: feed.profileName,
-                            imageData: feed.avatarData,
-                            imageUrl: feed.avatarUrl
-                        )
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(feed.profileName.isEmpty ? "أنا" : feed.profileName)
-                                .font(TamrinFont.font(size: 15, weight: .bold))
-                                .foregroundStyle(.white)
-                            Text("اللاعب الأساسي")
-                                .font(TamrinFont.font(size: 11, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.52))
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(includesSelf ? .isSelected : [])
+                        .accessibilityHint(includesSelf ? "يلغي حجز مقعدك" : "يحجز مقعدك في الموعد")
+                    } else {
+                        MemberRowCard(
+                            name: memberSummaryTitle,
+                            subtitle: memberSummarySubtitle,
+                            avatarImageData: feed.avatarData,
+                            avatarImageUrl: feed.avatarUrl
+                        ) {
+                            Image(systemName: memberSummaryIcon)
+                                .font(.system(size: 21, weight: .semibold))
+                                .foregroundStyle(memberSummaryTint)
                         }
-                        Spacer()
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 21, weight: .semibold))
-                            .foregroundStyle(TamrinTheme.lime)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel(memberSummaryAccessibilityLabel)
                     }
-                    .padding(.horizontal, 14)
-                    .frame(height: 52)
-                    .background(TamrinTheme.lime.opacity(0.2), in: .rect(cornerRadius: 17, style: .continuous))
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel("\(feed.profileName.isEmpty ? "أنا" : feed.profileName)، اللاعب الأساسي، مشمول")
 
-                    if showGuestSection {
+                    if showGuestSection || isGuestRequest {
                         VStack(spacing: 9) {
                             ForEach(guestNames.indices, id: \.self) { index in
                                 HStack(spacing: 8) {
@@ -1336,7 +1749,10 @@ struct RegistrationFlowSheet: View {
 
                                     Button {
                                         guestNames.remove(at: index)
-                                        if guestNames.isEmpty { showGuestSection = false }
+                                        if guestNames.isEmpty {
+                                            showGuestSection = false
+                                            guestsWithoutSelf = false
+                                        }
                                     } label: {
                                         Image(systemName: "minus")
                                             .font(.system(size: 14, weight: .bold))
@@ -1363,34 +1779,65 @@ struct RegistrationFlowSheet: View {
                             .buttonStyle(.plain)
                         }
                     } else {
+                        // One button, two meanings: with a seat claimed it adds
+                        // people alongside you, without one it registers them
+                        // instead of you.
+                        // Same glass row as «تسجيل لاعب يدويًا» on the event
+                        // page: this is the app's secondary action shape.
                         Button {
                             showGuestSection = true
+                            guestsWithoutSelf = !includesSelf
                             guestNames = [""]
                             focusedGuest = 0
                         } label: {
-                            Label("يسجل معي أحد", systemImage: "person.badge.plus")
-                                .font(TamrinFont.font(size: 14, weight: .bold))
-                                .foregroundStyle(.white.opacity(0.82))
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 46)
-                                .background(.white.opacity(0.08), in: .capsule)
+                            HStack(spacing: 8) {
+                                Image(systemName: "person.badge.plus")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .contentTransition(.symbolEffect(.replace))
+                                Text(includesSelf ? "بسجل معي أحد" : "سجّل ضيف بدونك")
+                                    .font(TamrinFont.font(size: 15, weight: .medium))
+                                    .contentTransition(.interpolate)
+                            }
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity, minHeight: 56)
+                            .padding(.horizontal, 14)
+                            .tamrinGlassCard()
+                            .contentShape(.rect)
                         }
                         .buttonStyle(.plain)
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.bottom, 12)
+                .padding(.bottom, 30)
+                .animation(.smooth(duration: 0.32, extraBounce: 0.08), value: includesSelf)
             }
 
+            // Registering is the whole of this sheet now, paid or free: the
+            // seat is taken here and the money is settled later from «دفع
+            // القطة», which is the only thing that opens the payment steps.
             primaryButton(
-                title: occurrence.price > 0 ? "متابعة للدفع" : "متابعة",
-                color: Color(red: 0.20, green: 0.47, blue: 0.96),
-                isLoading: false
+                title: "تسجيل",
+                color: Self.accent,
+                isLoading: submitting,
+                isEnabled: canContinue && !submitting
             ) {
                 focusedGuest = nil
-                withAnimation { step = .paymentMethod }
-                Task { await loadDestination() }
+                register()
             }
+        }
+    }
+
+    /// Takes the seat. The destination is still loaded first because the
+    /// preview and fixture paths read the price from it; the server call it
+    /// ends in does not ask for a payment method at all.
+    private func register() {
+        guard !submitting else { return }
+        submitting = true
+        Task {
+            await loadDestination()
+            submitting = false
+            guard destination != nil else { return }
+            submitRegistration()
         }
     }
 
@@ -1408,12 +1855,20 @@ struct RegistrationFlowSheet: View {
             } else if let destination {
                 Group {
                     VStack(alignment: .leading, spacing: 14) {
-                        Text(reviewOnly ? "راجع الوسيلة التي حوّلت إليها" : "اختر وسيلة الدفع المناسبة لك")
+                        Text(
+                            isSubmittedPaymentReview
+                                ? "راجع الوسيلة التي حوّلت إليها"
+                                : (reviewOnly
+                                    ? "اختر وسيلة الدفع لعرض بياناتها"
+                                    : "اختر وسيلة الدفع المناسبة لك")
+                        )
                             .font(TamrinFont.font(size: 14, weight: .medium))
                             .foregroundStyle(.white.opacity(0.58))
                             .frame(maxWidth: .infinity, alignment: .leading)
 
-                        if reviewOnly || destination.status == .free || destination.availablePaymentMethods.isEmpty {
+                        if destination.status == .free
+                            || destination.availablePaymentMethods.isEmpty
+                            || (reviewOnly && destination.selectedMethod != nil) {
                             snapshotDestinationRow(destination)
                         } else {
                             VStack(spacing: 10) {
@@ -1425,7 +1880,7 @@ struct RegistrationFlowSheet: View {
 
                         if destination.status != .free {
                             HStack {
-                                Text(reviewOnly ? "المبلغ المسجل" : "المبلغ المطلوب")
+                                Text(isSubmittedPaymentReview ? "المبلغ المسجل" : "المبلغ المطلوب")
                                     .font(TamrinFont.font(size: 13, weight: .medium))
                                     .foregroundStyle(.white.opacity(0.55))
                                 Spacer()
@@ -1508,16 +1963,24 @@ struct RegistrationFlowSheet: View {
                     .padding(.bottom, 12)
                 }
 
+                // Review is now the paying step: the seat already exists, and
+                // this is where its owner says the money is on its way.
                 if reviewOnly {
-                    primaryButton(title: "تم", color: .white, foregroundColor: .black) {
-                        dismiss()
+                    primaryButton(
+                        title: destination.provider == .cash ? "سأسدد في الملعب" : "حوّلت المبلغ",
+                        color: destination.provider?.brandColor ?? Self.accent,
+                        isLoading: submitting,
+                        isEnabled: !submitting && destination.selectedMethod != nil
+                    ) {
+                        guard let method = destination.selectedMethod else { return }
+                        declarePayment(using: method)
                     }
                 } else {
                     primaryButton(
                         title: destination.status == .free
-                            ? "تأكيد التسجيل"
+                            ? (isGuestRequest ? "تأكيد الضيوف" : "تأكيد التسجيل")
                             : (destination.provider == .cash ? "سأسدد في الملعب" : "حوّلت المبلغ"),
-                        color: destination.provider?.brandColor ?? Color(red: 0.20, green: 0.47, blue: 0.96),
+                        color: destination.provider?.brandColor ?? Self.accent,
                         isLoading: submitting,
                         isEnabled: !submitting
                     ) {
@@ -1638,31 +2101,32 @@ struct RegistrationFlowSheet: View {
 
     private var successStep: some View {
         VStack(spacing: 14) {
-            Color.clear.frame(height: 26)
+            Color.clear.frame(height: 4)
 
             ZStack {
-                Circle().fill(TamrinTheme.lime)
-                Image(systemName: destination?.provider == .cash ? "banknote.fill" : "checkmark")
+                // The flow's own accent, so the seal on the last screen is the
+                // colour of the button that got you here.
+                Circle().fill(Self.accent)
+                Image(systemName: successSymbol)
                     .font(.system(size: 31, weight: .bold))
-                    .foregroundStyle(TamrinTheme.ink)
+                    .foregroundStyle(.white)
             }
             .frame(width: 76, height: 76)
 
-            Text(destination?.status == .free || destination?.provider == .cash
-                 ? "سُجّلت في الموعد"
-                 : "سُجّل تحويلك")
+            Text(successTitle)
                 .font(TamrinFont.font(size: 24, weight: .bold))
                 .foregroundStyle(.white)
 
-            Text(destination?.status == .free
-                 ? "مكانك محفوظ في الموعد"
-                 : (destination?.provider == .cash
-                    ? "مكانك محفوظ، وتسدد للمشرف في الملعب"
-                    : "طلبك الآن بانتظار تأكيد الدفع من المشرف"))
+            Text(successSubtitle)
                 .font(TamrinFont.font(size: 14, weight: .medium))
                 .foregroundStyle(.white.opacity(0.62))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 28)
+
+            // The slack sits under the seal rather than over it: the news
+            // reads from the top of the sheet, and the button keeps its
+            // distance from it.
+            Color.clear.frame(height: 22)
 
             primaryButton(title: "تم", color: .white, foregroundColor: .black) {
                 dismiss()
@@ -1676,7 +2140,9 @@ struct RegistrationFlowSheet: View {
         defer { isLoadingDestination = false }
 
         do {
-            let loaded = try await feed.paymentDestination(for: occurrence)
+            let loaded = try await (isGuestRequest
+                ? feed.guestPaymentDestination(for: occurrence)
+                : feed.paymentDestination(for: occurrence))
             guard loaded.status != .paymentMethodRequired else {
                 failureMessage = "لم يضف المشرف وسيلة دفع لهذا الموعد بعد."
                 if !reviewOnly { step = .selection }
@@ -1689,15 +2155,75 @@ struct RegistrationFlowSheet: View {
         }
     }
 
-    private func submitRegistration() {
-        guard !submitting, step == .details, let destination else { return }
+    /// Registering and paying end on the same screen but are no longer the same
+    /// event: a seat is granted outright, while a declared transfer is a claim
+    /// the organizer still has to confirm.
+    private var declaredPayment: Bool { reviewOnly }
+
+    private var successSymbol: String {
+        if declaredPayment {
+            return destination?.provider == .cash ? "banknote.fill" : "checkmark"
+        }
+        return "checkmark"
+    }
+
+    private var successTitle: String {
+        if declaredPayment { return "سُجّل تحويلك" }
+        if isGuestRequest { return "سُجّل ضيوفك" }
+        return "أنت في القائمة"
+    }
+
+    private var successSubtitle: String {
+        if declaredPayment {
+            return destination?.provider == .cash
+                ? "تسدد للمشرف في الملعب، وينتظر تأكيده"
+                : "طلبك الآن بانتظار تأكيد وصول القطة من المشرف"
+        }
+        if isGuestRequest { return "أضيف الضيوف إلى قائمة التمرين" }
+        return "اسمك مسجل في قائمة التمرين"
+    }
+
+    private func declarePayment(using method: PaymentDestinationMethod) {
+        guard !submitting else { return }
         submitting = true
         Task {
-            let outcome = await feed.submitRegistration(
-                guests: validGuests,
-                for: occurrence,
-                expectedDestination: destination
-            )
+            let outcome = await feed.declarePayment(for: occurrence, method: method)
+            submitting = false
+            switch outcome {
+            case .success:
+                Haptics.success()
+                withAnimation { step = .success }
+            case .failure(let message):
+                Haptics.error()
+                failureMessage = message
+            // Declaring a transfer says nothing about seats; the server cannot
+            // answer with either of these. Reported rather than ignored.
+            case .seatsFullOfferWaitlist, .closedAtCapacity:
+                Haptics.error()
+                failureMessage = "اكتملت المقاعد لهذا الموعد."
+            }
+        }
+    }
+
+    private func submitRegistration() {
+        guard !submitting, step == .details || step == .selection,
+              let destination else { return }
+        submitting = true
+        Task {
+            let outcome = if isGuestRequest {
+                await feed.addGuests(
+                    validGuests,
+                    to: occurrence,
+                    expectedDestination: destination,
+                    withoutSelf: registersWithoutSelf
+                )
+            } else {
+                await feed.submitRegistration(
+                    guests: validGuests,
+                    for: occurrence,
+                    expectedDestination: destination
+                )
+            }
             submitting = false
             switch outcome {
             case .success:
@@ -1800,10 +2326,27 @@ struct RegistrationFlowSheet: View {
         isEnabled: Bool = true,
         action: @escaping () -> Void
     ) -> some View {
-        TamrinActionButton(title: title, isLoading: isLoading, tint: color, labelColor: foregroundColor, action: action)
+        // The same glass capsule either way — only its tint changes. Disabled
+        // is a barely-there wash that still reads as a button; dropping to the
+        // untinted glass style instead made it disappear into the sheet, and
+        // keeping the accent at full strength made an unpressable button look
+        // pressable.
+        TamrinActionButton(
+            title: title,
+            isLoading: isLoading,
+            tint: isEnabled ? color : .white.opacity(0.14),
+            labelColor: isEnabled ? foregroundColor : .white.opacity(0.4),
+            action: action
+        )
             .disabled(!isEnabled)
+            .animation(.smooth(duration: 0.25), value: isEnabled)
             .padding(.horizontal, 20)
             .padding(.top, 4)
+            // The sheet still reserves ~24pt of home-indicator strip beneath
+            // the content, so this is the remainder that brings the gap under
+            // the button up to the ~26pt its sides sit at. Measured, not
+            // guessed: the two margins are meant to read as identical.
+            .padding(.bottom, 3)
     }
 
     private func availablePaymentMethodRow(
@@ -1991,5 +2534,20 @@ struct EventActionTile<Badge: View>: View {
 extension EventActionTile where Badge == EmptyView {
     init(symbol: String, title: String) {
         self.init(symbol: symbol, title: title) { EmptyView() }
+    }
+}
+
+
+/// Paints the glass card around a roster row that has grown a question, so the
+/// row and its answers read as one object.
+private struct RosterCardBackground: ViewModifier {
+    let isOn: Bool
+
+    func body(content: Content) -> some View {
+        if isOn {
+            content.tamrinGlassCard()
+        } else {
+            content
+        }
     }
 }

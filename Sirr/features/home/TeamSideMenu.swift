@@ -278,14 +278,14 @@ private struct TeamSideMenuRow: View {
                 fallbackBackground: AnyShapeStyle(
                     LinearGradient(
                         colors: [
-                            Color(white: 0.26),
-                            Color(white: 0.17)
+                            team.color.color,
+                            team.color.color.opacity(0.82)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
                 ),
-                symbolColor: .white.opacity(0.88)
+                symbolColor: team.color.symbolColor
             )
             VStack(alignment: .leading, spacing: 3) {
                 Text(team.name)

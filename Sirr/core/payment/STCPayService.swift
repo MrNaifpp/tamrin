@@ -25,6 +25,9 @@ enum SubmitPaymentResult {
     case closedAtCapacity
     /// User already has a row for this event (any status).
     case alreadyJoined(paymentStatus: PaymentStatus)
+    /// A standalone guest payment is still pending for this account. It must
+    /// be resolved before a separate self-registration can be submitted.
+    case pendingGuestRequest
     /// Creator never set their STC Pay number — defensive; the guardrail at
     /// event-creation time should make this unreachable.
     case creatorMissingNumber
@@ -79,6 +82,9 @@ final class STCPayService {
             let s = PaymentStatus(rawValue: raw) ?? .confirmed
             stcPayLogger.info("submit_payment already_joined (eventId: \(eventId), status: \(raw))")
             return .alreadyJoined(paymentStatus: s)
+        case "pending_guest_request":
+            stcPayLogger.info("submit_payment pending_guest_request (eventId: \(eventId))")
+            return .pendingGuestRequest
         case "creator_missing_number":
             stcPayLogger.warning("submit_payment creator_missing_number (eventId: \(eventId))")
             return .creatorMissingNumber

@@ -44,6 +44,10 @@ struct EventRecord: Codable {
     let cancelledAt: Date?
     let cancellationReasonCode: String?
     let cancellationReasonText: String?
+    /// Set when the organizer has explicitly asked the registered players to
+    /// pay their share. Members use it to keep the payment destination
+    /// reachable after dismissing the reminder or payment sheet.
+    let paymentReminderSentAt: Date?
     /// Current authenticated member's private response, computed by the list
     /// RPC. Organizers do not receive other members' reasons here.
     let myResponseStatus: String?
@@ -77,6 +81,7 @@ struct EventRecord: Codable {
         case cancelledAt = "cancelled_at"
         case cancellationReasonCode = "cancellation_reason_code"
         case cancellationReasonText = "cancellation_reason_text"
+        case paymentReminderSentAt = "payment_reminder_sent_at"
         case myResponseStatus = "my_response_status"
         case capacityPolicy = "capacity_policy"
     }
@@ -109,6 +114,7 @@ struct EventRecord: Codable {
         cancelledAt = try container.decodeIfPresent(Date.self, forKey: .cancelledAt)
         cancellationReasonCode = try container.decodeIfPresent(String.self, forKey: .cancellationReasonCode)
         cancellationReasonText = try container.decodeIfPresent(String.self, forKey: .cancellationReasonText)
+        paymentReminderSentAt = try container.decodeIfPresent(Date.self, forKey: .paymentReminderSentAt)
         myResponseStatus = try container.decodeIfPresent(String.self, forKey: .myResponseStatus)
         capacityPolicy = try container.decodeIfPresent(CapacityPolicy.self, forKey: .capacityPolicy)
     }
@@ -130,12 +136,18 @@ struct ParticipantRecord: Codable, Identifiable {
     let joinedAt: String?
     let displayName: String?
     let avatarUrl: String?
+    /// The position on the player's profile, verbatim. Nil for a guest, and on
+    /// a server that predates the player sheet showing it.
+    let playerPosition: String?
     let paymentStatus: PaymentStatus?
     let paidToNumber: String?
     let guestName: String?
     let addedBy: UUID?
     /// Nil on a server that predates manual registration.
     let addedManually: Bool?
+    /// When the payer said they transferred. Nil on a seat that is held but
+    /// not yet paid for, and on a server that predates pay-after-registering.
+    let paymentDeclaredAt: String?
     /// Only the organizer receives this; it is what the payment-reminder
     /// cooldown is measured from. Nil on a server that predates reminders.
     let paymentReminderSentAt: String?
@@ -171,6 +183,13 @@ struct ParticipantRecord: Codable, Identifiable {
 
     var paymentReminderSentAtDate: Date? { Self.timestamp(paymentReminderSentAt) }
 
+    var paymentDeclaredAtDate: Date? { Self.timestamp(paymentDeclaredAt) }
+
+    /// The seat is taken but its share has not been declared yet. A server
+    /// that predates the column reports every pending seat as declared, which
+    /// is what it used to mean.
+    var isAwaitingPayment: Bool { isPending && paymentDeclaredAt == nil }
+
     /// True if the row represents a confirmed seat.
     var isConfirmed: Bool { (paymentStatus ?? .confirmed) == .confirmed }
 
@@ -186,11 +205,13 @@ struct ParticipantRecord: Codable, Identifiable {
         case joinedAt = "joined_at"
         case displayName = "display_name"
         case avatarUrl = "avatar_url"
+        case playerPosition = "player_position"
         case paymentStatus = "payment_status"
         case paidToNumber = "paid_to_number"
         case guestName = "guest_name"
         case addedBy = "added_by"
         case addedManually = "added_manually"
+        case paymentDeclaredAt = "payment_declared_at"
         case paymentReminderSentAt = "payment_reminder_sent_at"
         case isWaitlisted = "is_waitlisted"
     }
@@ -693,6 +714,69 @@ final class EventService {
         let records = try JSONDecoder().decode([ParticipantRecord].self, from: response.data)
         eventLogger.info("API getEventParticipants succeeded (eventId: \(eventId), count: \(records.count))")
         return records
+    }
+
+    /// Takes a seat without paying for it. A paid exercise is now joined first
+    /// and settled later, so this is the only call registration makes.
+    func registerEventSeat(
+        eventId: UUID,
+        guestNames: [String],
+        expectedPricePerPerson: Double?
+    ) async throws -> String {
+        var params: [String: AnyJSON] = [
+            "p_event_id": .string(eventId.uuidString),
+            "p_guest_names": .array(guestNames.map { .string($0) })
+        ]
+        if let expectedPricePerPerson {
+            params["p_expected_price_per_person"] = .double(expectedPricePerPerson)
+        }
+
+        let response = try await client
+            .rpc("register_event_seat", params: params)
+            .execute()
+
+        guard
+            let payload = try JSONSerialization.jsonObject(with: response.data) as? [String: Any],
+            let status = payload["status"] as? String
+        else {
+            throw NSError(
+                domain: "EventService",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "تعذر قراءة رد الخادم."]
+            )
+        }
+        eventLogger.info("API registerEventSeat -> \(status)")
+        return status
+    }
+
+    /// «حوّلت المبلغ»: marks the caller's own seat, and the guest seats they
+    /// are responsible for, as declared — awaiting the organizer's word that it
+    /// arrived. Seats already declared are untouched.
+    func declareEventPayment(
+        eventId: UUID,
+        paymentMethodId: UUID
+    ) async throws -> String {
+        let params: [String: String] = [
+            "p_event_id": eventId.uuidString,
+            "p_payment_method_id": paymentMethodId.uuidString
+        ]
+
+        let response = try await client
+            .rpc("declare_event_payment", params: params)
+            .execute()
+
+        guard
+            let payload = try JSONSerialization.jsonObject(with: response.data) as? [String: Any],
+            let status = payload["status"] as? String
+        else {
+            throw NSError(
+                domain: "EventService",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "تعذر قراءة رد الخادم."]
+            )
+        }
+        eventLogger.info("API declareEventPayment -> \(status)")
+        return status
     }
 
     /// Registers a person by name on behalf of the organizer. The seat is real:

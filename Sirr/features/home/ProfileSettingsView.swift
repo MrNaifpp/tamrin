@@ -17,7 +17,6 @@ struct ProfileSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var position = ""
-    @State private var customPosition = ""
     @State private var photoItem: PhotosPickerItem?
     @State private var avatarData: Data?
     /// Set by «حذف الصورة». Distinct from `avatarData == nil`, which is also
@@ -27,16 +26,10 @@ struct ProfileSettingsView: View {
     @State private var showPhotoPicker = false
     @FocusState private var nameFocused: Bool
 
-    private let positions = ["حارس", "دفاع", "وسط", "هجوم", "مخصص"]
+    private let positions = ["حارس", "دفاع", "وسط", "هجوم"]
 
     private var trimmedName: String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var resolvedPosition: String {
-        position == "مخصص"
-            ? customPosition.trimmingCharacters(in: .whitespacesAndNewlines)
-            : position
     }
 
     var body: some View {
@@ -64,13 +57,11 @@ struct ProfileSettingsView: View {
             // pushed inside the settings stack, where its state outlives a pop,
             // so a stale flag would delete the photo on an unrelated later save.
             avatarRemoved = false
+            // A position stored before the four became the only choices —
+            // anything typed by hand — is simply not preselected, so saving
+            // replaces it with one of the four.
             let saved = feed.playerPosition
-            if positions.contains(saved) {
-                position = saved
-            } else if !saved.isEmpty {
-                position = "مخصص"
-                customPosition = saved
-            }
+            if positions.contains(saved) { position = saved }
         }
     }
 
@@ -237,14 +228,6 @@ struct ProfileSettingsView: View {
                 }
             }
 
-            if position == "مخصص" {
-                TextField("اكتب مركزك", text: $customPosition)
-                    .font(TamrinFont.font(size: 15, weight: .medium))
-                    .padding(.horizontal, 18)
-                    .frame(height: 50)
-                    .background(TamrinTheme.secondary, in: .capsule)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.snappy(duration: 0.22), value: position)
@@ -261,7 +244,7 @@ struct ProfileSettingsView: View {
         feed.saveProfile(
             name: trimmedName,
             avatar: avatarEdit,
-            playerPosition: resolvedPosition
+            playerPosition: position
         )
         Haptics.success()
         dismiss()

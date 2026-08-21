@@ -212,6 +212,25 @@ extension View {
     }
 }
 
+extension View {
+    /// Wraps sheet content in a scroll view that only actually scrolls when the
+    /// content is taller than the sheet. Pair it with `sheetContentHeight()`
+    /// on the same subtree: the height is still measured from the content, so
+    /// short sheets stay short.
+    /// The content is given the sheet's own height as a floor, so a step that
+    /// is shorter than the sheet still fills it — its bottom controls stay at
+    /// the bottom instead of floating under a band of empty space once the
+    /// sheet is pulled to full.
+    func scrollableSheetContent() -> some View {
+        GeometryReader { proxy in
+            ScrollView(.vertical) {
+                frame(minHeight: proxy.size.height, alignment: .top)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+    }
+}
+
 private struct FittedSheetDetent: ViewModifier {
     var minHeight: CGFloat
     var maxFraction: CGFloat

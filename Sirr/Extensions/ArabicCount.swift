@@ -49,3 +49,14 @@ extension Int {
         }
     }
 }
+
+extension String {
+    /// The first word of a name. Asking «هل وصلتك قطة «مشعل»؟» reads as a
+    /// question between two people; the full legal name does not.
+    var firstNameOnly: String {
+        trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
+            .first
+            .map(String.init) ?? self
+    }
+}

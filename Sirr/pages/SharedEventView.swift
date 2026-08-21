@@ -367,6 +367,8 @@ struct SharedEventView: View {
                 if status == .confirmed { joinSuccess = true }
                 else if status == .pending { hasPendingPayment = true }
                 else { joinError = "أنت مسجل بالفعل في هذه الفعالية" }
+            case .pendingGuestRequest:
+                joinError = "لديك طلب ضيوف بانتظار التأكيد. انتظر حسمه قبل تسجيل نفسك."
             case .creatorMissingNumber:
                 joinError = "صاحب الفعالية لم يضف رقم STC Pay بعد"
             case .registrationClosed:
