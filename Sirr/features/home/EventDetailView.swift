@@ -39,6 +39,11 @@ struct EventDetailView: View {
     @State private var panelTop: CGFloat = .greatestFiniteMagnitude
 
     private var roster: [FeedMember] { feed.roster(for: occurrence) }
+    /// The people holding a seat. The roster now also carries the queue, and
+    /// the two belong in separate sections.
+    private var seatedRoster: [FeedMember] { roster.filter { $0.status != .waitlisted } }
+    /// The queue, in the order the server will promote from it.
+    private var waitingRoster: [FeedMember] { feed.waitlistMembers(for: occurrence) }
     private var myRegistration: FeedMember? { feed.myRegistration(for: occurrence) }
     private var confirmedCount: Int { feed.registeredCount(for: occurrence) }
     private var waitingCount: Int { feed.waitlistCount(for: occurrence) }
@@ -56,7 +61,7 @@ struct EventDetailView: View {
     /// Where this player sits in the order people registered — the roster
     /// already arrives sorted by `joined_at`.
     private func seatNumber(of member: FeedMember) -> Int? {
-        roster.firstIndex { $0.id == member.id }.map { $0 + 1 }
+        seatedRoster.firstIndex { $0.id == member.id }.map { $0 + 1 }
     }
 
     /// Guests carry the account id that registered them. Resolve it through
@@ -402,6 +407,8 @@ struct EventDetailView: View {
             }
 
             rosterRows
+
+            waitlistSection
         }
         .padding(.horizontal, 20)
         .padding(.top, 26)
@@ -619,6 +626,9 @@ struct EventDetailView: View {
             }
         } else {
             let full = occurrence.capacity > 0 && confirmedCount >= occurrence.capacity
+            // A full session that closes at capacity has nothing to tap: the
+            // label used to promise a waiting list that the server would then
+            // refuse to seat anyone on.
             let closed = full && occurrence.capacityPolicy == .closed
             VStack(spacing: 10) {
                 if closed {
@@ -631,6 +641,7 @@ struct EventDetailView: View {
                         .frame(height: TamrinControlMetrics.glassActionHeight)
                         .background(.white.opacity(0.08), in: .capsule)
                         .accessibilityLabel("التسجيل مغلق، اكتمل العدد")
+                        .accessibilityHint("اكتمل العدد وهذا الموعد يقفل التسجيل عند الاكتمال")
                 } else {
                     Button {
                         Haptics.impact(.medium)
@@ -761,6 +772,10 @@ struct EventDetailView: View {
                 Text("\(waitingCount.formatted()) في قائمة الانتظار")
                     .font(TamrinFont.font(size: 12, weight: .medium))
                     .foregroundStyle(.orange)
+            } else if occurrence.capacityPolicy == .closed {
+                Text("يقفل التسجيل عند اكتمال العدد")
+                    .font(TamrinFont.font(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.5))
             }
         }
         .padding(16)
@@ -805,7 +820,7 @@ struct EventDetailView: View {
 
     @ViewBuilder
     private var rosterRows: some View {
-        if seatedRoster.isEmpty, reserveRoster.isEmpty {
+        if seatedRoster.isEmpty {
             Text("كن أول المسجلين.")
                 .font(TamrinFont.subheadline)
                 .foregroundStyle(.white.opacity(0.65))
@@ -822,29 +837,46 @@ struct EventDetailView: View {
                     rosterRow(for: person)
                 }
             }
+        }
+    }
 
-            // The reserve list is its own list. Someone waiting for a seat is
-            // not in the exercise yet, and mixing them into the roster made the
-            // count read as larger than it is.
-            if !reserveRoster.isEmpty {
-                Text("الاحتياط")
-                    .font(TamrinFont.font(size: 15, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.75))
-                    .padding(.top, 14)
-                    .padding(.horizontal, 4)
+    /// The queue gets its own heading rather than orange marks inside the
+    /// seated list: these people are not registered, and the order matters --
+    /// it is exactly the order the server promotes in when a seat frees.
+    @ViewBuilder
+    private var waitlistSection: some View {
+        if !waitingRoster.isEmpty {
+            Text("قائمة الانتظار")
+                .font(TamrinFont.font(size: 15, weight: .medium))
+                .foregroundStyle(.white.opacity(0.75))
+                .padding(.top, 8)
+                .padding(.horizontal, 4)
 
-                VStack(spacing: 8) {
-                    ForEach(reserveRoster) { person in
-                        rosterRow(for: person)
+            Text("أول ما يعتذر أحد، ينحجز المكان لأول واحد بالقائمة تلقائيًا.")
+                .font(TamrinFont.font(size: 12, weight: .medium))
+                .foregroundStyle(.white.opacity(0.5))
+                .padding(.horizontal, 4)
+
+            VStack(spacing: 8) {
+                ForEach(Array(waitingRoster.enumerated()), id: \.element.id) { index, person in
+                    MemberRowCard(
+                        name: person.name,
+                        subtitle: index == 0 ? "التالي على الدور" : nil,
+                        avatarImageData: avatarData(for: person),
+                        avatarImageUrl: person.avatarUrl
+                    ) {
+                        Text("\((index + 1).formatted())")
+                            .font(TamrinFont.font(size: 13, weight: .bold))
+                            .foregroundStyle(.orange)
+                            .monospacedDigit()
+                            .accessibilityLabel("الدور \((index + 1).formatted())")
                     }
+                    .contentShape(.rect)
+                    .onTapGesture { memberInDetails = person }
                 }
             }
         }
     }
-
-    /// The people holding a seat, and the people waiting for one.
-    private var seatedRoster: [FeedMember] { roster.filter { $0.status != .waitlisted } }
-    private var reserveRoster: [FeedMember] { roster.filter { $0.status == .waitlisted } }
 
     /// The colour money wears in this app, on both ends of the transfer.
     static let moneyGreen = Color(red: 0.15, green: 0.56, blue: 0.38)
@@ -1132,6 +1164,9 @@ struct EventDetailView: View {
             case .failure(let message):
                 actionErrorMessage = message
                 Haptics.error()
+            case .seatsFullOfferWaitlist, .closedAtCapacity:
+                actionErrorMessage = "اكتملت المقاعد لهذا الموعد."
+                Haptics.error()
             }
         }
     }
@@ -1257,6 +1292,9 @@ struct EventDetailView: View {
             case .failure(let message):
                 actionErrorMessage = message
                 Haptics.error()
+            case .seatsFullOfferWaitlist, .closedAtCapacity:
+                actionErrorMessage = "اكتملت المقاعد لهذا الموعد."
+                Haptics.error()
             }
         }
     }
@@ -1272,6 +1310,9 @@ struct EventDetailView: View {
                 Haptics.success()
             case .failure(let message):
                 actionErrorMessage = message
+                Haptics.error()
+            case .seatsFullOfferWaitlist, .closedAtCapacity:
+                actionErrorMessage = "اكتملت المقاعد لهذا الموعد."
                 Haptics.error()
             }
         }
@@ -1398,6 +1439,7 @@ struct RegistrationFlowSheet: View {
     @State private var submitting = false
     @State private var failureMessage: String?
     @State private var copiedMessage: String?
+    @State private var joiningWaitlist = false
     @FocusState private var focusedGuest: Int?
 
     private enum Step: Hashable {
@@ -1405,6 +1447,12 @@ struct RegistrationFlowSheet: View {
         case paymentMethod
         case details
         case success
+        /// Every seat is taken on a session that keeps a queue.
+        case waitlistOffer
+        /// The queue has been joined.
+        case waitlisted
+        /// Every seat is taken on a session that closes at capacity.
+        case closedAtCapacity
     }
 
     init(
@@ -1527,6 +1575,8 @@ struct RegistrationFlowSheet: View {
         case .paymentMethod: reviewOnly ? "وسيلة الدفع" : "وسائل الدفع"
         case .details: "تفاصيل الدفع"
         case .success: "تم"
+        case .waitlistOffer, .waitlisted: "قائمة الانتظار"
+        case .closedAtCapacity: "اكتمل العدد"
         }
     }
 
@@ -1534,7 +1584,7 @@ struct RegistrationFlowSheet: View {
     /// close the sheet instead.
     private var backStep: Step? {
         switch step {
-        case .selection, .success: nil
+        case .selection, .success, .waitlistOffer, .waitlisted, .closedAtCapacity: nil
         case .paymentMethod: reviewOnly ? nil : .selection
         case .details: .paymentMethod
         }
@@ -1564,6 +1614,12 @@ struct RegistrationFlowSheet: View {
                         detailsStep
                     case .success:
                         successStep
+                    case .waitlistOffer:
+                        waitlistOfferStep
+                    case .waitlisted:
+                        waitlistedStep
+                    case .closedAtCapacity:
+                        closedAtCapacityStep
                     }
                 }
                 .sheetContentHeight()
@@ -1935,6 +1991,114 @@ struct RegistrationFlowSheet: View {
         }
     }
 
+    /// The seats ran out while this sheet was open, and the organizer keeps a
+    /// queue. Offered instead of an error, because joining is the useful thing
+    /// to do next.
+    private var waitlistOfferStep: some View {
+        VStack(spacing: 14) {
+            Color.clear.frame(height: 26)
+
+            ZStack {
+                Circle().fill(.white.opacity(0.12))
+                Image(systemName: "hourglass")
+                    .font(.system(size: 31, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 76, height: 76)
+
+            Text("امتلأت المقاعد")
+                .font(TamrinFont.font(size: 24, weight: .bold))
+                .foregroundStyle(.white)
+
+            Text("انضم لقائمة الانتظار، وإذا اعتذر أحد ينحجز لك مكانه تلقائيًا ويوصلك تنبيه.")
+                .font(TamrinFont.font(size: 14, weight: .medium))
+                .foregroundStyle(.white.opacity(0.62))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 28)
+
+            primaryButton(
+                title: joiningWaitlist ? "..." : "انضم لقائمة الانتظار",
+                color: TamrinTheme.lime,
+                foregroundColor: TamrinTheme.ink
+            ) {
+                guard !joiningWaitlist else { return }
+                joiningWaitlist = true
+                Task {
+                    let outcome = await feed.joinWaitlist(occurrence)
+                    joiningWaitlist = false
+                    switch outcome {
+                    case .success:
+                        Haptics.success()
+                        withAnimation(.smooth(duration: 0.3)) { step = .waitlisted }
+                    case .failure(let message):
+                        Haptics.error()
+                        failureMessage = message
+                    case .seatsFullOfferWaitlist, .closedAtCapacity:
+                        Haptics.error()
+                        failureMessage = "تعذر الانضمام لقائمة الانتظار."
+                    }
+                }
+            }
+        }
+    }
+
+    private var waitlistedStep: some View {
+        VStack(spacing: 14) {
+            Color.clear.frame(height: 26)
+
+            ZStack {
+                Circle().fill(TamrinTheme.lime)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 31, weight: .bold))
+                    .foregroundStyle(TamrinTheme.ink)
+            }
+            .frame(width: 76, height: 76)
+
+            Text("أنت في قائمة الانتظار")
+                .font(TamrinFont.font(size: 24, weight: .bold))
+                .foregroundStyle(.white)
+
+            Text("أول ما يتحرر مقعد ينحجز لك ويوصلك تنبيه.")
+                .font(TamrinFont.font(size: 14, weight: .medium))
+                .foregroundStyle(.white.opacity(0.62))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 28)
+
+            primaryButton(title: "تم", color: .white, foregroundColor: .black) {
+                dismiss()
+            }
+        }
+    }
+
+    /// This session closes at capacity, so there is no queue to offer.
+    private var closedAtCapacityStep: some View {
+        VStack(spacing: 14) {
+            Color.clear.frame(height: 26)
+
+            ZStack {
+                Circle().fill(.white.opacity(0.12))
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 31, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 76, height: 76)
+
+            Text("قفل التسجيل")
+                .font(TamrinFont.font(size: 24, weight: .bold))
+                .foregroundStyle(.white)
+
+            Text("اكتمل عدد اللاعبين، وهذا الموعد يقفل التسجيل عند الاكتمال بدون قائمة انتظار.")
+                .font(TamrinFont.font(size: 14, weight: .medium))
+                .foregroundStyle(.white.opacity(0.62))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 28)
+
+            primaryButton(title: "حسنًا", color: .white, foregroundColor: .black) {
+                dismiss()
+            }
+        }
+    }
+
     private var successStep: some View {
         VStack(spacing: 14) {
             Color.clear.frame(height: 4)
@@ -2032,6 +2196,11 @@ struct RegistrationFlowSheet: View {
             case .failure(let message):
                 Haptics.error()
                 failureMessage = message
+            // Declaring a transfer says nothing about seats; the server cannot
+            // answer with either of these. Reported rather than ignored.
+            case .seatsFullOfferWaitlist, .closedAtCapacity:
+                Haptics.error()
+                failureMessage = "اكتملت المقاعد لهذا الموعد."
             }
         }
     }
@@ -2063,6 +2232,12 @@ struct RegistrationFlowSheet: View {
             case .failure(let message):
                 Haptics.error()
                 failureMessage = message
+            case .seatsFullOfferWaitlist:
+                Haptics.impact(.medium)
+                withAnimation(.smooth(duration: 0.3)) { step = .waitlistOffer }
+            case .closedAtCapacity:
+                Haptics.error()
+                withAnimation(.smooth(duration: 0.3)) { step = .closedAtCapacity }
             }
         }
     }

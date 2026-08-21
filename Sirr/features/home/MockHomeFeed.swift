@@ -20,7 +20,9 @@ struct FeedTeam: Identifiable {
 }
 
 enum FeedTeamRole { case admin, member }
-enum FeedCapacityPolicy { case waitlist, closed }
+/// The feed's name for the shared model type — kept so the composer and
+/// team screens read the same as they always have.
+typealias FeedCapacityPolicy = CapacityPolicy
 enum FeedScheduleKind { case recurring, oneOff }
 
 /// Where a team trains. A custom venue is one only the team knows — the rest
@@ -263,10 +265,10 @@ struct FeedOccurrence: Identifiable {
     /// registered player can always return to the transfer details.
     var paymentReminderSentAt: Date? = nil
     var memberResponse: FeedMemberResponse? = nil
-    /// What happens once every seat is taken: a reserve list the organizer
-    /// opened, or a closed door. Defaults to the reserve list, which is what
-    /// every event did before the choice existed.
-    var capacityPolicy: FeedCapacityPolicy = .waitlist
+    /// What happens once every seat is taken. Defaults to `.waitlist`, which
+    /// is both the column default and how the app behaved before the choice
+    /// was storable.
+    var capacityPolicy: CapacityPolicy = .waitlist
 
     /// Compatibility convenience for surfaces that only need a representative
     /// method (the participant flow always uses `paymentMethodIds`).
@@ -372,7 +374,31 @@ final class HomeStore {
         roster(for: occurrence).filter { $0.status != .waitlisted }.count
     }
     func waitlistCount(for occurrence: FeedOccurrence) -> Int {
-        roster(for: occurrence).filter { $0.status == .waitlisted }.count
+        waitlistMembers(for: occurrence).count
+    }
+
+    /// Everyone queued for a seat, in the order the server will promote them.
+    /// The roster RPC already returns waiters after the seated players and
+    /// oldest-first among themselves, so position in this array is position in
+    /// the queue.
+    func waitlistMembers(for occurrence: FeedOccurrence) -> [FeedMember] {
+        roster(for: occurrence).filter { $0.status == .waitlisted }
+    }
+
+    /// Puts the current user in the queue for a full session.
+    func joinWaitlist(_ occurrence: FeedOccurrence) async -> RegistrationOutcome {
+        guard let uid = currentUserID else { return .failure("يجب تسجيل الدخول أولاً.") }
+        if isPreview || isDebugMemberFixtureEvent(occurrence.id) {
+            myEventStatus[occurrence.id] = .waitlisted
+            return .success
+        }
+        do {
+            try await STCPayService.shared.joinWaitlist(eventId: occurrence.id, userId: uid)
+            await reloadRoster(occurrence.id)
+            return .success
+        } catch {
+            return .failure(error.localizedDescription)
+        }
     }
     func myRegistration(for occurrence: FeedOccurrence) -> FeedMember? {
         guard let status = myEventStatus[occurrence.id] else { return nil }
@@ -761,9 +787,13 @@ final class HomeStore {
         rosterCache[eventId] = parts.map {
             FeedMember(id: $0.participantId,
                        name: $0.displayName ?? $0.guestName ?? "—",
-                       status: $0.isAwaitingPayment
-                           ? .awaitingPayment
-                           : ($0.isPending ? .paymentPending : .registered),
+                       // Waiting for a seat outranks anything about money:
+                       // nobody on the queue owes for a seat they do not hold.
+                       status: $0.isWaiting
+                           ? .waitlisted
+                           : ($0.isAwaitingPayment
+                               ? .awaitingPayment
+                               : ($0.isPending ? .paymentPending : .registered)),
                        userId: $0.userId,
                        addedBy: $0.addedBy,
                        isManual: $0.isManual,
@@ -778,10 +808,15 @@ final class HomeStore {
                            ?? ($0.userId == currentUserID ? playerPosition : ""),
                        paymentReminderSentAt: $0.paymentReminderSentAtDate)
         }
-        if let mine = parts.first(where: { $0.userId == currentUserID && $0.guestName == nil }) {
+        let mineSeated = parts.first {
+            $0.userId == currentUserID && $0.guestName == nil && !$0.isWaiting
+        }
+        if let mine = mineSeated {
             myEventStatus[eventId] = mine.isAwaitingPayment
                 ? .awaitingPayment
                 : (mine.isPending ? .paymentPending : .registered)
+        } else if parts.contains(where: { $0.userId == currentUserID && $0.isWaiting }) {
+            myEventStatus[eventId] = .waitlisted
         } else {
             myEventStatus[eventId] = nil
         }
@@ -963,6 +998,13 @@ final class HomeStore {
                 longitude: plan.longitude,
                 paymentMethodIds: paymentMethodIds
             )
+            // Its own RPC rather than another argument on update_event_with_scope:
+            // switching back to a queue can seat people immediately, so the
+            // server drains the waiting list in the same transaction.
+            try await EventService.shared.setCapacityPolicy(
+                eventId: eventID,
+                policy: plan.capacityPolicy
+            )
         } catch {
             errorMessage = error.localizedDescription
             await loadSelectedTeamData()
@@ -1051,7 +1093,8 @@ final class HomeStore {
             latitude: plan.latitude,
             longitude: plan.longitude,
             recurrence: recurrence,
-            paymentMethodIds: paymentMethodIds
+            paymentMethodIds: paymentMethodIds,
+            capacityPolicy: plan.capacityPolicy
         )
     }
 
@@ -1116,6 +1159,11 @@ final class HomeStore {
     enum RegistrationOutcome {
         case success
         case failure(String)
+        /// Every seat is taken, and this session keeps a queue. The caller
+        /// offers to join it rather than reporting an error.
+        case seatsFullOfferWaitlist
+        /// Every seat is taken on a session that closes at capacity.
+        case closedAtCapacity
     }
 
     /// Sends this exact exercise to every current member of the workspace.
@@ -1526,7 +1574,11 @@ final class HomeStore {
                 updateOccurrence(occurrence.id) { $0.memberResponse = nil }
                 return .success
             case "seats_full":
-                return .failure("اكتملت المقاعد لهذا الموعد.")
+                // Full, but the organizer keeps a reserve list: the sheet asks
+                // whether to take a place on it rather than reporting a dead end.
+                return .seatsFullOfferWaitlist
+            case "registration_closed_full":
+                return .closedAtCapacity
             case "registration_closed":
                 return .failure("التسجيل مقفل لهذا الموعد.")
             case "not_published":
@@ -1932,7 +1984,8 @@ final class HomeStore {
                               cancellationReasonCode: ev.cancellationReasonCode,
                               cancellationReasonText: ev.cancellationReasonText,
                               paymentReminderSentAt: ev.paymentReminderSentAt,
-                              memberResponse: ev.myResponseStatus.flatMap(FeedMemberResponse.init(rawValue:)))
+                              memberResponse: ev.myResponseStatus.flatMap(FeedMemberResponse.init(rawValue:)),
+                              capacityPolicy: ev.capacityPolicy ?? .waitlist)
     }
 
     /// Gap: there is no per-workspace template list, so the team-detail "session"
@@ -1951,7 +2004,8 @@ final class HomeStore {
                         startTime: ev.startDate, endTime: end, startDate: ev.startDate, endDate: nil,
                         price: ev.pricePerPerson ?? Double(ev.totalPrice ?? 0),
                         totalVenueCost: Double(ev.totalPrice ?? 0), currency: "ر.س",
-                        capacity: ev.maxParticipants ?? 0, capacityPolicy: .waitlist,
+                        capacity: ev.maxParticipants ?? 0,
+                        capacityPolicy: ev.capacityPolicy ?? .waitlist,
                         latitude: ev.latitude ?? 24.7136, longitude: ev.longitude ?? 46.6753,
                         locationName: ev.location, locationAddress: "",
                         sourceEventID: ev.id,

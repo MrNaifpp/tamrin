@@ -51,6 +51,10 @@ struct EventRecord: Codable {
     /// Current authenticated member's private response, computed by the list
     /// RPC. Organizers do not receive other members' reasons here.
     let myResponseStatus: String?
+    /// What happens once the seats run out. Nil only on a server that predates
+    /// the column; callers treat that as `.waitlist`, which is how the client
+    /// behaved back when it hardcoded the value.
+    let capacityPolicy: CapacityPolicy?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -79,6 +83,7 @@ struct EventRecord: Codable {
         case cancellationReasonText = "cancellation_reason_text"
         case paymentReminderSentAt = "payment_reminder_sent_at"
         case myResponseStatus = "my_response_status"
+        case capacityPolicy = "capacity_policy"
     }
 
     init(from decoder: Decoder) throws {
@@ -111,6 +116,7 @@ struct EventRecord: Codable {
         cancellationReasonText = try container.decodeIfPresent(String.self, forKey: .cancellationReasonText)
         paymentReminderSentAt = try container.decodeIfPresent(Date.self, forKey: .paymentReminderSentAt)
         myResponseStatus = try container.decodeIfPresent(String.self, forKey: .myResponseStatus)
+        capacityPolicy = try container.decodeIfPresent(CapacityPolicy.self, forKey: .capacityPolicy)
     }
 }
 
@@ -145,6 +151,10 @@ struct ParticipantRecord: Codable, Identifiable {
     /// Only the organizer receives this; it is what the payment-reminder
     /// cooldown is measured from. Nil on a server that predates reminders.
     let paymentReminderSentAt: String?
+    /// True when this row is somebody waiting for a seat rather than holding
+    /// one. Waiters carry no payment columns. Nil on a server that predates
+    /// the waiting list being returned at all.
+    let isWaitlisted: Bool?
 
     var id: UUID { participantId }
 
@@ -186,6 +196,9 @@ struct ParticipantRecord: Codable, Identifiable {
     /// True if the row is awaiting creator confirmation.
     var isPending: Bool { paymentStatus == .pending }
 
+    /// True if the row is a place in the queue rather than a seat.
+    var isWaiting: Bool { isWaitlisted == true }
+
     enum CodingKeys: String, CodingKey {
         case participantId = "participant_id"
         case userId = "user_id"
@@ -200,6 +213,7 @@ struct ParticipantRecord: Codable, Identifiable {
         case addedManually = "added_manually"
         case paymentDeclaredAt = "payment_declared_at"
         case paymentReminderSentAt = "payment_reminder_sent_at"
+        case isWaitlisted = "is_waitlisted"
     }
 }
 
@@ -393,7 +407,8 @@ final class EventService {
         longitude: Double? = nil,
         recurrence: String = "none",
         paymentMethodId: UUID? = nil,
-        paymentMethodIds: [UUID] = []
+        paymentMethodIds: [UUID] = [],
+        capacityPolicy: CapacityPolicy = .waitlist
     ) async throws -> EventRecord {
         let session: Session
         do {
@@ -423,7 +438,8 @@ final class EventService {
             } ?? .null,
             "p_payment_method_ids": .array(
                 selectedPaymentMethodIds.map { .string($0.uuidString) }
-            )
+            ),
+            "p_capacity_policy": .string(capacityPolicy.rawValue)
         ]
         if let endDate { params["p_end_date"] = .string(iso.string(from: endDate)) }
         if let imageUrl { params["p_image_url"] = .string(imageUrl) }
@@ -1027,6 +1043,27 @@ final class EventService {
             .rpc("decline_event", params: params)
             .execute()
         eventLogger.info("API declineEvent succeeded (eventId: \(eventId))")
+    }
+
+    /// Changes what happens when the session fills. Switching back to
+    /// `.waitlist` can make an already-free seat claimable, so the RPC drains
+    /// the queue in the same transaction and reports how many it seated.
+    @discardableResult
+    func setCapacityPolicy(
+        eventId: UUID,
+        policy: CapacityPolicy
+    ) async throws -> Int {
+        let params: [String: AnyJSON] = [
+            "p_event_id": .string(eventId.uuidString),
+            "p_capacity_policy": .string(policy.rawValue)
+        ]
+        let response: PostgrestResponse<Void> = try await client
+            .rpc("set_event_capacity_policy", params: params)
+            .execute()
+        let promoted = (try? JSONSerialization.jsonObject(with: response.data))
+            .flatMap { ($0 as? [String: Any])?["promoted_count"] as? Int } ?? 0
+        eventLogger.info("API setCapacityPolicy ok (promoted: \(promoted))")
+        return promoted
     }
 
     /// Cancels only this concrete occurrence, preserving its weekly template.

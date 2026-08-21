@@ -361,6 +361,8 @@ struct SharedEventView: View {
                 stcPaySheetNumber = number
             case .seatsFull:
                 showWaitlistSheet = true
+            case .closedAtCapacity:
+                joinError = "اكتمل العدد، وهذا الموعد يقفل التسجيل عند الاكتمال"
             case .alreadyJoined(let status):
                 if status == .confirmed { joinSuccess = true }
                 else if status == .pending { hasPendingPayment = true }

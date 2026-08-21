@@ -17,6 +17,10 @@ private let manualPaymentLogger = Logger(
 enum ManualPaymentSubmissionResult {
     case submitted(destination: PaymentDestination, groupSize: Int, totalAmount: Double)
     case seatsFull
+    /// Every seat is taken on a session that closes at capacity. Distinct from
+    /// `seatsFull` because there is no queue to offer — the caller shows the
+    /// closed state instead of the waiting-list sheet.
+    case closedAtCapacity
     case alreadyJoined(PaymentStatus)
     case pendingGuestRequest
     case creatorMissingPaymentMethod
@@ -266,6 +270,9 @@ final class ManualPaymentService {
 
         case "seats_full":
             return .seatsFull
+
+        case "registration_closed_full":
+            return .closedAtCapacity
 
         case "already_joined":
             let status = PaymentStatus(rawValue: payload.paymentStatus ?? "confirmed") ?? .confirmed
