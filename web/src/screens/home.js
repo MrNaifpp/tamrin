@@ -1,7 +1,7 @@
 import { html, useState, useEffect, useCallback, useRef } from '../../vendor/preact.js'
 import { getMyWorkspaces, getWorkspaceEvents, getEventParticipants, joinWorkspace } from '../api.js'
 import { navigate } from '../router.js'
-import { Spinner, Icon, Sheet, Toast, MemberAvatar, artFor } from '../ui.js'
+import { Spinner, Icon, Sheet, Toast, MemberAvatar, artFor, symbolGlyph } from '../ui.js'
 import { parseDate, arabicDay, arabicTime, cleanAmount, counted, NOUNS } from '../format.js'
 import { APP_STORE_URL } from '../config.js'
 import { DeclineSheet } from './decline.js'
@@ -93,10 +93,12 @@ export function HomeScreen({ session, profile, onProfileChanged }) {
             <button class="glass-circle" onClick=${() => setMenuOpen(true)} aria-label="التمارين">
               <${Icon.menu} />
             </button>
-            <button class="glass-pill grow" onClick=${() => setMenuOpen(true)} aria-label="تفاصيل التمرين">
-              <span class="name grow">${current?.name ?? 'التمرين'}</span>
+            <button class="glass-pill" aria-label="تفاصيل التمرين"
+                    onClick=${() => workspaceId && navigate({ name: 'team', workspaceId })}>
+              <span class="name truncate">${current?.name ?? 'التمرين'}</span>
               <span class="chev"><${Icon.chevronStart} /></span>
             </button>
+            <span class="grow"></span>
             <button class="avatar-button" onClick=${() => navigate({ name: 'settings' })} aria-label="الملف الشخصي">
               ${profile?.avatar_url
                 ? html`<img src=${profile.avatar_url} alt="" />`
@@ -344,22 +346,6 @@ function TeamDrawer({ workspaces, currentId, profile, onSelect, onClose, onProfi
     </div>
   `
 }
-
-/// Workspace symbols are stored as SF Symbol names; the web has no such font,
-/// so the handful the app offers map to their nearest glyph.
-const SYMBOL_GLYPHS = {
-  'figure.soccer': '⚽️',
-  'soccerball': '⚽️',
-  'person.3.fill': '👥',
-  'shield.checkered': '🛡️',
-  'figure.run': '🏃',
-  'basketball.fill': '🏀',
-  'tennis.racket': '🎾',
-  'volleyball.fill': '🏐',
-  'bicycle': '🚴',
-  'dumbbell.fill': '🏋️'
-}
-const symbolGlyph = (raw) => SYMBOL_GLYPHS[raw] ?? (raw.length <= 2 ? raw : '⚽️')
 
 export function JoinByCodeSheet({ onClose, onJoined }) {
   const [value, setValue] = useState('')

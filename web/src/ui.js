@@ -30,6 +30,22 @@ export const PROVIDERS = {
 }
 export const providerOf = (raw) => PROVIDERS[raw] ?? PROVIDERS.cash
 
+/// Workspace symbols are stored as SF Symbol names, which the web has no font
+/// for, so the ones the app offers map to their nearest glyph.
+const SYMBOL_GLYPHS = {
+  'figure.soccer': '⚽️',
+  'soccerball': '⚽️',
+  'person.3.fill': '👥',
+  'shield.checkered': '🛡️',
+  'figure.run': '🏃',
+  'basketball.fill': '🏀',
+  'tennis.racket': '🎾',
+  'volleyball.fill': '🏐',
+  'bicycle': '🚴',
+  'dumbbell.fill': '🏋️'
+}
+export const symbolGlyph = (raw) => SYMBOL_GLYPHS[raw] ?? (raw && raw.length <= 2 ? raw : '⚽️')
+
 export const Spinner = () => html`<div class="center-pad"><div class="spinner"></div></div>`
 
 /// The one place a person is drawn: their photo when there is one, their
@@ -77,6 +93,9 @@ export const Icon = {
       stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 7.4V12l3 2"/></svg>`,
   close: () => html`<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
       stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>`,
+  calendar: () => html`<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+      stroke-width="1.9" stroke-linecap="round"><rect x="3.4" y="5" width="17.2" height="15.4" rx="3"/><path d="M8 3v3.4M16 3v3.4M3.4 10h17.2"/></svg>`,
+  people: () => html`<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><circle cx="9" cy="8.4" r="3.3"/><circle cx="16.6" cy="9.2" r="2.6"/><path d="M2.6 19.4c.5-3.3 3.1-5 6.4-5s5.9 1.7 6.4 5z"/><path d="M16.6 13.2c2.4 0 4.2 1.2 4.8 3.6h-4z"/></svg>`,
   pencil: () => html`<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor"
       stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10-10-4-4L4 16z"/></svg>`
 }

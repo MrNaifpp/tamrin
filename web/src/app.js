@@ -7,6 +7,7 @@ import { ProfileSetupScreen } from './screens/profile-setup.js'
 import { HomeScreen } from './screens/home.js'
 import { EventScreen } from './screens/event.js'
 import { JoinScreen } from './screens/join.js'
+import { TeamScreen } from './screens/team.js'
 import { SettingsScreen } from './screens/settings.js'
 
 /// The member-side web build of تمرين. Everything an organizer does — creating
@@ -63,6 +64,8 @@ function App() {
                       session=${session} profile=${profile} />`
       case 'join':
         return html`<${JoinScreen} key=${route.code} code=${route.code} />`
+      case 'team':
+        return html`<${TeamScreen} key=${route.workspaceId} workspaceId=${route.workspaceId} session=${session} />`
       case 'settings':
         return html`<${SettingsScreen} session=${session} profile=${profile} onProfileChanged=${loadProfile} />`
       default:

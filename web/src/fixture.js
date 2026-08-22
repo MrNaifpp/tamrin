@@ -214,8 +214,19 @@ export function demoRpc(name, params = {}) {
   switch (name) {
     case 'get_my_workspaces':
       return workspaces
-    case 'get_workspace':
-      return { workspace: workspaces[0], members: [] }
+    case 'get_workspace': {
+      const workspace = workspaces.find((w) => w.id === params.p_workspace_id) ?? workspaces[0]
+      return {
+        workspace,
+        members: [
+          { user_id: OWNER, display_name: 'نايف', avatar_url: null, postion: 'هجوم', is_owner: true },
+          { user_id: ME, display_name: profile.name, avatar_url: null, postion: profile.postion, is_owner: false },
+          ...CAST.map(([name, position], i) => ({
+            user_id: `m${i}`, display_name: name, avatar_url: null, postion: position, is_owner: false
+          }))
+        ]
+      }
+    }
     case 'get_workspace_events':
       return events.filter((event) => event.workspace_id === params.p_workspace_id)
     case 'get_event_by_id':

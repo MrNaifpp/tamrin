@@ -26,6 +26,7 @@ export function currentRoute() {
     return { name: 'event', eventId: parts[1], entry: parts[2] ?? null }
   }
   if (parts[0] === 'join' && parts[1]) return { name: 'join', code: parts[1] }
+  if (parts[0] === 'team' && parts[1]) return { name: 'team', workspaceId: parts[1] }
   if (parts[0] === 'settings') return { name: 'settings' }
   return { name: 'home' }
 }
@@ -34,6 +35,7 @@ export function href(route) {
   switch (route.name) {
     case 'event': return `${BASE}event/${encodeURIComponent(route.eventId)}${route.entry ? `/${route.entry}` : ''}`
     case 'join': return `${BASE}join/${encodeURIComponent(route.code)}`
+    case 'team': return `${BASE}team/${encodeURIComponent(route.workspaceId)}`
     case 'settings': return `${BASE}settings`
     default: return BASE
   }
