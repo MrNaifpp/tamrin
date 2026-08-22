@@ -20,7 +20,11 @@ export function currentRoute() {
   const raw = hash || stripBase(location.pathname)
   const parts = raw.split('/').filter(Boolean).map(decodeURIComponent)
 
-  if (parts[0] === 'event' && parts[1]) return { name: 'event', eventId: parts[1] }
+  if (parts[0] === 'event' && parts[1]) {
+    // A third segment is the sheet the card's button asked for — «سجّل حضورك»
+    // and «دفع القطة» open the detail page already on that step.
+    return { name: 'event', eventId: parts[1], entry: parts[2] ?? null }
+  }
   if (parts[0] === 'join' && parts[1]) return { name: 'join', code: parts[1] }
   if (parts[0] === 'settings') return { name: 'settings' }
   return { name: 'home' }
@@ -28,7 +32,7 @@ export function currentRoute() {
 
 export function href(route) {
   switch (route.name) {
-    case 'event': return `${BASE}event/${encodeURIComponent(route.eventId)}`
+    case 'event': return `${BASE}event/${encodeURIComponent(route.eventId)}${route.entry ? `/${route.entry}` : ''}`
     case 'join': return `${BASE}join/${encodeURIComponent(route.code)}`
     case 'settings': return `${BASE}settings`
     default: return BASE

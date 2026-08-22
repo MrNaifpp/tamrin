@@ -1,13 +1,11 @@
 import { html, useState, useEffect } from '../../vendor/preact.js'
 import { getInvitePreview, joinWorkspace } from '../api.js'
 import { href, goBack } from '../router.js'
-import { Spinner, Notice, BackIcon } from '../ui.js'
+import { Spinner, Icon } from '../ui.js'
 import { counted, NOUNS } from '../format.js'
 
-/// The other end of a shared invite link. On an iPhone the same URL opens the
-/// app; everywhere else it lands here.
-/// A full load rather than a client-side push: Home caches the group list it
-/// mounted with, and the member has just changed that list.
+/// JoinWorkspaceView — the other end of a shared invite link. On an iPhone the
+/// same URL opens the app; everywhere else it lands here.
 const openHome = () => { location.href = href({ name: 'home' }) }
 
 export function JoinScreen({ code }) {
@@ -28,8 +26,6 @@ export function JoinScreen({ code }) {
     setError(null)
     try {
       await joinWorkspace(code)
-      // Home reads the last opened group from storage, so point it at the one
-      // just joined before handing over.
       localStorage.setItem('tamrin.workspace', preview.id)
       openHome()
     } catch (failure) {
@@ -39,38 +35,39 @@ export function JoinScreen({ code }) {
   }
 
   return html`
-    <div class="shell">
-      <div class="topbar">
-        <button class="iconbtn" onClick=${goBack} aria-label="رجوع"><${BackIcon} /></button>
-        <h1>دعوة</h1>
-      </div>
+    <div class="app">
+      <div class="event" style="background:var(--page)">
+        <button class="glass-circle event-back" onClick=${goBack} aria-label="رجوع"><${Icon.back} /></button>
+        <div class="event-panel" style="padding-top:96px;min-height:100dvh">
+          ${error && html`<div class="notice notice-error">${error}</div>`}
+          ${!preview && !error && html`<${Spinner} />`}
 
-      ${error && html`<${Notice} tone="error">${error}<//>`}
-      ${!preview && !error && html`<${Spinner} />`}
-
-      ${preview &&
-      html`
-        <div class="card stack" style="text-align:center">
-          <div style="font-size:44px">👥</div>
-          <div>
-            <h2 style="margin:0 0 4px">${preview.name}</h2>
-            <p class="muted" style="margin:0">
-              ${preview.owner_name ? `${preview.owner_name} · ` : ''}${counted(preview.member_count, NOUNS.member)}
-            </p>
-          </div>
-          ${preview.is_member
-            ? html`
-                <${Notice} tone="good">أنت عضو في هذه المجموعة أصلًا.<//>
-                <button class="btn" onClick=${() => {
-                  localStorage.setItem('tamrin.workspace', preview.id)
-                  openHome()
-                }}>افتح المجموعة</button>
-              `
-            : html`<button class="btn btn-lime" disabled=${busy} onClick=${join}>
-                ${busy ? 'جارٍ الانضمام…' : 'انضم للمجموعة'}
-              </button>`}
+          ${preview &&
+          html`
+            <div class="hero">
+              <div style="font-size:52px">👥</div>
+              <h1>${preview.name}</h1>
+              <div class="when">
+                ${preview.owner_name ? `${preview.owner_name} · ` : ''}${counted(preview.member_count, NOUNS.member)}
+              </div>
+            </div>
+            <div style="height:8px"></div>
+            ${preview.is_member
+              ? html`
+                  <div class="state-row"><span class="dot-check dot-lime">✓</span>أنت عضو في هذا التمرين أصلًا</div>
+                  <button class="action action-prominent" onClick=${() => {
+                    localStorage.setItem('tamrin.workspace', preview.id)
+                    openHome()
+                  }}>افتح التمرين</button>
+                `
+              : html`
+                  <button class="action action-prominent" disabled=${busy} onClick=${join}>
+                    ${busy ? 'جارٍ الانضمام…' : 'انضم للتمرين'}
+                  </button>
+                `}
+          `}
         </div>
-      `}
+      </div>
     </div>
   `
 }

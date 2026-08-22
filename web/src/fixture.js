@@ -23,6 +23,7 @@ export const DEMO = readFlag()
 const ME = '11111111-1111-4111-8111-111111111111'
 const OWNER = '22222222-2222-4222-8222-222222222222'
 const WORKSPACE = '33333333-3333-4333-8333-333333333333'
+const PAID_WORKSPACE = '99999999-9999-4999-8999-999999999999'
 const PAID_EVENT = '44444444-4444-4444-8444-444444444444'
 const FREE_EVENT = '55555555-5555-4555-8555-555555555555'
 const FULL_EVENT = '66666666-6666-4666-8666-666666666666'
@@ -33,16 +34,28 @@ const hoursFromNow = (hours) => new Date(Date.now() + hours * 3_600_000).toISOSt
 
 let profile = { user_id: ME, name: 'فارس', postion: 'وسط', avatar_url: null, stc_pay_number: null }
 
+// The same three groups HomeDebugMemberFixture builds on the phone, so a
+// walkthrough here and a walkthrough there land on the same screens.
 const workspaces = [
   {
     id: WORKSPACE,
-    name: 'شباب الأربعاء',
+    name: '١ — عضو: قبول فوري',
     owner_id: OWNER,
-    invite_code: 'DEMO42',
+    invite_code: 'DEMO-USER',
     image_url: null,
-    symbol: '⚽️',
-    color: '#2f4f3a',
-    member_count: 14
+    symbol: 'figure.soccer',
+    color: '#c2eb63',
+    member_count: 18
+  },
+  {
+    id: PAID_WORKSPACE,
+    name: '٢ — عضو: القطة والضيوف',
+    owner_id: OWNER,
+    invite_code: 'DEMO-PAID',
+    image_url: null,
+    symbol: 'person.3.fill',
+    color: '#f28b30',
+    member_count: 16
   }
 ]
 
@@ -50,17 +63,17 @@ const events = [
   {
     id: PAID_EVENT,
     creator_id: OWNER,
-    workspace_id: WORKSPACE,
-    name: 'تمرين الأربعاء',
-    location: 'ملعب النخبة، حي الياسمين',
+    workspace_id: PAID_WORKSPACE,
+    name: 'مدفوع — جرّب القطة وإضافة ضيف',
+    location: 'ملعب الندى',
     description: 'نلعب ساعة ونص، والحضور قبل الموعد بعشر دقائق.',
     start_date: hoursFromNow(30),
     end_date: hoursFromNow(31.5),
     image_url: null,
     max_participants: 16,
     registration_locked: false,
-    total_price: 400,
-    price_per_person: 25,
+    total_price: 480,
+    price_per_person: 30,
     latitude: 24.82,
     longitude: 46.63,
     payment_method_id: STC_METHOD,
@@ -75,18 +88,18 @@ const events = [
     id: FREE_EVENT,
     creator_id: OWNER,
     workspace_id: WORKSPACE,
-    name: 'ركض الفجر',
-    location: 'منتزه السلام',
+    name: 'مجاني — سجّل ويتأكد فورًا',
+    location: 'ملعب النخيل',
     description: '',
     start_date: hoursFromNow(54),
     end_date: hoursFromNow(55),
     image_url: null,
-    max_participants: null,
+    max_participants: 18,
     registration_locked: false,
     total_price: 0,
     price_per_person: 0,
-    latitude: null,
-    longitude: null,
+    latitude: 24.77,
+    longitude: 46.72,
     payment_method_id: null,
     payment_method_ids: [],
     is_recurring: false,
@@ -99,7 +112,7 @@ const events = [
     id: FULL_EVENT,
     creator_id: OWNER,
     workspace_id: WORKSPACE,
-    name: 'تمرين السبت',
+    name: 'مكتمل — جرّب قائمة الانتظار',
     location: 'ملعب الروابي',
     description: '',
     start_date: hoursFromNow(78),
@@ -147,14 +160,29 @@ const seat = (fields) => ({
   ...fields
 })
 
+const CAST = [
+  ['سلمان', 'وسط'], ['عبدالعزيز', 'مهاجم'], ['تركي', 'مدافع'], ['ماجد', 'حارس'],
+  ['خالد', 'وسط'], ['نواف', 'مدافع'], ['ريان', 'مهاجم'], ['حمزة', 'وسط'],
+  ['ياسر', 'مدافع'], ['زياد', 'مهاجم']
+]
+
 const rosters = {
   [PAID_EVENT]: [
     seat({ user_id: OWNER, display_name: 'نايف', player_position: 'هجوم' }),
-    seat({ user_id: 'a1', display_name: 'مشعل', player_position: 'دفاع' }),
-    seat({ user_id: 'a2', display_name: 'تركي', player_position: 'حارس', payment_status: 'pending', payment_declared_at: null }),
-    seat({ guest_name: 'ضيف تركي', added_by: 'a2', payment_status: 'pending', payment_declared_at: null })
+    ...CAST.slice(0, 8).map(([name, position], i) =>
+      seat({
+        user_id: `p${i}`,
+        display_name: name,
+        player_position: position,
+        payment_status: i > 5 ? 'pending' : 'confirmed',
+        payment_declared_at: i > 5 ? null : hoursFromNow(-5)
+      })
+    ),
+    seat({ guest_name: 'ضيف تركي', added_by: 'p2', payment_status: 'pending', payment_declared_at: null })
   ],
-  [FREE_EVENT]: [seat({ user_id: 'a1', display_name: 'مشعل', player_position: 'دفاع' })],
+  [FREE_EVENT]: CAST.map(([name, position], i) =>
+    seat({ user_id: `f${i}`, display_name: name, player_position: position })
+  ),
   [FULL_EVENT]: [
     seat({ user_id: OWNER, display_name: 'نايف', player_position: 'هجوم' }),
     seat({ user_id: 'a1', display_name: 'مشعل', player_position: 'دفاع' }),

@@ -57,6 +57,9 @@ export function onAuthChange(handler) {
 /// because the app verifies a code rather than following a magic link, so the
 /// same call serves both clients.
 export async function requestOtp(email) {
+  // The walkthrough must never send a real email, so the fixture answers here
+  // too — its session is already signed in, but a stray call cannot escape.
+  if (DEMO) return
   const { error } = await supabase.auth.signInWithOtp({
     email,
     options: { shouldCreateUser: true }
@@ -65,6 +68,7 @@ export async function requestOtp(email) {
 }
 
 export async function verifyOtp(email, token) {
+  if (DEMO) return demoAuth.session()
   const { data, error } = await supabase.auth.verifyOtp({ email, token, type: 'email' })
   if (error) throw translate(error)
   return data.session

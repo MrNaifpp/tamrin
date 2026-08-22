@@ -1,7 +1,7 @@
 import { html, render, useState, useEffect, useCallback } from '../vendor/preact.js'
 import { getSession, onAuthChange, getProfile } from './api.js'
 import { useRoute } from './router.js'
-import { Spinner, Notice } from './ui.js'
+import { Spinner } from './ui.js'
 import { LoginScreen } from './screens/login.js'
 import { ProfileSetupScreen } from './screens/profile-setup.js'
 import { HomeScreen } from './screens/home.js'
@@ -37,14 +37,14 @@ function App() {
 
   useEffect(() => { loadProfile() }, [loadProfile])
 
-  if (session === undefined) return html`<div class="shell"><${Spinner} /></div>`
+  if (session === undefined) return html`<div class="app"><${Spinner} /></div>`
 
   // A member who followed an invite or event link before signing in keeps that
   // link in the address bar, so verifying the code lands them on it — the same
   // pendingJoinCode / pendingEventId walk the app does across its login flow.
   if (!session) return html`<${LoginScreen} />`
 
-  if (profile === undefined) return html`<div class="shell"><${Spinner} /></div>`
+  if (profile === undefined) return html`<div class="app"><${Spinner} /></div>`
 
   if (profile === null) {
     return html`
@@ -59,19 +59,20 @@ function App() {
   const screen = () => {
     switch (route.name) {
       case 'event':
-        return html`<${EventScreen} key=${route.eventId} eventId=${route.eventId} session=${session} profile=${profile} />`
+        return html`<${EventScreen} key=${route.eventId} eventId=${route.eventId} entry=${route.entry}
+                      session=${session} profile=${profile} />`
       case 'join':
         return html`<${JoinScreen} key=${route.code} code=${route.code} />`
       case 'settings':
         return html`<${SettingsScreen} session=${session} profile=${profile} onProfileChanged=${loadProfile} />`
       default:
-        return html`<${HomeScreen} session=${session} profile=${profile} />`
+        return html`<${HomeScreen} session=${session} profile=${profile} onProfileChanged=${loadProfile} />`
     }
   }
 
   return html`
     <div>
-      ${error && html`<div class="shell"><${Notice} tone="error">${error}<//></div>`}
+      ${error && html`<div class="app"><div class="event-panel"><div class="notice notice-error">${error}</div></div></div>`}
       ${screen()}
     </div>
   `

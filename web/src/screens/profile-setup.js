@@ -1,22 +1,18 @@
 import { html, useState } from '../../vendor/preact.js'
 import { saveProfile } from '../api.js'
-import { Notice, POSITIONS } from '../ui.js'
+import { POSITIONS } from '../ui.js'
 
-/// A first sign-in has an auth user but no row in public.users, and every
-/// roster reads its name from there. Same two fields the app asks for.
+/// SignupView: a first sign-in has an auth user but no row in public.users,
+/// and every roster reads its name from there.
 export function ProfileSetupScreen({ userId, initialName = '', onSaved }) {
   const [name, setName] = useState(initialName)
-  const [position, setPosition] = useState(POSITIONS[1].value)
+  const [position, setPosition] = useState('وسط')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
 
-  async function submit(event) {
-    event.preventDefault()
+  async function submit() {
     const trimmed = name.trim()
-    if (trimmed.length < 2) {
-      setError('اكتب اسمك كما يعرفك أعضاء مجموعتك.')
-      return
-    }
+    if (!trimmed) { setError('اكتب اسمك كما يعرفك أعضاء تمرينك.'); return }
     setBusy(true)
     setError(null)
     try {
@@ -29,48 +25,40 @@ export function ProfileSetupScreen({ userId, initialName = '', onSaved }) {
   }
 
   return html`
-    <div class="shell">
-      <div style="padding:44px 0 20px">
-        <h1 class="title">عرّفنا بنفسك</h1>
-        <p class="subtitle">اسمك هذا هو اللي يشوفه أعضاء مجموعتك في قائمة المسجلين.</p>
-      </div>
+    <div class="app">
+      <div class="light-page">
+        <div class="auth-page">
+          <div class="auth-avatar">👤</div>
+          <h1 class="auth-title">كمــل ملفـك الشخـصي</h1>
 
-      <form class="card stack" onSubmit=${submit}>
-        <div>
-          <label class="label" for="name">الاسم</label>
-          <input
-            id="name"
-            class="field"
-            type="text"
-            autocomplete="name"
-            placeholder="مثال: فارس"
-            value=${name}
-            onInput=${(e) => setName(e.target.value)}
-          />
-        </div>
-
-        <div>
-          <span class="label">مركزك المفضل</span>
-          <div class="wrap">
-            ${POSITIONS.map(
-              (option) => html`
-                <button
-                  type="button"
-                  class="chip"
-                  aria-pressed=${position === option.value}
-                  onClick=${() => setPosition(option.value)}
-                >
-                  <span class="position-dot" style="background:${option.tint};display:inline-block;margin-inline-end:6px"></span>
-                  ${option.value}
-                </button>
-              `
-            )}
+          <div>
+            <label class="field-label" style="opacity:1;color:#808080;font-size:17px" for="name">اسـم الكريـم</label>
+            <input id="name" class="auth-field" placeholder="اسـم الكريـم" value=${name}
+                   onInput=${(e) => setName(e.target.value)} />
           </div>
-        </div>
 
-        ${error && html`<${Notice} tone="error">${error}<//>`}
-        <button class="btn" type="submit" disabled=${busy}>${busy ? 'جارٍ الحفظ…' : 'يلا نبدأ'}</button>
-      </form>
+          <div>
+            <span class="field-label" style="opacity:1;color:#808080;font-size:17px">المركـز المفضـل</span>
+            <div class="chips">
+              ${POSITIONS.map(
+                (option) => html`
+                  <button class="chip" style=${position === option
+                      ? 'background:var(--accent-blue);color:#fff'
+                      : 'background:#ebebeb;color:#333'}
+                          aria-pressed=${position === option}
+                          onClick=${() => setPosition(option)}>${option}</button>
+                `
+              )}
+            </div>
+          </div>
+
+          ${error && html`<div class="auth-error">${error}</div>`}
+          <div class="auth-spacer"></div>
+          <button class="auth-button auth-dark" disabled=${busy} onClick=${submit}>
+            ${busy ? '…' : 'التالي'}
+          </button>
+        </div>
+      </div>
     </div>
   `
 }
