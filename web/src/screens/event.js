@@ -186,8 +186,6 @@ export function EventScreen({ eventId, entry, session, profile }) {
               </a>
             `}
 
-            ${event.description &&
-            html`<div class="card" style="font-size:14px;color:rgba(255,255,255,0.8)">${event.description}</div>`}
 
             <div class="card">
               <div class="progress-head">

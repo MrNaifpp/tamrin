@@ -66,7 +66,7 @@ const events = [
     workspace_id: PAID_WORKSPACE,
     name: 'مدفوع — جرّب القطة وإضافة ضيف',
     location: 'ملعب الندى',
-    description: 'نلعب ساعة ونص، والحضور قبل الموعد بعشر دقائق.',
+    description: '',
     start_date: hoursFromNow(30),
     end_date: hoursFromNow(31.5),
     image_url: null,
