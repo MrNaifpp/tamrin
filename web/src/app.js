@@ -43,17 +43,17 @@ function App() {
   // A member who followed an invite or event link before signing in keeps that
   // link in the address bar, so verifying the code lands them on it — the same
   // pendingJoinCode / pendingEventId walk the app does across its login flow.
-  if (!session) return html`<${LoginScreen} />`
+  if (!session) return html`<div class="enter-fade" key="auth"><${LoginScreen} /></div>`
 
   if (profile === undefined) return html`<div class="app"><${Spinner} /></div>`
 
   if (profile === null) {
     return html`
-      <${ProfileSetupScreen}
+      <div class="enter-fade" key="setup"><${ProfileSetupScreen}
         userId=${session.user.id}
         initialName=${session.user.user_metadata?.full_name ?? ''}
         onSaved=${loadProfile}
-      />
+      /></div>
     `
   }
 
@@ -73,10 +73,13 @@ function App() {
     }
   }
 
+  // Keyed by phase, not by route: signing in or finishing a profile is a
+  // change of scene and fades in, while moving between screens inside the app
+  // is a navigation and belongs to the view transition instead.
   return html`
     <div>
       ${error && html`<div class="app"><div class="event-panel"><div class="notice notice-error">${error}</div></div></div>`}
-      ${screen()}
+      <div class="enter-fade" key="signed-in">${screen()}</div>
     </div>
   `
 }

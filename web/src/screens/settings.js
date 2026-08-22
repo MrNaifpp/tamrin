@@ -44,7 +44,7 @@ export function SettingsScreen({ session, profile, onProfileChanged }) {
           <button style="font-weight:700" disabled=${!trimmed || busy} onClick=${save}>حفظ</button>
         </div>
 
-        <div class="settings-body">
+        <div class="settings-body enter">
           <div class="settings-avatar">
             <${MemberAvatar} name=${profile?.name} url=${profile?.avatar_url} size=${88} />
             <a class="settings-camera" href=${APP_STORE_URL} target="_blank" rel="noopener"

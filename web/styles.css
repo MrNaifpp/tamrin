@@ -61,6 +61,32 @@
   --avatar: 40px;
   --shell: 430px;             /* one iPhone's worth of width on a desktop */
   --page-pad: 20px;
+
+  /* ── Motion ───────────────────────────────────────────────────────────
+     The app's springs, transcribed. SwiftUI's spring(response:damping:) has
+     an exact position curve, and CSS `linear()` can carry it point for point
+     — so a drawer opens here on the same curve it opens on there, overshoot
+     and all, instead of on a hand-picked bezier that merely looks close. */
+  --spring: linear(0, 0.04, 0.134, 0.2529, 0.3776, 0.4967, 0.6036, 0.6956, 0.772,
+    0.8337, 0.8821, 0.9193, 0.9471, 0.9673, 0.9815, 0.9913, 0.9977, 1.0016,
+    1.0038, 1.0048, 1.005, 1.0048, 1.0043, 1.0037, 1.0031, 1.0025, 1.002);
+  --spring-dur: 0.45s;                       /* spring(0.35, 0.86) */
+
+  --press: linear(0, 0.0439, 0.1469, 0.2764, 0.4108, 0.5375, 0.6492, 0.7432,
+    0.8192, 0.8785, 0.9231, 0.9556, 0.9782, 0.9933, 1.0027, 1.008, 1.0105,
+    1.0111, 1.0106, 1.0094, 1.0079, 1.0065, 1.0051, 1.0038, 1.0028, 1.002, 1.0013);
+  --press-dur: 0.3s;                         /* spring(0.22, 0.82) */
+
+  --bouncy: linear(0, 0.0461, 0.1541, 0.2893, 0.429, 0.5596, 0.6736, 0.7683,
+    0.8437, 0.9012, 0.9434, 0.973, 0.9927, 1.0049, 1.0116, 1.0146, 1.0151,
+    1.0141, 1.0124, 1.0103, 1.0082, 1.0062, 1.0046, 1.0032, 1.0021, 1.0013, 1.0007);
+  --bouncy-dur: 0.47s;                       /* snappy(0.34, extraBounce 0.08) */
+
+  /* `.smooth` — no overshoot at all, for anything that changes in place:
+     a step in a sheet, an error arriving, a number going up. */
+  --smooth: cubic-bezier(0.32, 0.72, 0, 1);
+  --smooth-dur: 0.3s;
+  --enter-dur: 0.42s;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -79,6 +105,22 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   min-height: 100dvh;
+
+  /* Thmanyah's identity alternates — the sweeping مرسلة forms. The browser
+     shapes Arabic and applies kerning, ligatures and marks on its own, exactly
+     as CoreText does, but `ss01` is a brand choice and has to be asked for.
+     TamrinFont turns it on for every glyph the app draws (and asserts the face
+     never falls back), so it is on for every glyph here too. */
+  font-feature-settings: 'ss01' 1;
+  font-kerning: normal;
+  font-variant-ligatures: common-ligatures contextual;
+}
+
+/* Inputs and buttons do not inherit font features from body on their own. */
+button, input, textarea, select {
+  font-feature-settings: inherit;
+  font-kerning: inherit;
+  font-variant-ligatures: inherit;
 }
 
 button, input, textarea {
@@ -126,12 +168,13 @@ img { display: block; }
   margin: 0 auto;
 }
 .home-backdrop img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   transform: scale(1.22);
   filter: blur(58px);
-  transition: opacity 0.5s ease;
 }
 .home-backdrop::after {
   content: '';
@@ -494,6 +537,7 @@ img { display: block; }
   --fade-start: 240px;
   --fade-end: 390px;
 }
+.event-art { view-transition-name: event-art; }
 .event-art, .event-art-blur {
   position: fixed;
   inset: 0;
@@ -974,6 +1018,7 @@ img { display: block; }
 .copy-row .value { font-weight: 700; direction: ltr; unicode-bidi: isolate; margin-inline-start: auto; }
 .copy-row button { font-size: 13px; font-weight: 700; color: var(--accent-blue); }
 
+.done-mark { animation: enter-pop var(--bouncy-dur) var(--bouncy) both; }
 .done-mark {
   width: 110px;
   height: 110px;
@@ -1131,6 +1176,7 @@ img { display: block; }
 }
 .otp-slot .dash { width: 6px; height: 6px; border-radius: 50%; background: #b3b3b3; }
 
+.center-pad { animation: enter-fade 0.3s var(--smooth) both; }
 .spinner {
   width: 22px;
   height: 22px;
@@ -1369,3 +1415,177 @@ img { display: block; }
 .info-row .value { font-size: 15px; font-weight: 700; margin-inline-start: auto; }
 
 .crown { color: var(--lime); font-size: 15px; }
+
+
+/* ── Motion ───────────────────────────────────────────────────────────────
+   Nothing appears; everything arrives. Entrances rise a few points and fade
+   on the smooth curve, surfaces leave the way they came, and a screen change
+   is a view transition rather than a repaint. */
+
+/* Screen transitions. `data-nav` on the root says which way we are going, so
+   a push enters from the leading edge (the left, in Arabic) and a pop
+   reverses it — the same relationship the phone's navigation stack has. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.42s;
+  animation-timing-function: var(--smooth);
+}
+:root[data-nav='forward']::view-transition-old(root) {
+  animation-name: screen-out-forward;
+}
+:root[data-nav='forward']::view-transition-new(root) {
+  animation-name: screen-in-forward;
+}
+:root[data-nav='back']::view-transition-old(root) {
+  animation-name: screen-out-back;
+}
+:root[data-nav='back']::view-transition-new(root) {
+  animation-name: screen-in-back;
+}
+
+@keyframes screen-in-forward {
+  from { transform: translateX(-26%); opacity: 0.4; }
+}
+@keyframes screen-out-forward {
+  to { transform: translateX(10%); opacity: 0.5; }
+}
+@keyframes screen-in-back {
+  from { transform: translateX(14%); opacity: 0.5; }
+}
+@keyframes screen-out-back {
+  to { transform: translateX(-24%); opacity: 0.4; }
+}
+
+/* The poster card and the event's artwork share a name, so the card grows
+   into the page instead of being replaced by it — the app's zoom transition. */
+::view-transition-group(event-art) {
+  animation-duration: 0.5s;
+  animation-timing-function: var(--spring);
+}
+::view-transition-old(event-art),
+::view-transition-new(event-art) {
+  /* The two are different shapes; cross-fading them while the group morphs is
+     what keeps the corners from tearing. */
+  animation-duration: 0.34s;
+  animation-timing-function: var(--smooth);
+}
+
+/* Entrances. `--i` staggers a list without any of it being scripted. */
+@keyframes enter-rise {
+  from { opacity: 0; transform: translateY(10px); }
+}
+@keyframes enter-fade {
+  from { opacity: 0; }
+}
+@keyframes enter-pop {
+  from { opacity: 0; transform: scale(0.94); }
+}
+
+.enter {
+  animation: enter-rise var(--enter-dur) var(--smooth) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+.enter-fade {
+  animation: enter-fade var(--enter-dur) var(--smooth) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+.enter-pop {
+  animation: enter-pop var(--spring-dur) var(--spring) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+
+/* Presses. SpringCardPressStyle: 0.975 and a little dimmer, on its own spring. */
+.poster,
+.action,
+.row-card,
+.sheet-card,
+.pay-method,
+.team-row,
+.account-row,
+.glass-pill,
+.glass-circle,
+.chip,
+.tile,
+.poster-action,
+.status-row,
+.link-row {
+  transition:
+    transform var(--press-dur) var(--press),
+    opacity var(--press-dur) var(--press),
+    background-color var(--smooth-dur) var(--smooth),
+    border-color var(--smooth-dur) var(--smooth),
+    color var(--smooth-dur) var(--smooth);
+}
+.poster:active,
+.action:not(:disabled):active,
+.row-card:active,
+.sheet-card:active,
+.pay-method:active,
+.team-row:active,
+.account-row:active,
+.glass-pill:active,
+.glass-circle:active,
+.chip:active,
+.tile:active,
+.poster-action:not(:disabled):active,
+.status-row:active,
+.link-row:active {
+  transform: scale(0.975);
+  opacity: 0.88;
+}
+
+/* Surfaces leaving. The scrim fades, the sheet drops, the drawer slides back
+   under the page it pushed aside. */
+.sheet.is-closing {
+  animation: sheet-out 0.24s var(--smooth) both;
+}
+.sheet-scrim.is-closing,
+.drawer-scrim.is-closing {
+  animation: scrim-out 0.24s var(--smooth) both;
+}
+.drawer.is-closing {
+  animation: drawer-out 0.28s var(--smooth) both;
+}
+@keyframes sheet-out { to { transform: translateY(100%); } }
+@keyframes scrim-out { to { opacity: 0; } }
+@keyframes drawer-out { to { transform: translateX(24%); opacity: 0; } }
+
+/* The toast leaves the way it came in. */
+.toast span.is-closing { animation: toast-out 0.24s var(--smooth) both; }
+@keyframes toast-out { to { transform: translateY(-14px); opacity: 0; } }
+
+/* Anything that changes in place rather than arriving: a number going up, a
+   status swapping, an error appearing. */
+.change {
+  animation: change-in var(--smooth-dur) var(--smooth) both;
+}
+@keyframes change-in {
+  from { opacity: 0; transform: translateY(4px); }
+}
+
+/* The artwork behind Home cross-fades when the card in front changes, over
+   the half second the app gives it: the incoming picture fades in on top of
+   the one it replaces. */
+.home-backdrop img.is-front {
+  animation: enter-fade 0.5s ease-in-out both;
+}
+
+/* A picture fades up as it decodes instead of snapping into a card that is
+   already on screen. */
+.fade-img { opacity: 0; transition: opacity 0.4s var(--smooth); }
+.fade-img.is-loaded { opacity: 1; }
+
+/* Skeletons hand over rather than cut. */
+.skeleton { animation: shimmer 1.3s ease-in-out infinite, enter-fade 0.3s var(--smooth) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) { animation: none !important; }
+}

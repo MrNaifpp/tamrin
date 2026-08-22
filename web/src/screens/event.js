@@ -4,7 +4,7 @@ import {
   leaveWaitlist, joinWaitlist, getMyWorkspaces
 } from '../api.js'
 import { goBack, navigate } from '../router.js'
-import { Spinner, Icon, Toast, RowCard, artFor } from '../ui.js'
+import { Spinner, Icon, Toast, RowCard, artFor, fadeInImage } from '../ui.js'
 import { parseDate, arabicDay, arabicTime, counted, NOUNS } from '../format.js'
 import { APP_STORE_URL } from '../config.js'
 import { DeclineSheet } from './decline.js'
@@ -72,10 +72,7 @@ export function EventScreen({ eventId, entry, session, profile }) {
     try { await load() } catch (failure) { setError(failure.message) }
   }, [load])
 
-  const flash = useCallback((text) => {
-    setToast(text)
-    setTimeout(() => setToast(null), 2600)
-  }, [])
+  const flash = useCallback((text) => setToast(text), [])
 
   if (error) {
     return html`
@@ -105,6 +102,14 @@ export function EventScreen({ eventId, entry, session, profile }) {
   const awaiting = isPaid && mine?.payment_declared_at && mine.payment_status === 'pending'
   const settled = isPaid && mine?.payment_status === 'confirmed'
 
+  // Which control is on screen. When it changes the block is re-created, so
+  // the new state rises into place instead of replacing the old one mid-frame.
+  const ctaKey = [
+    myWait ? 'queue' : mine ? 'seat' : full ? 'full' : 'open',
+    owes ? 'owes' : awaiting ? 'awaiting' : settled ? 'settled' : '',
+    myGuests.length
+  ].join('-')
+
   async function run(work, success) {
     setBusy(true)
     try {
@@ -121,8 +126,8 @@ export function EventScreen({ eventId, entry, session, profile }) {
   return html`
     <div class="app">
       <div class="event" style=${`--fade-start:${Math.max(panelTop - 60, 0)}px;--fade-end:${Math.max(panelTop - 60, 0) + 150}px`}>
-        <div class="event-art"><img src=${art} alt="" /></div>
-        <div class="event-art-blur"><img src=${art} alt="" /></div>
+        <div class="event-art"><img class="fade-img" ref=${fadeInImage} src=${art} alt="" /></div>
+        <div class="event-art-blur"><img class="fade-img" ref=${fadeInImage} src=${art} alt="" /></div>
         <div class="event-shade"></div>
 
         <button class="glass-circle event-back" onClick=${goBack} aria-label="إغلاق">
@@ -132,7 +137,7 @@ export function EventScreen({ eventId, entry, session, profile }) {
         <div class="event-scroll">
           <div class="event-window"></div>
           <div class="event-panel">
-            <div class="hero">
+            <div class="hero enter" style="--i:0">
               ${cancelled && html`<span class="skipped">هذا الموعد متخطّى</span>`}
               <h1>${event.name}</h1>
               <div class="when">يوم ${arabicDay(startAt)}، الساعة ${arabicTime(startAt)}</div>
@@ -140,7 +145,7 @@ export function EventScreen({ eventId, entry, session, profile }) {
 
             ${cancelled
               ? html`
-                  <div class="card">
+                  <div class="card enter" style="--i:1">
                     <div style="font-size:14px;font-weight:700;margin-bottom:8px">ⓘ سبب التخطي</div>
                     <div style="font-size:14px;color:rgba(255,255,255,0.76)">
                       ${event.cancellation_reason_text
@@ -152,7 +157,7 @@ export function EventScreen({ eventId, entry, session, profile }) {
               : isOwner
                 ? html`<${OwnerNote} />`
                 : html`
-                    <${MemberCTA}
+                    <div class="change" key=${ctaKey}><${MemberCTA}
                       mine=${mine}
                       myWait=${myWait}
                       myGuests=${myGuests}
@@ -170,12 +175,12 @@ export function EventScreen({ eventId, entry, session, profile }) {
                       onDecline=${() => setSheet('decline')}
                       onLeaveQueue=${() => run(() => leaveWaitlist(event.id, userId), 'انسحبت من قائمة الانتظار')}
                       onJoinQueue=${() => run(() => joinWaitlist(event.id, userId), 'انضممت لقائمة الانتظار')}
-                    />
+                    /></div>
                   `}
 
             ${event.location &&
             html`
-              <a class="link-row"
+              <a class="link-row enter" style="--i:2"
                  href=${event.latitude != null
                    ? `https://maps.google.com/?q=${event.latitude},${event.longitude}`
                    : `https://maps.google.com/?q=${encodeURIComponent(event.location)}`}
@@ -187,10 +192,10 @@ export function EventScreen({ eventId, entry, session, profile }) {
             `}
 
 
-            <div class="card">
+            <div class="card enter" style="--i:3">
               <div class="progress-head">
                 <span class="label">المسجلون في الموعد</span>
-                <span class="value">${seats.length} من ${capacity || seats.length}</span>
+                <span class="value change" key=${seats.length}>${seats.length} من ${capacity || seats.length}</span>
               </div>
               <div class="progress-track">
                 <div class="progress-fill"
@@ -203,16 +208,17 @@ export function EventScreen({ eventId, entry, session, profile }) {
                   : null}
             </div>
 
-            <div class="section-label">القائمة</div>
+            <div class="section-label enter" style="--i:4">القائمة</div>
             ${roster === null
               ? html`<${Spinner} />`
               : seats.length
                 ? html`
                     <div class="row-stack">
                       ${seats.map(
-                        (person) => html`
+                        (person, position) => html`
                           <${RowCard}
                             key=${person.participant_id}
+                            index=${5 + position}
                             name=${person.display_name ?? person.guest_name ?? 'لاعب'}
                             subtitle=${rosterSubtitle(person, userId)}
                             avatarUrl=${person.avatar_url}
@@ -233,6 +239,7 @@ export function EventScreen({ eventId, entry, session, profile }) {
                   (person, position) => html`
                     <${RowCard}
                       key=${person.participant_id}
+                      index=${position}
                       name=${person.display_name ?? 'لاعب'}
                       subtitle=${position === 0 ? 'التالي على الدور' : null}
                       avatarUrl=${person.avatar_url}
@@ -246,7 +253,7 @@ export function EventScreen({ eventId, entry, session, profile }) {
         </div>
       </div>
 
-      ${toast && html`<${Toast} text=${toast} />`}
+      ${toast && html`<${Toast} text=${toast} onDone=${() => setToast(null)} />`}
 
       ${(sheet === 'register' || sheet === 'guests' || sheet === 'pay') &&
       html`<${RegistrationSheet}

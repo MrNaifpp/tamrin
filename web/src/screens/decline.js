@@ -1,5 +1,6 @@
 import { html, useState, useRef } from '../../vendor/preact.js'
 import { declineEvent } from '../api.js'
+import { useDismissible } from '../motion.js'
 import { Sheet } from '../ui.js'
 
 /// MemberDeclineSheet, both of its steps: the decision, then the reason.
@@ -20,13 +21,14 @@ export function DeclineSheet({ eventId, onClose, onDone }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const { closing, dismiss } = useDismissible(null)
 
   async function submit() {
     setBusy(true)
     setError(null)
     try {
       await declineEvent(eventId, reason.code, reason.free ? text.trim() || null : null)
-      onDone()
+      dismiss(onDone)
     } catch (failure) {
       setError(failure.message)
       setBusy(false)
@@ -35,8 +37,8 @@ export function DeclineSheet({ eventId, onClose, onDone }) {
 
   if (step === 'confirm') {
     return html`
-      <${Sheet} title="الاعتذار عن الموعد" onClose=${onClose}>
-        <div class="vstack" style="gap:18px;padding-bottom:6px">
+      <${Sheet} title="الاعتذار عن الموعد" onClose=${onClose} closing=${closing}>
+        <div class="vstack change" key="confirm" style="gap:18px;padding-bottom:6px">
           <div class="hstack" style="align-items:flex-start;gap:10px">
             <span style="color:var(--orange);font-size:18px">⚠︎</span>
             <p style="margin:0;font-size:17px;opacity:0.75">
@@ -54,8 +56,9 @@ export function DeclineSheet({ eventId, onClose, onDone }) {
       title="سبب الاعتذار"
       subtitle="اختياري، ويساعد المشرف يرتب الموعد"
       onClose=${onClose}
+      closing=${closing}
     >
-      <div class="vstack">
+      <div class="vstack change" key="reason">
         <div class="chips">
           ${REASONS.map(
             (option) => html`

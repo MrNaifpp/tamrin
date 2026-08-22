@@ -1,4 +1,5 @@
 import { useState, useEffect } from '../vendor/preact.js'
+import { withTransition } from './motion.js'
 
 /// Routes are real paths, because the invite and event links people already
 /// share are real paths: /event/<id> and /join/<code> are what the app's
@@ -41,26 +42,47 @@ export function href(route) {
   }
 }
 
+/// Which way the next route change should travel. Set by navigate/goBack and
+/// consumed by the popstate listener, which is the single place a transition
+/// is started — a browser back or forward button leaves it null and reads as
+/// a pop.
+let navDirection = null
+
 /// Navigation is pushState when the page was served over http(s) — a plain
 /// path is what makes a link shareable — and a hash otherwise.
-export function navigate(route, { replace = false } = {}) {
+export function navigate(route, { replace = false, direction = 'forward' } = {}) {
   const usesHash = location.protocol === 'file:' || location.hash.startsWith('#/')
   const target = usesHash ? `#/${href(route).slice(BASE.length)}` : href(route)
+  navDirection = direction
   if (replace) history.replaceState(null, '', target)
   else history.pushState(null, '', target)
   window.dispatchEvent(new PopStateEvent('popstate'))
-  window.scrollTo(0, 0)
 }
 
 export function goBack() {
-  if (history.length > 1) history.back()
-  else navigate({ name: 'home' }, { replace: true })
+  navDirection = 'back'
+  if (history.length > 1) {
+    history.back()
+    return
+  }
+  navigate({ name: 'home' }, { replace: true, direction: 'back' })
 }
 
 export function useRoute() {
   const [route, setRoute] = useState(currentRoute)
   useEffect(() => {
-    const sync = () => setRoute(currentRoute())
+    // popstate fires for our own navigate() and for the browser's own back
+    // and forward buttons; both are animated from here.
+    const sync = () => {
+      const direction = navDirection ?? 'back'
+      navDirection = null
+      // The scroll reset belongs inside the transition: the old screen is
+      // captured where the reader left it, and the new one starts at its top.
+      withTransition(direction, () => {
+        setRoute(currentRoute())
+        window.scrollTo(0, 0)
+      })
+    }
     window.addEventListener('popstate', sync)
     window.addEventListener('hashchange', sync)
     return () => {

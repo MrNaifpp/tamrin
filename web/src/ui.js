@@ -1,4 +1,5 @@
-import { html, useEffect } from '../vendor/preact.js'
+import { html, useEffect, useState } from '../vendor/preact.js'
+import { useDismissible, EXIT_MS } from './motion.js'
 
 /// Preact's own Fragment, which the standalone bundle does not export: a
 /// component that renders exactly its children, so a row can hand back three
@@ -46,6 +47,14 @@ const SYMBOL_GLYPHS = {
 }
 export const symbolGlyph = (raw) => SYMBOL_GLYPHS[raw] ?? (raw && raw.length <= 2 ? raw : '⚽️')
 
+/// Marks an <img> so it fades in on decode. Cached images are already
+/// complete by the time this runs, and take the class immediately.
+export const fadeInImage = (node) => {
+  if (!node) return
+  if (node.complete) node.classList.add('is-loaded')
+  else node.addEventListener('load', () => node.classList.add('is-loaded'), { once: true })
+}
+
 export const Spinner = () => html`<div class="center-pad"><div class="spinner"></div></div>`
 
 /// The one place a person is drawn: their photo when there is one, their
@@ -57,7 +66,7 @@ export const MemberAvatar = ({ name, url, size }) => html`
 `
 
 /// TamrinRowCard — the app's list row, used by every list that names things.
-export const RowCard = ({ name, subtitle, avatarUrl, leading, accessory, onClick }) => {
+export const RowCard = ({ name, subtitle, avatarUrl, leading, accessory, onClick, index }) => {
   const inner = html`
     <${Fragment}>
       ${leading ?? html`<${MemberAvatar} name=${name} url=${avatarUrl} />`}
@@ -68,9 +77,10 @@ export const RowCard = ({ name, subtitle, avatarUrl, leading, accessory, onClick
       ${accessory}
     <//>
   `
+  const stagger = index == null ? {} : { class: 'row-card enter', style: `--i:${index}` }
   return onClick
-    ? html`<button class="row-card" onClick=${onClick}>${inner}</button>`
-    : html`<div class="row-card">${inner}</div>`
+    ? html`<button class="row-card" ...${stagger} onClick=${onClick}>${inner}</button>`
+    : html`<div class="row-card" ...${stagger}>${inner}</div>`
 }
 
 export const Icon = {
@@ -100,14 +110,34 @@ export const Icon = {
       stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l10-10-4-4L4 16z"/></svg>`
 }
 
-/// The app's floating confirmation capsule.
-export const Toast = ({ text }) => html`<div class="toast"><span>${text}</span></div>`
+/// The app's floating confirmation capsule. It owns its own life: it shows,
+/// waits, then leaves the way it came in and tells the caller it is gone.
+export function Toast({ text, onDone, duration = 2400 }) {
+  const [closing, setClosing] = useState(false)
+
+  useEffect(() => {
+    setClosing(false)
+    const leave = setTimeout(() => setClosing(true), duration)
+    const gone = setTimeout(() => onDone?.(), duration + EXIT_MS)
+    return () => { clearTimeout(leave); clearTimeout(gone) }
+  }, [text])
+
+  return html`<div class="toast"><span class=${closing ? 'is-closing' : ''}>${text}</span></div>`
+}
+
+
 
 /// A bottom sheet. `tone` picks the surface: the event's sheets are presented
 /// from a screen pinned to dark, the profile sheet follows the system.
-export function Sheet({ title, subtitle, tone = 'dark', leading, trailing, onClose, children }) {
+/// A bottom sheet. It plays its own exit before the caller unmounts it, and a
+/// flow that finishes on its own terms — «تم», a confirmed decline — passes
+/// `closing` in so the same exit runs for that too.
+export function Sheet({ title, subtitle, tone = 'dark', leading, trailing, onClose, closing: closingProp, children }) {
+  const { closing: closingSelf, dismiss } = useDismissible(onClose)
+  const closing = closingProp || closingSelf
+
   useEffect(() => {
-    const onKey = (event) => { if (event.key === 'Escape') onClose?.() }
+    const onKey = (event) => { if (event.key === 'Escape') dismiss() }
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     window.addEventListener('keydown', onKey)
@@ -115,12 +145,13 @@ export function Sheet({ title, subtitle, tone = 'dark', leading, trailing, onClo
       document.body.style.overflow = previous
       window.removeEventListener('keydown', onKey)
     }
-  }, [onClose])
+  }, [dismiss])
 
   return html`
-    <div>
-      <div class="sheet-scrim" onClick=${onClose}></div>
-      <div class="sheet sheet-${tone}" role="dialog" aria-modal="true" aria-label=${title ?? ''}>
+    <${Fragment}>
+      <div class="sheet-scrim ${closing ? 'is-closing' : ''}" onClick=${() => dismiss()}></div>
+      <div class="sheet sheet-${tone} ${closing ? 'is-closing' : ''}"
+           role="dialog" aria-modal="true" aria-label=${title ?? ''}>
         <div class="sheet-grabber"></div>
         <div class="sheet-bar">
           ${leading ?? html`<span style="min-width:44px"></span>`}
@@ -128,10 +159,10 @@ export function Sheet({ title, subtitle, tone = 'dark', leading, trailing, onClo
             ${title}
             ${subtitle && html`<span class="sub">${subtitle}</span>`}
           </h2>
-          ${trailing ?? html`<button class="plain" onClick=${onClose} aria-label="إغلاق"><${Icon.close} /></button>`}
+          ${trailing ?? html`<button class="plain" onClick=${() => dismiss()} aria-label="إغلاق"><${Icon.close} /></button>`}
         </div>
         ${children}
       </div>
-    </div>
+    <//>
   `
 }

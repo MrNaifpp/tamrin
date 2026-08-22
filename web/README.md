@@ -73,12 +73,22 @@ http://localhost:8788/?demo=1
 الرسمات الثلاث والخط وشعارات وسائل الدفع منسوخة من `Sirr/App/Assets.xcassets`
 و`Sirr/App/*.ttf`، ويُختار للموعد نفس الرسمة بنفس دالة `stableIndex`.
 
+## الحركة
+
+لا شيء يظهر فجأة. منحنيات السبرنق في `styles.css` مولّدة من قيم SwiftUI نفسها
+عبر `linear()` — `spring(0.35, 0.86)` للدرج والانتقالات، `spring(0.22, 0.82)`
+للضغط، و`smooth` لأي شيء يتغيّر في مكانه. تغيير الشاشة يمر بـ View Transitions:
+دفع للأمام ورجوع للخلف، وبطاقة الموعد تكبر إلى صفحتها لأن الرسمة تحمل نفس
+`view-transition-name` في الجهتين (مقابل `.zoom(sourceID:)` في التطبيق).
+الشيتات والدرج والتوست تخرج بحركة قبل ما تُزال، والقوائم تدخل بتدرّج، والخلفية
+تتلاشى بين رسمتين. كل هذا يُلغى مع `prefers-reduced-motion`.
+
 ## البنية
 
 ```
 index.html        الغلاف
 styles.css        الرموز اللونية والخطوط، منقولة من DesignSystem.swift
-assets/fonts/     خط ثمانية (Regular / Medium / Bold)
+assets/fonts/     خط ثمانية (Regular / Medium / Bold) مع `ss01` مفعّلة
 vendor/           preact + htm، supabase-js — منسوخة، بلا CDN وقت التشغيل
 src/config.js     مشروع Supabase (مثبّت على نفس ما يثبّته التطبيق)
 src/api.js        أغلفة الـ RPCs + ترجمة أخطاء الخادم للعربية

@@ -2,6 +2,7 @@ import { html, useState } from '../../vendor/preact.js'
 import { registerEventSeat, declareEventPayment } from '../api.js'
 import { Sheet, Icon, MemberAvatar, providerOf } from '../ui.js'
 import { cleanAmount, counted, NOUNS } from '../format.js'
+import { useDismissible } from '../motion.js'
 
 /// RegistrationFlowSheet. One sheet, several steps: take the seat, then — from
 /// «دفع القطة» — pick the destination and say the money moved.
@@ -32,6 +33,10 @@ export function RegistrationSheet({ event, profile, destination, mine, myGuests,
   const [outcome, setOutcome] = useState(null)
   const [selectedMethod, setSelectedMethod] = useState(null)
   const [copied, setCopied] = useState(null)
+  /// A finished flow leaves on the same exit a tap on the scrim would give it,
+  /// rather than blinking out while the page behind it reloads.
+  const { closing, dismiss } = useDismissible(null)
+  const finish = (message) => dismiss(() => onDone(message))
 
   const price = Number(event.price_per_person ?? 0)
   const isPaid = Number(event.total_price ?? 0) > 0
@@ -121,10 +126,10 @@ export function RegistrationSheet({ event, profile, destination, mine, myGuests,
   }
 
   return html`
-    <${Sheet} title=${titles[step]} onClose=${onClose}>
+    <${Sheet} title=${titles[step]} onClose=${onClose} closing=${closing}>
       ${step === 'seat' &&
       html`
-        <div class="vstack" style="gap:12px">
+        <div class="vstack change" key="seat" style="gap:12px">
           ${isGuestRequest
             ? html`
                 <div class="sheet-card">
@@ -196,7 +201,7 @@ export function RegistrationSheet({ event, profile, destination, mine, myGuests,
 
       ${step === 'payment' &&
       html`
-        <div class="vstack" style="gap:12px">
+        <div class="vstack change" key="payment" style="gap:12px">
           <div class="amount-block">
             <div class="value">${cleanAmount(duePer * dueSize)} <span style="font-size:18px">﷼</span></div>
             <div class="for">لعدد ${counted(dueSize, NOUNS.player)}</div>
@@ -240,11 +245,11 @@ export function RegistrationSheet({ event, profile, destination, mine, myGuests,
 
       ${step === 'done' &&
       html`
-        <div>
+        <div class="change" key="done">
           <div class="done-mark">✓</div>
           <div class="done-title">${outcome?.title}</div>
           <div class="done-sub">${outcome?.body}</div>
-          <button class="action action-prominent" onClick=${() => onDone(null)}>تم</button>
+          <button class="action action-prominent" onClick=${() => finish(null)}>تم</button>
         </div>
       `}
     <//>

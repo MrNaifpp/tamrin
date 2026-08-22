@@ -1,7 +1,8 @@
 import { html, useState, useEffect, useCallback, useRef } from '../../vendor/preact.js'
 import { getMyWorkspaces, getWorkspaceEvents, getEventParticipants, joinWorkspace } from '../api.js'
 import { navigate } from '../router.js'
-import { Spinner, Icon, Sheet, Toast, MemberAvatar, artFor, symbolGlyph } from '../ui.js'
+import { Spinner, Icon, Sheet, Toast, MemberAvatar, artFor, symbolGlyph, fadeInImage } from '../ui.js'
+import { useDismissible, setZoomedEvent, isZoomed } from '../motion.js'
 import { parseDate, arabicDay, arabicTime, cleanAmount, counted, NOUNS } from '../format.js'
 import { APP_STORE_URL } from '../config.js'
 import { DeclineSheet } from './decline.js'
@@ -74,6 +75,15 @@ export function HomeScreen({ session, profile, onProfileChanged }) {
   const feed = events ?? []
   const art = feed.length ? artFor(feed[Math.min(index, feed.length - 1)].id) : null
 
+  // The backdrop cross-fades over the half second the app gives it, so it
+  // needs the outgoing picture to fade under the incoming one rather than
+  // being swapped for it.
+  const [artLayers, setArtLayers] = useState([])
+  useEffect(() => {
+    if (!art) return
+    setArtLayers((layers) => (layers[layers.length - 1] === art ? layers : [layers[layers.length - 1], art].filter(Boolean)))
+  }, [art])
+
   if (error) {
     return html`
       <div class="app"><div class="home"><div class="event-panel">
@@ -86,7 +96,12 @@ export function HomeScreen({ session, profile, onProfileChanged }) {
   return html`
     <div class="app ${menuOpen ? 'menu-open' : ''}">
       <div class="home">
-        <div class="home-backdrop">${art && html`<img src=${art} alt="" />`}</div>
+        <div class="home-backdrop">
+          ${artLayers.map(
+            (src, layer) => html`<img key=${src} src=${src} alt=""
+                                      class=${layer === artLayers.length - 1 ? 'is-front' : ''} />`
+          )}
+        </div>
 
         <header class="home-header">
           <div class="home-topbar">
@@ -118,9 +133,10 @@ export function HomeScreen({ session, profile, onProfileChanged }) {
               : html`
                   <div class="poster-scroll" ref=${scrollRef} onScroll=${onScroll}>
                     ${feed.slice(0, FEED_LIMIT).map(
-                      (event) => html`
+                      (event, position) => html`
                         <${PosterCard}
                           key=${event.id}
+                          index=${position}
                           event=${event}
                           roster=${rosters[event.id]}
                           userId=${userId}
@@ -134,7 +150,7 @@ export function HomeScreen({ session, profile, onProfileChanged }) {
         ${feed.length > 1 && index === 0 && html`<div class="scroll-hint">⌄</div>`}
       </div>
 
-      ${toast && html`<${Toast} text=${toast} />`}
+      ${toast && html`<${Toast} text=${toast} onDone=${() => setToast(null)} />`}
 
       ${menuOpen &&
       html`<${TeamDrawer}
@@ -143,7 +159,7 @@ export function HomeScreen({ session, profile, onProfileChanged }) {
         profile=${profile}
         onSelect=${(id) => { setWorkspaceId(id); setMenuOpen(false) }}
         onClose=${() => setMenuOpen(false)}
-        onProfile=${() => { setMenuOpen(false); navigate({ name: 'settings' }) }}
+        onProfile=${() => navigate({ name: 'settings' })}
       />`}
 
       ${declining &&
@@ -153,7 +169,6 @@ export function HomeScreen({ session, profile, onProfileChanged }) {
         onDone=${async () => {
           setDeclining(null)
           setToast('سُجّل اعتذارك عن الموعد')
-          setTimeout(() => setToast(null), 2600)
           await loadEvents(workspaceId)
         }}
       />`}
@@ -162,7 +177,7 @@ export function HomeScreen({ session, profile, onProfileChanged }) {
 }
 
 /// EventPosterCard: the artwork, the essentials, and the two decisions.
-function PosterCard({ event, roster, userId, onOpen, onDecline }) {
+function PosterCard({ event, roster, userId, index = 0, onOpen, onDecline }) {
   const startAt = parseDate(event.start_date)
   const seats = roster?.filter((row) => !row.is_waitlisted) ?? null
   const mine = roster?.find((row) => row.user_id === userId) ?? null
@@ -196,11 +211,12 @@ function PosterCard({ event, roster, userId, onOpen, onDecline }) {
   const declined = event.my_response_status === 'declined' && !mine
 
   return html`
-    <div class="poster">
-      <img src=${artFor(event.id)} alt="" loading="lazy" />
+    <div class="poster enter" style=${`--i:${index}`}>
+      <img class="fade-img" ref=${fadeInImage} src=${artFor(event.id)} alt="" loading="lazy"
+           style=${isZoomed(event.id) ? 'view-transition-name:event-art' : ''} />
       <button
         style="position:absolute;inset:0;width:100%;height:100%"
-        onClick=${() => onOpen(null)}
+        onClick=${(clickEvent) => openZoomed(clickEvent, event.id, () => onOpen(null))}
         aria-label=${`${event.name}، ${arabicDay(startAt)}، الساعة ${arabicTime(startAt)}`}
       ></button>
 
@@ -225,7 +241,7 @@ function PosterCard({ event, roster, userId, onOpen, onDecline }) {
               <button
                 class="poster-action ${primary.disabled ? 'is-disabled' : ''}"
                 disabled=${primary.disabled}
-                onClick=${() => onOpen(primary.entry)}
+                onClick=${(clickEvent) => openZoomed(clickEvent, event.id, () => onOpen(primary.entry))}
               >
                 <span class="mark ${primary.kind}">${primary.mark}</span>
                 <span>${primary.title}</span>
@@ -242,6 +258,18 @@ function PosterCard({ event, roster, userId, onOpen, onDecline }) {
           `}
     </div>
   `
+}
+
+/// The card grows into the event page rather than being replaced by it: the
+/// artwork it shares with that page is handed the same view-transition-name
+/// just before the navigation, which is how `.zoom(sourceID:)` reads on the
+/// phone. `zoomedEventId` keeps the pairing for the way back.
+function openZoomed(clickEvent, eventId, go) {
+  const card = clickEvent.currentTarget.closest('.poster')
+  const art = card?.querySelector('img')
+  if (art) art.style.viewTransitionName = 'event-art'
+  setZoomedEvent(eventId)
+  go()
 }
 
 function EmptySchedule() {
@@ -288,18 +316,20 @@ export function WebOnlyNote() {
 }
 
 function TeamDrawer({ workspaces, currentId, profile, onSelect, onClose, onProfile }) {
+  const { closing, dismiss } = useDismissible(onClose)
+
   useEffect(() => {
-    const onKey = (event) => { if (event.key === 'Escape') onClose() }
+    const onKey = (event) => { if (event.key === 'Escape') dismiss() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [dismiss])
 
   const position = (profile?.postion ?? '').trim()
 
   return html`
     <div>
-      <div class="drawer-scrim" onClick=${onClose}></div>
-      <aside class="drawer" role="dialog" aria-modal="true" aria-label="التمارين">
+      <div class="drawer-scrim ${closing ? 'is-closing' : ''}" onClick=${() => dismiss()}></div>
+      <aside class="drawer ${closing ? 'is-closing' : ''}" role="dialog" aria-modal="true" aria-label="التمارين">
         <!-- The app's gear and + live here. Neither has anything to do on the
              web: the gear opens the account, which the row at the foot of this
              drawer already is, and the + creates a group, which is the app's
@@ -311,12 +341,13 @@ function TeamDrawer({ workspaces, currentId, profile, onSelect, onClose, onProfi
 
         <div class="drawer-list">
           ${workspaces.map(
-            (workspace) => html`
+            (workspace, index) => html`
               <button
-                class="team-row"
                 key=${workspace.id}
                 aria-current=${workspace.id === currentId}
-                onClick=${() => onSelect(workspace.id)}
+                style=${`--i:${index}`}
+                class="team-row enter"
+                onClick=${() => dismiss(() => onSelect(workspace.id))}
               >
                 <span class="team-mark" style=${`background:${workspace.color ?? '#3a3a3a'}`}>
                   ${workspace.symbol ? symbolGlyph(workspace.symbol) : '⚽️'}
@@ -331,7 +362,7 @@ function TeamDrawer({ workspaces, currentId, profile, onSelect, onClose, onProfi
           )}
         </div>
 
-        <button class="account-row" onClick=${onProfile}>
+        <button class="account-row" onClick=${() => dismiss(onProfile)}>
           <${MemberAvatar} name=${profile?.name} url=${profile?.avatar_url} size=${38} />
           <span class="grow">
             <span class="name truncate" style="display:block">${profile?.name || 'حسابي'}</span>
@@ -351,6 +382,7 @@ export function JoinByCodeSheet({ onClose, onJoined }) {
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const { closing, dismiss } = useDismissible(null)
 
   async function submit(event) {
     event.preventDefault()
@@ -360,7 +392,7 @@ export function JoinByCodeSheet({ onClose, onJoined }) {
     setError(null)
     try {
       const result = await joinWorkspace(code)
-      onJoined(result.workspace_id)
+      dismiss(() => onJoined(result.workspace_id))
     } catch (failure) {
       setError(failure.message)
       setBusy(false)
@@ -368,7 +400,8 @@ export function JoinByCodeSheet({ onClose, onJoined }) {
   }
 
   return html`
-    <${Sheet} title="انضم إلى تمرين" subtitle="الصق رابط الدعوة الذي وصلك من المشرف" onClose=${onClose}>
+    <${Sheet} title="انضم إلى تمرين" subtitle="الصق رابط الدعوة الذي وصلك من المشرف"
+              onClose=${onClose} closing=${closing}>
       <form class="vstack" onSubmit=${submit}>
         <input class="guest-field" dir="ltr" placeholder="https://…/join/ABC123"
                value=${value} onInput=${(e) => setValue(e.target.value)} />

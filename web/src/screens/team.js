@@ -65,7 +65,7 @@ export function TeamScreen({ workspaceId, session }) {
         <${TeamBar} title=${workspace.name} onMenu=${() => setMenuOpen(true)} />
 
         <div class="team-body">
-          <header class="team-hero">
+          <header class="team-hero enter" style="--i:0">
             <div class="team-badge" style=${`background:${tint};box-shadow:0 10px 24px ${tint}4d`}>
               ${symbolGlyph(workspace.symbol)}
             </div>
@@ -75,7 +75,7 @@ export function TeamScreen({ workspaceId, session }) {
 
           ${plan
             ? html`
-                <section class="card team-section">
+                <section class="card team-section enter" style="--i:1">
                   <div class="team-section-head">
                     <h2>قالب التمرين</h2>
                     <span class="caption truncate">${plan.name}</span>
@@ -111,13 +111,13 @@ export function TeamScreen({ workspaceId, session }) {
                 </section>
               `
             : html`
-                <section class="card team-section">
+                <section class="card team-section enter" style="--i:1">
                   <div class="team-section-head"><h2>قالب التمرين</h2></div>
                   <p class="team-empty">ما فيه موعد قادم في هذا التمرين.</p>
                 </section>
               `}
 
-          <section class="card team-section">
+          <section class="card team-section enter" style="--i:2">
             <div class="team-section-head">
               <h2>الأعضاء</h2>
               ${memberCount > 0 && html`<span class="caption">${counted(memberCount, NOUNS.member)}</span>`}
@@ -127,8 +127,9 @@ export function TeamScreen({ workspaceId, session }) {
               ? html`
                   <div class="row-stack">
                     ${members.map(
-                      (member) => html`
-                        <div class="row-card" key=${member.user_id}>
+                      (member, position) => html`
+                        <div class="row-card enter" key=${member.user_id}
+                             style=${`--i:${3 + position}`}>
                           <div class="member-avatar"
                                style=${member.is_owner ? 'background:var(--lime);color:var(--ink)' : ''}>
                             ${member.avatar_url
