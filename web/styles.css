@@ -414,31 +414,8 @@ img { display: block; }
 @keyframes drawer-in { from { transform: translateX(24%); opacity: 0.4; } }
 @keyframes fade { from { opacity: 0; } }
 
-.drawer-header {
-  display: flex;
-  flex-direction: row-reverse;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 6px 18px;
-}
+.drawer-header { padding: 0 6px 18px; }
 .drawer-header h2 { margin: 0; font-size: 22px; font-weight: 700; }
-.drawer-controls {
-  display: flex;
-  gap: 4px;
-  background: var(--glass-strong);
-  border-radius: 999px;
-  padding: 0;
-}
-.drawer-controls button {
-  width: var(--touch);
-  height: var(--touch);
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-}
-.drawer-controls button:active { background: rgba(255, 255, 255, 0.1); }
-
 .drawer-list {
   flex: 1;
   overflow-y: auto;

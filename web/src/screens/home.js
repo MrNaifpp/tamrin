@@ -141,7 +141,6 @@ export function HomeScreen({ session, profile, onProfileChanged }) {
         profile=${profile}
         onSelect=${(id) => { setWorkspaceId(id); setMenuOpen(false) }}
         onClose=${() => setMenuOpen(false)}
-        onJoined=${(id) => { setMenuOpen(false); loadWorkspaces(id) }}
         onProfile=${() => { setMenuOpen(false); navigate({ name: 'settings' }) }}
       />`}
 
@@ -286,9 +285,7 @@ export function WebOnlyNote() {
   `
 }
 
-function TeamDrawer({ workspaces, currentId, profile, onSelect, onClose, onJoined, onProfile }) {
-  const [joining, setJoining] = useState(false)
-
+function TeamDrawer({ workspaces, currentId, profile, onSelect, onClose, onProfile }) {
   useEffect(() => {
     const onKey = (event) => { if (event.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
@@ -301,12 +298,13 @@ function TeamDrawer({ workspaces, currentId, profile, onSelect, onClose, onJoine
     <div>
       <div class="drawer-scrim" onClick=${onClose}></div>
       <aside class="drawer" role="dialog" aria-modal="true" aria-label="التمارين">
+        <!-- The app's gear and + live here. Neither has anything to do on the
+             web: the gear opens the account, which the row at the foot of this
+             drawer already is, and the + creates a group, which is the app's
+             alone. An inert control is worse than no control, so the header is
+             the title. -->
         <div class="drawer-header">
           <h2>التمارين</h2>
-          <div class="drawer-controls">
-            <button onClick=${onProfile} aria-label="الإعدادات"><${Icon.gear} /></button>
-            <button onClick=${() => setJoining(true)} aria-label="إضافة"><${Icon.plus} /></button>
-          </div>
         </div>
 
         <div class="drawer-list">
@@ -349,7 +347,6 @@ function TeamDrawer({ workspaces, currentId, profile, onSelect, onClose, onJoine
           <span class="pencil"><${Icon.pencil} /></span>
         </button>
 
-        ${joining && html`<${JoinByCodeSheet} onClose=${() => setJoining(false)} onJoined=${onJoined} />`}
       </aside>
     </div>
   `

@@ -64,10 +64,6 @@ export const Icon = {
       stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>`,
   chevronStart: () => html`<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
       stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>`,
-  gear: () => html`<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor"
-      stroke-width="1.7" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l1.7-1.3-1.9-3.3-2 .8a7.6 7.6 0 0 0-2.6-1.5L14.3 3h-3.8l-.3 2.2c-1 .3-1.8.8-2.6 1.5l-2-.8-1.9 3.3 1.7 1.3a7.6 7.6 0 0 0 0 3l-1.7 1.3 1.9 3.3 2-.8c.8.7 1.6 1.2 2.6 1.5l.3 2.2h3.8l.3-2.2c1-.3 1.8-.8 2.6-1.5l2 .8 1.9-3.3z"/></svg>`,
-  plus: () => html`<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor"
-      stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>`,
   person: () => html`<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-6 8-6s8 2 8 6z"/></svg>`,
   personPlus: () => html`<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
       stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9.5" cy="8" r="3.4"/><path d="M3.4 20c.7-3.4 3.2-5.2 6.1-5.2 1 0 2 .2 2.8.6M17.5 13.5v6M14.5 16.5h6"/></svg>`,
