@@ -452,17 +452,6 @@ img { display: block; }
 .team-row[aria-current='true'] .name { font-weight: 700; }
 .team-row .count { font-size: 11px; color: rgba(255, 255, 255, 0.52); }
 
-.drawer-note {
-  margin: 10px 2px 0;
-  font-size: 12px;
-  line-height: 1.6;
-  color: rgba(255, 255, 255, 0.55);
-  padding: 12px 14px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.05);
-}
-.drawer-note a { color: var(--lime); }
-
 .account-row {
   display: flex;
   align-items: center;

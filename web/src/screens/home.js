@@ -327,13 +327,6 @@ function TeamDrawer({ workspaces, currentId, profile, onSelect, onClose, onProfi
               </button>
             `
           )}
-
-          <!-- The app's blue + creates a group here. On the web it says where
-               that went rather than leaving a member hunting for it. -->
-          <div class="drawer-note">
-            إنشاء تمرين جديد من التطبيق فقط.
-            <a href=${APP_STORE_URL} target="_blank" rel="noopener">حمّل «تمرين» للآيفون</a>
-          </div>
         </div>
 
         <button class="account-row" onClick=${onProfile}>
