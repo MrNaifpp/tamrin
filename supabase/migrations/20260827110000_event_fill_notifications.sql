@@ -76,8 +76,13 @@ begin
     else 'event_fill_' || v_milestone::text
   end;
 
-  insert into public.push_outbox (user_id, type, event_id)
-  values (v_event.creator_id, v_type, v_event.id);
+  -- The update above runs unconditionally: an organizer who fills their own
+  -- session spends the milestone, so it cannot arrive later attached to
+  -- somebody else's join, reporting news they already acted on.
+  if v_uid is distinct from v_event.creator_id then
+    insert into public.push_outbox (user_id, type, event_id)
+    values (v_event.creator_id, v_type, v_event.id);
+  end if;
 
   return null;
 end;
