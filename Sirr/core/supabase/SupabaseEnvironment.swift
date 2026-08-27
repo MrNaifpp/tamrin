@@ -12,12 +12,7 @@ import Foundation
 /// Store Connect record, and pinning the sandbox in code means no xcconfig or
 /// build-setting edit can aim that binary at production.
 enum SupabaseEnvironment {
-    // ⚠️ TEMPORARY: every build talks to the SANDBOX, production included.
-    // Here so an archive of the normal `Sirr` scheme can exercise the
-    // waitlist feature, whose migration has only reached the sandbox.
-    // MUST become `#if STAGING` again before anything is submitted for
-    // review, or real users land on the sandbox database.
-    #if true
+    #if STAGING
     /// Development sandbox, pinned. Config/Staging.xcconfig deliberately does
     /// not define SUPABASE_HOST or SUPABASE_ANON_KEY, so there is exactly one
     /// place these values live and nothing to drift out of sync.

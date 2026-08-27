@@ -379,6 +379,9 @@ begin
   v_paid_event_id := (v_event->>'id')::uuid;
   v_result := public.publish_event(v_paid_event_id);
 
+  -- A method this event does not offer is no longer a reason to refuse: a
+  -- standalone guest seat picks no method either. The price still is, which
+  -- the next case covers.
   perform pg_temp.set_auth('45000000-0000-0000-0000-000000000002');
   v_result := public.register_event_guest_only(
     p_event_id => v_paid_event_id,
@@ -387,9 +390,11 @@ begin
     p_expected_price_per_person => 100,
     p_payment_method_id => v_method_two_id
   );
-  if v_result->>'status' <> 'event_terms_changed' then
-    raise exception 'FAIL: unavailable paid method accepted %', v_result;
+  if v_result->>'status' <> 'submitted' then
+    raise exception 'FAIL: an unoffered method blocked a guest seat %', v_result;
   end if;
+  delete from public.event_participants
+  where event_id = v_paid_event_id and guest_name = 'وسيلة قديمة';
   v_result := public.register_event_guest_only(
     p_event_id => v_paid_event_id,
     p_guest_names => array['سعر قديم'],
@@ -416,8 +421,8 @@ begin
   if v_result->>'status' <> 'submitted'
      or (v_result->>'group_size')::int <> 2
      or (v_result->>'guest_only')::boolean is not true
-     or (v_result->>'payment_method_id')::uuid <> v_method_one_id
-     or v_result->>'provider' <> 'stc_bank' then
+     or v_result->>'payment_method_id' is not null
+     or v_result->>'provider' is not null then
     raise exception 'FAIL: paid standalone submission %', v_result;
   end if;
   select count(*) into v_count
@@ -425,8 +430,8 @@ begin
   where event_id = v_paid_event_id
     and user_id = '45000000-0000-0000-0000-000000000001'
     and type = 'payment_submitted';
-  if v_count <> v_before + 1 then
-    raise exception 'FAIL: paid standalone notification count';
+  if v_count <> v_before then
+    raise exception 'FAIL: standalone guests announced an undeclared payment';
   end if;
 
   select count(*) into v_count
@@ -436,12 +441,13 @@ begin
     and added_by = '45000000-0000-0000-0000-000000000002'
     and guest_only
     and payment_status = 'pending'
-    and payment_method_id = v_method_one_id
-    and payment_provider = 'stc_bank'
-    and paid_to_number = '+966500000045'
+    and payment_declared_at is null
+    and payment_method_id is null
+    and payment_provider is null
+    and paid_to_number is null
     and paid_price_per_person = 100;
   if v_count <> 2 then
-    raise exception 'FAIL: paid standalone snapshots';
+    raise exception 'FAIL: paid standalone rows were snapshotted too early';
   end if;
 
   v_result := public.register_event_guest_only(
