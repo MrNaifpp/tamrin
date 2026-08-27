@@ -49,6 +49,26 @@ export function copyFor(
         title: "جتك دعوة للتمرين ⚽",
         body: `دعاك المشرف لحضور ${eventName}، افتح التطبيق لتأكيد حضورك.`,
       };
+    case "event_fill_25":
+      return {
+        title: "التمرين بدأ يمتلئ ⚽",
+        body: `ربع مقاعد ${eventName} انحجزت`,
+      };
+    case "event_fill_50":
+      return {
+        title: "نص العدد اكتمل 🔥",
+        body: `نص مقاعد ${eventName} انحجزت`,
+      };
+    case "event_fill_75":
+      return {
+        title: "٣ أرباع المقاعد راحت ⏳",
+        body: `${eventName} قارب يكتمل — باقي ربع المقاعد`,
+      };
+    case "event_full":
+      return {
+        title: "اكتمل العدد 🎉",
+        body: `امتلأت مقاعد ${eventName}`,
+      };
     case "waitlist_promoted":
       return {
         title: "لاعب اعتذر، أنت في القائمة✨",

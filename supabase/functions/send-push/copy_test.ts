@@ -97,6 +97,38 @@ Deno.test("member_declined copy interpolates the event name", () => {
   });
 });
 
+Deno.test("event_fill_25 copy interpolates the event name", () => {
+  const c = copyFor("event_fill_25", "تمرين الخميس");
+  assertEquals(c, {
+    title: "التمرين بدأ يمتلئ ⚽",
+    body: "ربع مقاعد تمرين الخميس انحجزت",
+  });
+});
+
+Deno.test("event_fill_50 copy interpolates the event name", () => {
+  const c = copyFor("event_fill_50", "تمرين الخميس");
+  assertEquals(c, {
+    title: "نص العدد اكتمل 🔥",
+    body: "نص مقاعد تمرين الخميس انحجزت",
+  });
+});
+
+Deno.test("event_fill_75 copy interpolates the event name", () => {
+  const c = copyFor("event_fill_75", "تمرين الخميس");
+  assertEquals(c, {
+    title: "٣ أرباع المقاعد راحت ⏳",
+    body: "تمرين الخميس قارب يكتمل — باقي ربع المقاعد",
+  });
+});
+
+Deno.test("event_full copy interpolates the event name", () => {
+  const c = copyFor("event_full", "تمرين الخميس");
+  assertEquals(c, {
+    title: "اكتمل العدد 🎉",
+    body: "امتلأت مقاعد تمرين الخميس",
+  });
+});
+
 Deno.test("unknown type returns null", () => {
   assertEquals(copyFor("nope", "x"), null);
 });
