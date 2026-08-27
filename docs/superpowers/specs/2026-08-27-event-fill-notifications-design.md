@@ -123,7 +123,9 @@ Four cases added to `send-push/copy.ts`:
 | Owner adds players manually across a milestone | No push, but `fill_notified_pct` advances |
 | A later player crosses a milestone the owner already spent | Still silent |
 | `max_participants is null` | Nothing enqueued |
-| Unpublished or cancelled session | Nothing enqueued |
+| Unpublished session, tested through the creator's own seat | Nothing enqueued, mark stays 0 |
+
+`guard_event_registration_insert` already rejects inserts into unpublished and cancelled sessions before this trigger runs. So the unpublished case is reachable only through the creator's seat, which `create_event` inserts before publication, and the **cancelled** case is not reachable at all. Its check stays as defence in depth and is deliberately untested.
 
 `copy_test.ts` gains a case per new type, matching the existing `payment_submitted` test.
 
