@@ -29,55 +29,55 @@ declare
   v_milestone int;
   v_type text;
 begin
-  -- Ordered so two concurrent registrations on different events cannot take
-  -- these row locks in opposite orders.
-  for v_event in
-    select e.*
-    from public.events e
-    where e.id in (select distinct n.event_id from new_rows n)
-    order by e.id
-    for update
-  loop
-    -- Nobody can act on a session they cannot see, a skipped one has no
-    -- roster worth reporting, and without a cap there is no percentage.
-    if v_event.published_at is null
-       or v_event.cancelled_at is not null
-       or v_event.max_participants is null then
-      continue;
-    end if;
+  select * into v_event
+  from public.events
+  where id = new.event_id
+  for update;
 
-    select count(*) into v_seated
-    from public.event_participants ep
-    where ep.event_id = v_event.id
-      and ep.payment_status in ('pending', 'confirmed');
+  -- Nobody can act on a session they cannot see, a skipped one has no roster
+  -- worth reporting, and without a cap there is no percentage.
+  if v_event.published_at is null
+     or v_event.cancelled_at is not null
+     or v_event.max_participants is null then
+    return null;
+  end if;
 
-    v_pct := (v_seated * 100) / v_event.max_participants;
+  select count(*) into v_seated
+  from public.event_participants ep
+  where ep.event_id = v_event.id
+    and ep.payment_status in ('pending', 'confirmed');
 
-    v_thresholds := array[25, 50, 75, 100];
+  v_pct := (v_seated * 100) / v_event.max_participants;
 
-    -- The highest milestone now passed that has not been announced. Taking
-    -- the highest is what makes a batch vaulting 40% to 80% announce 75%
-    -- alone rather than 50% and 75% together.
-    select max(t) into v_milestone
-    from unnest(v_thresholds) as t
-    where t <= v_pct and t > v_event.fill_notified_pct;
+  -- Quarters only where a quarter means something. On a four-a-side game that
+  -- would be a notification per player, so small sessions get halves.
+  v_thresholds := case
+    when v_event.max_participants >= 8 then array[25, 50, 75, 100]
+    else array[50, 100]
+  end;
 
-    if v_milestone is null then
-      continue;
-    end if;
+  -- The highest milestone now passed that has not been announced. Taking the
+  -- highest is what makes a registration vaulting 40% to 80% announce 75%
+  -- alone rather than 50% and 75% together.
+  select max(t) into v_milestone
+  from unnest(v_thresholds) as t
+  where t <= v_pct and t > v_event.fill_notified_pct;
 
-    update public.events
-    set fill_notified_pct = v_milestone
-    where id = v_event.id;
+  if v_milestone is null then
+    return null;
+  end if;
 
-    v_type := case v_milestone
-      when 100 then 'event_full'
-      else 'event_fill_' || v_milestone::text
-    end;
+  update public.events
+  set fill_notified_pct = v_milestone
+  where id = v_event.id;
 
-    insert into public.push_outbox (user_id, type, event_id)
-    values (v_event.creator_id, v_type, v_event.id);
-  end loop;
+  v_type := case v_milestone
+    when 100 then 'event_full'
+    else 'event_fill_' || v_milestone::text
+  end;
+
+  insert into public.push_outbox (user_id, type, event_id)
+  values (v_event.creator_id, v_type, v_event.id);
 
   return null;
 end;
@@ -86,14 +86,20 @@ $$;
 revoke execute on function public.announce_event_fill()
   from public, anon, authenticated;
 
--- Statement-level with a transition table, because guests are inserted as a
--- batch: a row-level trigger would re-count the roster once per guest and
--- could announce two milestones for a single request.
+-- Deferred to the end of the transaction, because one registration is not one
+-- statement: register_event_seat inserts the member and then their guests
+-- separately, so anything evaluated per statement announces 50% for the member
+-- and 75% for their guest — two notifications for one tap. Deferring means the
+-- roster is final when this runs, and it stays correct however future RPCs
+-- choose to split their inserts.
+--
+-- Constraint triggers are per-row only, so a batch fires this once per guest.
+-- The first firing takes the milestone and the rest find nothing new.
 drop trigger if exists trg_announce_event_fill on public.event_participants;
-create trigger trg_announce_event_fill
+create constraint trigger trg_announce_event_fill
   after insert on public.event_participants
-  referencing new table as new_rows
-  for each statement
+  deferrable initially deferred
+  for each row
   execute function public.announce_event_fill();
 
 notify pgrst, 'reload schema';
