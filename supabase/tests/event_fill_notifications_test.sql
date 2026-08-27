@@ -47,6 +47,7 @@ declare
   v_uncapped_event_id uuid;
   v_draft_event_id uuid;
   v_small_event_id uuid;
+  v_owner_event_id uuid;
   v_result json;
   v_mark int;
 begin
@@ -292,6 +293,56 @@ begin
   end if;
   if pg_temp.fill_pushes(v_small_event_id, 'event_fill_75') <> 0 then
     raise exception 'FAIL: a small session announced three quarters';
+  end if;
+
+  -- ---------------------------------------------------------------------
+  -- An organizer adding players by hand does not need their own taps
+  -- announced back to them. The milestone is spent all the same, so it
+  -- cannot fire later for somebody else's join.
+  -- ---------------------------------------------------------------------
+  perform pg_temp.set_auth('46000000-0000-0000-0000-000000000001');
+  v_event := public.create_event(
+    p_creator_id => '46000000-0000-0000-0000-000000000001',
+    p_workspace_id => v_workspace_id,
+    p_name => 'تمرين المشرف',
+    p_start_date => now() + interval '8 days',
+    p_max_participants => 8
+  );
+  v_owner_event_id := (v_event->>'id')::uuid;
+  v_result := public.publish_event(v_owner_event_id);
+
+  -- Owner holds 1 and adds 3 by hand -> 4/8 = 50%.
+  v_result := public.add_manual_participant(v_owner_event_id, 'يدوي 1');
+  v_result := public.add_manual_participant(v_owner_event_id, 'يدوي 2');
+  v_result := public.add_manual_participant(v_owner_event_id, 'يدوي 3');
+  set constraints all immediate;
+
+  if pg_temp.fill_pushes(v_owner_event_id, 'event_fill_50') <> 0 then
+    raise exception 'FAIL: the owner was told about their own additions';
+  end if;
+
+  select fill_notified_pct into v_mark from public.events
+  where id = v_owner_event_id;
+  if v_mark <> 50 then
+    raise exception 'FAIL: an owner-caused crossing left the mark at %', v_mark;
+  end if;
+
+  -- Member B takes 1 -> 5/8 = 62%: still inside the spent half, silent.
+  perform pg_temp.set_auth('46000000-0000-0000-0000-000000000002');
+  v_result := public.register_event_seat(p_event_id => v_owner_event_id);
+  set constraints all immediate;
+
+  if pg_temp.fill_pushes(v_owner_event_id, 'event_fill_50') <> 0 then
+    raise exception 'FAIL: a spent milestone fired for a later join';
+  end if;
+
+  -- Member C takes 1 -> 6/8 = 75%: a fresh milestone, and not owner-caused.
+  perform pg_temp.set_auth('46000000-0000-0000-0000-000000000003');
+  v_result := public.register_event_seat(p_event_id => v_owner_event_id);
+  set constraints all immediate;
+
+  if pg_temp.fill_pushes(v_owner_event_id, 'event_fill_75') <> 1 then
+    raise exception 'FAIL: three quarters not announced after an owner fill';
   end if;
 
   raise notice 'ALL FILL NOTIFICATION TESTS PASSED';
