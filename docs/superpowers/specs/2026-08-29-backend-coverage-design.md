@@ -230,11 +230,31 @@ are per device presentation state, not data worth a table.
 `20260818100000_player_ratings.sql` stays on this branch unchanged. The work
 here is a merge instruction rather than code.
 
-Staging reverted the migration in `a1bc5a4` while keeping the app code that
-calls it. Merging this branch into staging must un-revert it in the same merge.
-If it does not, the app ships calling `submit_player_rating` and
-`get_player_rating` against a database where neither exists, and every rating
-screen fails at runtime.
+Verified on 2026-08-29, and not what the first draft of this spec said. `a1bc5a4`
+on staging did not delete the migration. It deleted the Swift: RatingService,
+PlayerRating, PlayerRatingFlow and the calls into them. The migration simply
+never reached staging, because staging never took the commits that carried it.
+
+So both branches are consistent as they stand. This branch has the migration and
+the code that calls it. Staging has neither, and therefore nothing that breaks.
+
+The hazard is the merge itself. This branch still holds three files staging
+deleted, which git presents as modify/delete conflicts:
+
+* `Sirr/core/supabase/RatingService.swift`
+* `Sirr/features/home/PlayerRating.swift`
+* `Sirr/features/home/PlayerRatingFlow.swift`
+
+Resolve all three the same way as the migration, or the result is inconsistent
+in one of two directions: Swift calling `submit_player_rating` and
+`get_player_rating` where neither exists, or a `player_ratings` table nothing
+ever writes to. Keeping this branch's side of all four is what ships ratings;
+taking staging's side of all four is what holds them back. There is no correct
+mixture.
+
+`supabase/tests/player_ratings_test.sql` passes against the merged schema when
+the migration survives. It has no announce line, so check its exit code rather
+than its output.
 
 The pgTAP suite `supabase/tests/player_ratings_test.sql` is already on this
 branch and covers the RPCs, so the check after merging is that this suite runs
