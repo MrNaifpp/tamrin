@@ -354,7 +354,7 @@ struct PlayerRatingFlowView: View {
             }
         } catch {
             Haptics.error()
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
         }
         isSubmitting = false
     }

@@ -40,7 +40,7 @@ class AuthViewModel: ObservableObject {
         } catch {
             logger.error("Login failed: \(error.localizedDescription)")
             if let urlError = error as? URLError { logger.error("URLError: \(String(describing: urlError))") }
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
         }
     }
 
@@ -55,7 +55,7 @@ class AuthViewModel: ObservableObject {
         } catch {
             logger.error("Signup failed: \(error.localizedDescription)")
             if let urlError = error as? URLError { logger.error("URLError: \(String(describing: urlError))") }
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
         }
     }
 
@@ -86,7 +86,7 @@ class AuthViewModel: ObservableObject {
             if error.localizedDescription.lowercased().contains("magic link") {
                 errorMessage = "تعذر إرسال رمز التفعيل. تأكد من تفعيل البريد في Supabase (SMTP أو Email)."
             } else {
-                errorMessage = error.localizedDescription
+                errorMessage = ServerErrorMessage.arabic(for: error)
             }
         }
     }
@@ -106,7 +106,7 @@ class AuthViewModel: ObservableObject {
         } catch {
             logger.error("Verify OTP failed: \(error.localizedDescription)")
             if let urlError = error as? URLError { logger.error("URLError: \(String(describing: urlError))") }
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
         }
     }
 
@@ -168,7 +168,7 @@ class AuthViewModel: ObservableObject {
             logger.info("Logout succeeded")
         } catch {
             logger.error("Logout failed: \(error.localizedDescription)")
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
         }
     }
 
@@ -219,7 +219,7 @@ class AuthViewModel: ObservableObject {
         } catch {
             logger.error("Complete profile failed: \(error.localizedDescription)")
             if let urlError = error as? URLError { logger.error("URLError: \(String(describing: urlError))") }
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
         }
     }
 
@@ -260,7 +260,7 @@ class AuthViewModel: ObservableObject {
             logger.info("Save STC Pay number succeeded")
         } catch {
             logger.error("Save STC Pay number failed: \(error.localizedDescription)")
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
         }
     }
 
@@ -293,7 +293,7 @@ class AuthViewModel: ObservableObject {
         } catch {
             logger.error("Update profile failed: \(error.localizedDescription)")
             if let urlError = error as? URLError { logger.error("URLError: \(String(describing: urlError))") }
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
         }
     }
 }

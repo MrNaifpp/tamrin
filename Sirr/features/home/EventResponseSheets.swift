@@ -383,8 +383,7 @@ private struct EventReasonSheet: View {
             // has gone, so the whole flow leaves the screen together.
             onFinished()
         } catch {
-            let description = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-            errorMessage = description.isEmpty ? "تعذر إكمال العملية. حاول مرة أخرى." : description
+            errorMessage = ServerErrorMessage.arabic(for: error)
             isSubmitting = false
         }
     }

@@ -18,7 +18,7 @@ MARKETING_VERSION = 1.6
 // marketing version. Every number below is spent: (2) was uploaded, (3)
 // predates the rating repair, (4) the details-page and lineup-permission
 // fixes, and (5) the exercise actions menu.
-CURRENT_PROJECT_VERSION = 7
+CURRENT_PROJECT_VERSION = 8
 
 // Here rather than in the target so Staging.xcconfig can override it — a
 // staging build on the home screen has to be tellable from a real one.

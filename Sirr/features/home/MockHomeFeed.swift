@@ -935,7 +935,7 @@ final class HomeStore {
                 onSelectWorkspace?(fixture.id)
             }
             #endif
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
         }
     }
 
@@ -1300,7 +1300,7 @@ final class HomeStore {
             if rosterCache[eventId] == nil {
                 rosterLoadFailedEventIDs.insert(eventId)
             }
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
         }
     }
 
@@ -1330,7 +1330,7 @@ final class HomeStore {
         } catch {
             // Keep the last known event. A transient event refresh must not
             // hide the detail screen or discard the already loaded roster.
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
         }
     }
 
@@ -1351,7 +1351,7 @@ final class HomeStore {
             memberResponseRecordsByEvent[eventId] = try await EventService.shared
                 .getEventMemberResponses(eventId: eventId)
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
         }
     }
 
@@ -1440,7 +1440,7 @@ final class HomeStore {
             do {
                 if isOwner { try await WorkspaceService.shared.deleteWorkspace(id: id) }
                 else { try await WorkspaceService.shared.leaveWorkspace(id: id) }
-            } catch { errorMessage = error.localizedDescription }
+            } catch { errorMessage = ServerErrorMessage.arabic(for: error) }
             // Re-sync from the server either way — confirms the delete, or
             // restores the row if the server refused it.
             await refresh()
@@ -1509,7 +1509,7 @@ final class HomeStore {
             await loadSelectedTeamData()      // pick up the events just created
             return team
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
             if let workspace = createdWorkspace {
                 try? await WorkspaceService.shared.deleteWorkspace(id: workspace.id)
                 paymentMethodsByTeam[workspace.id] = nil
@@ -1525,7 +1525,7 @@ final class HomeStore {
         do {
             try await createEvents(from: [plan], startDate: Date(), in: selectedTeamID)
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
             throw error
         }
         await loadSelectedTeamData()
@@ -1584,7 +1584,7 @@ final class HomeStore {
                 policy: plan.capacityPolicy
             )
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
             await loadSelectedTeamData()
             throw error
         }
@@ -1696,7 +1696,7 @@ final class HomeStore {
                 plansByTeam[teamID, default: []].append(refreshedPlan)
             }
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
             throw error
         }
 
@@ -2223,7 +2223,7 @@ final class HomeStore {
             )
         } catch {
             membersByTeam[teamID] = previous
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
         }
     }
 
@@ -2607,7 +2607,7 @@ final class HomeStore {
                 case nil:
                     break
                 }
-            } catch { errorMessage = error.localizedDescription }
+            } catch { errorMessage = ServerErrorMessage.arabic(for: error) }
             await reloadRoster(occurrence.id)
         }
     }
