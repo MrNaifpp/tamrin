@@ -390,7 +390,7 @@ private extension EventPageView {
             Text("ابدأ تمرينك الأول")
                 .font(.appTitle)
                 .foregroundStyle(.white)
-            Text("التمرين لك ولأصحابك — أنشئ واحدًا لشلّتك\nأو انضم برابط دعوة من صديق")
+            Text("التمرين لك ولأصحابك. أنشئ واحدًا لشلّتك\nأو انضم برابط دعوة من صديق")
                 .font(.appBody)
                 .foregroundStyle(.white.opacity(0.9))
                 .multilineTextAlignment(.center)

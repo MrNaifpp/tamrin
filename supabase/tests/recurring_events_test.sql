@@ -223,8 +223,8 @@ begin
 end $$;
 
 -- ============================================================
--- Section 4: generator — creates one organizer-only draft, copies fields,
--- auto-joins creator, and waits for explicit send before inviting members
+-- Section 4: generator — waits for the current occurrence to end, then creates
+-- and publishes exactly one next occurrence without an organizer action
 -- ============================================================
 do $$
 declare
@@ -243,7 +243,7 @@ begin
   values (w_id, 'cash')
   returning id into v_payment_method_id;
 
-  -- A live weekly template whose next occurrence has entered the lead window.
+  -- A weekly template whose current occurrence has not ended yet.
   ev := public.create_event(
     p_creator_id => '10000000-0000-0000-0000-000000000001',
     p_workspace_id => w_id,
@@ -265,13 +265,23 @@ begin
   where template_id = t_id and id <> (ev->>'id')::uuid;
   if cnt <> 0 then raise exception 'FAIL: draft template generated an event'; end if;
 
-  -- Sending the first occurrence activates the weekly template. Move the test
-  -- template's next date into the lead window, then exercise cron generation.
+  -- Sending the first occurrence activates the weekly template, but the next
+  -- occurrence must remain absent until next_release_at is reached.
   r := public.publish_event((ev->>'id')::uuid);
-  update public.event_templates
-  set next_occurrence_at = now() + interval '2 days'
-  where id = t_id;
   select next_occurrence_at into v_next from public.event_templates where id = t_id;
+
+  perform public.generate_recurring_events();
+  select count(*) into cnt from public.events
+  where template_id = t_id and id <> (ev->>'id')::uuid;
+  if cnt <> 0 then
+    raise exception 'FAIL: generator opened the next occurrence before release';
+  end if;
+
+  -- Simulate the current occurrence ending. The next cron tick publishes the
+  -- next slot and invites the workspace without calling publish_event.
+  update public.event_templates
+  set next_release_at = now() - interval '1 second'
+  where id = t_id;
 
   -- run 1: exactly one new event
   perform public.generate_recurring_events();
@@ -293,8 +303,8 @@ begin
   if g.end_date is null or abs(extract(epoch from (g.end_date - (g.start_date + interval '90 minutes')))) > 1 then
     raise exception 'FAIL: generated end_date != start + duration';
   end if;
-  if g.published_at is not null then
-    raise exception 'FAIL: generated occurrence was published automatically';
+  if g.published_at is null then
+    raise exception 'FAIL: generated occurrence was not published automatically';
   end if;
 
   -- creator auto-joined
@@ -302,37 +312,30 @@ begin
     where event_id = g.id and user_id = '10000000-0000-0000-0000-000000000001';
   if cnt <> 1 then raise exception 'FAIL: creator not auto-joined'; end if;
 
-  -- Cron never publishes or notifies. The owner sees the draft; a member does
-  -- not see it until the owner explicitly sends this occurrence.
-  select count(*) into cnt from public.push_outbox where event_id = g.id;
-  if cnt <> 0 then raise exception 'FAIL: generated draft enqueued % pushes', cnt; end if;
+  -- Automatic publication records one invitation and emits one durable push to
+  -- the only non-creator member.
+  select count(*) into cnt from public.event_member_responses
+  where event_id = g.id
+    and user_id = '10000000-0000-0000-0000-000000000002'
+    and status = 'invited';
+  if cnt <> 1 then raise exception 'FAIL: generated occurrence invitations %', cnt; end if;
+
+  select count(*) into cnt from public.push_outbox
+  where event_id = g.id
+    and user_id = '10000000-0000-0000-0000-000000000002'
+    and type = 'event_invited';
+  if cnt <> 1 then raise exception 'FAIL: generated occurrence pushes %', cnt; end if;
 
   arr := public.get_workspace_events(w_id);
   select bool_or((x->>'id')::uuid = g.id) into flag
   from json_array_elements(arr) x;
-  if flag is distinct from true then raise exception 'FAIL: owner cannot see generated draft'; end if;
+  if flag is distinct from true then raise exception 'FAIL: owner cannot see generated occurrence'; end if;
 
   perform pg_temp.set_auth('10000000-0000-0000-0000-000000000002');
   arr := public.get_workspace_events(w_id);
   select coalesce(bool_or((x->>'id')::uuid = g.id), false) into flag
   from json_array_elements(arr) x;
-  if flag then raise exception 'FAIL: member saw generated draft before send'; end if;
-
-  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000001');
-  r := public.publish_event(g.id);
-  if (r->>'new_invite_count')::int <> 1
-     or (r->>'notification_count')::int <> 1 then
-    raise exception 'FAIL: sending generated occurrence %', r;
-  end if;
-  select count(*) into cnt from public.push_outbox
-  where event_id = g.id and type = 'event_invited';
-  if cnt <> 1 then raise exception 'FAIL: sent occurrence invite pushes %', cnt; end if;
-
-  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000002');
-  arr := public.get_workspace_events(w_id);
-  select coalesce(bool_or((x->>'id')::uuid = g.id), false) into flag
-  from json_array_elements(arr) x;
-  if not flag then raise exception 'FAIL: member cannot see sent occurrence'; end if;
+  if not flag then raise exception 'FAIL: member cannot see auto-published occurrence'; end if;
   perform pg_temp.set_auth('10000000-0000-0000-0000-000000000001');
 
   -- next_occurrence_at advanced exactly one interval
@@ -340,10 +343,15 @@ begin
     and abs(extract(epoch from (next_occurrence_at - (v_next + interval '7 days')))) < 1;
   if not found then raise exception 'FAIL: next_occurrence_at not advanced by 7 days'; end if;
 
-  -- run 2: idempotent (next occurrence now outside the lead window)
+  -- run 2: idempotent — no duplicate slot, invitation, or notification.
   perform public.generate_recurring_events();
   select count(*) into cnt from public.events where template_id = t_id and id <> (ev->>'id')::uuid;
   if cnt <> 1 then raise exception 'FAIL: generator not idempotent — % events after run 2', cnt; end if;
+  select count(*) into cnt from public.event_member_responses where event_id = g.id;
+  if cnt <> 1 then raise exception 'FAIL: generator duplicated invitations — %', cnt; end if;
+  select count(*) into cnt from public.push_outbox
+  where event_id = g.id and type = 'event_invited';
+  if cnt <> 1 then raise exception 'FAIL: generator duplicated pushes — %', cnt; end if;
 end $$;
 
 -- ============================================================
@@ -361,27 +369,35 @@ begin
     p_creator_id => '10000000-0000-0000-0000-000000000001',
     p_workspace_id => w_id,
     p_name => 'سيُتخطى',
-    p_start_date => now() - interval '5 days',
+    p_start_date => now() + interval '1 day',
+    p_end_date => now() + interval '1 day 1 hour',
     p_recurrence => 'weekly'
   );
   t_id := (ev->>'template_id')::uuid;
 
   update public.event_templates set published_at = now() where id = t_id;
 
-  -- skip consumption: flag set + inside window -> no event, flag reset, date advanced
-  update public.event_templates set skip_next = true where id = t_id;
+  -- skip consumption: a due release advances both rolling pointers and creates
+  -- nothing, while preserving the one-week gap before the following release.
+  update public.event_templates
+  set skip_next = true,
+      next_release_at = now() - interval '1 second'
+  where id = t_id;
   select next_occurrence_at into v_next from public.event_templates where id = t_id;
   perform public.generate_recurring_events();
   select count(*) into cnt from public.events where template_id = t_id and id <> (ev->>'id')::uuid;
   if cnt <> 0 then raise exception 'FAIL: skip still generated an event'; end if;
   perform 1 from public.event_templates where id = t_id
     and not skip_next
-    and abs(extract(epoch from (next_occurrence_at - (v_next + interval '7 days')))) < 1;
+    and abs(extract(epoch from (next_occurrence_at - (v_next + interval '7 days')))) < 1
+    and next_release_at > now();
   if not found then raise exception 'FAIL: skip not consumed correctly'; end if;
 
   -- ended template: generator ignores it even inside the window
   update public.event_templates
-    set ended_at = now(), next_occurrence_at = now() + interval '1 day'
+    set ended_at = now(),
+        next_occurrence_at = now() + interval '1 day',
+        next_release_at = now() - interval '1 second'
     where id = t_id;
   perform public.generate_recurring_events();
   select count(*) into cnt from public.events where template_id = t_id and id <> (ev->>'id')::uuid;
@@ -389,13 +405,21 @@ begin
 
   -- catch-up: a far-behind template creates at most one event and lands in the future
   update public.event_templates
-    set ended_at = null, skip_next = false, next_occurrence_at = now() - interval '20 days'
+    set ended_at = null,
+        skip_next = false,
+        next_occurrence_at = now() - interval '19 days',
+        next_release_at = now() - interval '1 second'
     where id = t_id;
   perform public.generate_recurring_events();
   select count(*) into cnt from public.events where template_id = t_id and id <> (ev->>'id')::uuid;
-  if cnt > 1 then raise exception 'FAIL: catch-up burst-created % events', cnt; end if;
-  perform 1 from public.event_templates where id = t_id and next_occurrence_at > now();
-  if not found then raise exception 'FAIL: catch-up left next_occurrence_at in the past'; end if;
+  if cnt <> 1 then raise exception 'FAIL: catch-up created % events instead of one', cnt; end if;
+  perform 1 from public.event_templates
+  where id = t_id
+    and next_occurrence_at > now()
+    and next_release_at > now();
+  if not found then
+    raise exception 'FAIL: catch-up left a rolling pointer in the past';
+  end if;
 end $$;
 
 -- ============================================================
@@ -485,26 +509,31 @@ end $$;
 do $$
 declare
   w json; w_id uuid; v_orphan_template_id uuid; v_healthy_template_id uuid;
-  cnt int;
+  v_healthy_event_id uuid; cnt int;
 begin
   perform pg_temp.set_auth('10000000-0000-0000-0000-000000000001');
   w := public.create_workspace('مساحة قالب يتيم');
   w_id := (w->>'id')::uuid;
-  insert into public.workspace_members (workspace_id, user_id)
-  values (w_id, '10000000-0000-0000-0000-000000000002');
+  insert into public.workspace_members (workspace_id, user_id) values
+    (w_id, '10000000-0000-0000-0000-000000000002'),
+    (w_id, '10000000-0000-0000-0000-000000000003');
 
   insert into public.event_templates
-    (workspace_id, creator_id, name, recurrence, next_occurrence_at, published_at)
+    (workspace_id, creator_id, name, recurrence, next_occurrence_at,
+     next_release_at, published_at)
   values
     (w_id, '10000000-0000-0000-0000-000000000002',
-     'قالب منشئه غادر', 'weekly', now() + interval '1 day', now())
+     'قالب منشئه غادر', 'weekly', now() + interval '1 day',
+     now() - interval '1 second', now())
   returning id into v_orphan_template_id;
 
   insert into public.event_templates
-    (workspace_id, creator_id, name, recurrence, next_occurrence_at, published_at)
+    (workspace_id, creator_id, name, recurrence, next_occurrence_at,
+     next_release_at, published_at)
   values
     (w_id, '10000000-0000-0000-0000-000000000001',
-     'قالب سليم', 'weekly', now() + interval '1 day', now())
+     'قالب سليم', 'weekly', now() + interval '1 day',
+     now() - interval '1 second', now())
   returning id into v_healthy_template_id;
 
   delete from public.workspace_members
@@ -520,11 +549,118 @@ begin
   where template_id = v_orphan_template_id;
   if cnt <> 0 then raise exception 'FAIL: orphan template generated an event'; end if;
 
-  select count(*) into cnt from public.events
-  where template_id = v_healthy_template_id and published_at is null;
+  select count(*) into cnt
+  from public.events
+  where template_id = v_healthy_template_id and published_at is not null;
   if cnt <> 1 then
-    raise exception 'FAIL: orphan blocked healthy template, draft count %', cnt;
+    raise exception 'FAIL: orphan blocked healthy template, published count %', cnt;
   end if;
+  select id into v_healthy_event_id
+  from public.events
+  where template_id = v_healthy_template_id and published_at is not null;
+
+  select count(*) into cnt from public.event_member_responses
+  where event_id = v_healthy_event_id
+    and user_id = '10000000-0000-0000-0000-000000000003'
+    and status = 'invited';
+  if cnt <> 1 then raise exception 'FAIL: healthy template invitation count %', cnt; end if;
+
+  select count(*) into cnt from public.push_outbox
+  where event_id = v_healthy_event_id
+    and user_id = '10000000-0000-0000-0000-000000000003'
+    and type = 'event_invited';
+  if cnt <> 1 then raise exception 'FAIL: healthy template push count %', cnt; end if;
+end $$;
+
+-- ============================================================
+-- Section 7b: a future draft left by the lead-days generator is healed in
+-- place, published once, and does not advance the already-advanced anchor twice
+-- ============================================================
+do $$
+declare
+  w json; w_id uuid; ev json; e_id uuid; t_id uuid; r json;
+  draft_id uuid; draft_start timestamptz; draft_end timestamptz;
+  advanced_anchor timestamptz; cnt int;
+begin
+  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000001');
+  w := public.create_workspace('مساحة شفاء المسودة');
+  w_id := (w->>'id')::uuid;
+  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000002');
+  r := public.join_workspace((select invite_code from public.workspaces where id = w_id));
+  perform pg_temp.set_auth('10000000-0000-0000-0000-000000000001');
+
+  ev := public.create_event(
+    p_creator_id => '10000000-0000-0000-0000-000000000001',
+    p_workspace_id => w_id,
+    p_name => 'سلسلة قديمة',
+    p_start_date => now() + interval '1 day',
+    p_end_date => now() + interval '1 day 90 minutes',
+    p_recurrence => 'weekly'
+  );
+  e_id := (ev->>'id')::uuid;
+  t_id := (ev->>'template_id')::uuid;
+  r := public.publish_event(e_id);
+
+  select next_occurrence_at into draft_start
+  from public.event_templates where id = t_id;
+  draft_end := draft_start + interval '90 minutes';
+  advanced_anchor := draft_start + interval '7 days';
+
+  -- The current published occurrence has ended, while the old generator has
+  -- already inserted the next slot as a draft and advanced its template anchor.
+  update public.events
+  set start_date = now() - interval '2 hours',
+      end_date = now() - interval '1 hour'
+  where id = e_id;
+
+  insert into public.events
+    (creator_id, workspace_id, name, start_date, end_date, template_id,
+     published_at)
+  values
+    ('10000000-0000-0000-0000-000000000001', w_id, 'مسودة قديمة',
+     draft_start, draft_end, t_id, null)
+  returning id into draft_id;
+
+  update public.event_templates
+  set next_occurrence_at = advanced_anchor,
+      next_release_at = now() - interval '1 hour'
+  where id = t_id;
+
+  perform public.generate_recurring_events();
+
+  perform 1 from public.events
+  where id = draft_id and published_at is not null;
+  if not found then raise exception 'FAIL: legacy future draft was not published'; end if;
+
+  select count(*) into cnt from public.events where template_id = t_id;
+  if cnt <> 2 then raise exception 'FAIL: legacy healing created a duplicate slot, count %', cnt; end if;
+
+  perform 1 from public.event_templates
+  where id = t_id
+    and abs(extract(epoch from (next_occurrence_at - advanced_anchor))) < 1
+    and abs(extract(epoch from (next_release_at - draft_end))) < 1;
+  if not found then raise exception 'FAIL: legacy healing moved a rolling pointer twice'; end if;
+
+  select count(*) into cnt from public.event_participants
+  where event_id = draft_id
+    and user_id = '10000000-0000-0000-0000-000000000001';
+  if cnt <> 1 then raise exception 'FAIL: legacy draft creator was not joined'; end if;
+
+  select count(*) into cnt from public.event_member_responses
+  where event_id = draft_id
+    and user_id = '10000000-0000-0000-0000-000000000002'
+    and status = 'invited';
+  if cnt <> 1 then raise exception 'FAIL: legacy draft invitation count %', cnt; end if;
+
+  select count(*) into cnt from public.push_outbox
+  where event_id = draft_id
+    and user_id = '10000000-0000-0000-0000-000000000002'
+    and type = 'event_invited';
+  if cnt <> 1 then raise exception 'FAIL: legacy draft push count %', cnt; end if;
+
+  perform public.generate_recurring_events();
+  select count(*) into cnt from public.events where template_id = t_id;
+  if cnt <> 2 then raise exception 'FAIL: legacy healing retry created % events', cnt; end if;
 end $$;
 
 -- ============================================================
@@ -533,8 +669,13 @@ end $$;
 do $$
 declare cnt int;
 begin
-  select count(*) into cnt from cron.job where jobname = 'recurring-events';
-  if cnt <> 1 then raise exception 'FAIL: recurring-events cron job not scheduled'; end if;
+  select count(*) into cnt
+  from cron.job
+  where jobname = 'recurring-events'
+    and schedule = '* * * * *';
+  if cnt <> 1 then
+    raise exception 'FAIL: recurring-events cron is not scheduled every minute';
+  end if;
 end $$;
 
 select 'ALL RECURRING EVENT TESTS PASSED' as result;

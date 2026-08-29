@@ -51,6 +51,10 @@ struct EventRecord: Codable {
     /// Current authenticated member's private response, computed by the list
     /// RPC. Organizers do not receive other members' reasons here.
     let myResponseStatus: String?
+    /// A finished occurrence that remains actionable solely because the current
+    /// member still owes its contribution. Older servers omit this computed
+    /// field, so decoding deliberately falls back to false.
+    let requiresPaymentAction: Bool
     /// What happens once the seats run out. Nil only on a server that predates
     /// the column; callers treat that as `.waitlist`, which is how the client
     /// behaved back when it hardcoded the value.
@@ -83,6 +87,7 @@ struct EventRecord: Codable {
         case cancellationReasonText = "cancellation_reason_text"
         case paymentReminderSentAt = "payment_reminder_sent_at"
         case myResponseStatus = "my_response_status"
+        case requiresPaymentAction = "requires_payment_action"
         case capacityPolicy = "capacity_policy"
     }
 
@@ -116,6 +121,7 @@ struct EventRecord: Codable {
         cancellationReasonText = try container.decodeIfPresent(String.self, forKey: .cancellationReasonText)
         paymentReminderSentAt = try container.decodeIfPresent(Date.self, forKey: .paymentReminderSentAt)
         myResponseStatus = try container.decodeIfPresent(String.self, forKey: .myResponseStatus)
+        requiresPaymentAction = try container.decodeIfPresent(Bool.self, forKey: .requiresPaymentAction) ?? false
         capacityPolicy = try container.decodeIfPresent(CapacityPolicy.self, forKey: .capacityPolicy)
     }
 }
@@ -126,6 +132,20 @@ struct SavedLocation: Identifiable, Hashable {
     let latitude: Double
     let longitude: Double
     var id: String { "\(name)|\(latitude)|\(longitude)" }
+}
+
+/// Authoritative rows returned by the all-or-nothing template editor RPC.
+/// Returning the edited event and selected payment destinations lets Home
+/// update immediately even when its follow-up feed refresh is offline.
+struct ExerciseTemplateUpdateResult: Decodable {
+    let workspace: WorkspaceRecord
+    let event: EventRecord
+    let paymentMethods: [PaymentMethodRecord]
+
+    enum CodingKeys: String, CodingKey {
+        case workspace, event
+        case paymentMethods = "payment_methods"
+    }
 }
 
 
@@ -281,6 +301,47 @@ enum MemberReminderResult {
 /// A member invitation response returned by `get_event_member_responses`.
 /// The RPC only exposes the full list to the event organizer; regular members
 /// receive their own row server-side.
+/// A roster row as the feed returns it: everything `get_event_participants`
+/// gives, plus the exercise it belongs to. Composed rather than redeclared, so
+/// a column added to ParticipantRecord arrives here too.
+struct FeedParticipantRow: Decodable {
+    let eventId: UUID
+    let participant: ParticipantRecord
+
+    enum CodingKeys: String, CodingKey {
+        case eventId = "event_id"
+    }
+
+    init(from decoder: Decoder) throws {
+        eventId = try decoder.container(keyedBy: CodingKeys.self)
+            .decode(UUID.self, forKey: .eventId)
+        participant = try ParticipantRecord(from: decoder)
+    }
+}
+
+struct FeedResponseRow: Decodable {
+    let eventId: UUID
+    let response: EventMemberResponseRecord
+
+    enum CodingKeys: String, CodingKey {
+        case eventId = "event_id"
+    }
+
+    init(from decoder: Decoder) throws {
+        eventId = try decoder.container(keyedBy: CodingKeys.self)
+            .decode(UUID.self, forKey: .eventId)
+        response = try EventMemberResponseRecord(from: decoder)
+    }
+}
+
+/// Everything Home needs to paint its shelf, in one answer.
+struct MyFeedRecord: Decodable {
+    let workspaces: [WorkspaceRecord]
+    let events: [EventRecord]
+    let participants: [FeedParticipantRow]
+    let responses: [FeedResponseRow]
+}
+
 struct EventMemberResponseRecord: Codable, Identifiable {
     let userId: UUID
     let displayName: String
@@ -343,7 +404,9 @@ final class EventService {
 
     /// Decoder handling Postgres timestamp formats (same strategy the RPC
     /// decoders in this file use inline).
-    private static func makePostgresDecoder() -> JSONDecoder {
+    /// Shared with LineupService, which decodes the same date shapes. One
+    /// decoder rather than two that drift.
+    static func makePostgresDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
@@ -387,6 +450,40 @@ final class EventService {
         }
         let events = try decoder.decode([EventRecord].self, from: response.data)
         eventLogger.info("API getWorkspaceEvents succeeded (count: \(events.count))")
+        return events
+    }
+
+    /// Historical events of one workspace, newest first.
+    ///
+    /// This deliberately uses a separate bounded RPC from `getWorkspaceEvents`.
+    /// The live Home feed eagerly prepares rosters for everything returned by
+    /// that endpoint; returning history there would make an ordinary launch do
+    /// work proportional to the lifetime of every workspace.
+    func getWorkspacePastEvents(
+        workspaceId: UUID,
+        before: Date = .now,
+        limit: Int = 60,
+        offset: Int = 0
+    ) async throws -> [EventRecord] {
+        let boundedLimit = min(max(limit, 1), 120)
+        let boundedOffset = max(offset, 0)
+        let params: [String: AnyJSON] = [
+            "p_workspace_id": .string(workspaceId.uuidString),
+            "p_before": .string(ISO8601DateFormatter().string(from: before)),
+            "p_limit": .integer(boundedLimit),
+            "p_offset": .integer(boundedOffset)
+        ]
+        let response = try await client
+            .rpc("get_workspace_past_events", params: params)
+            .execute()
+
+        let events = try Self.makePostgresDecoder().decode(
+            [EventRecord].self,
+            from: response.data
+        )
+        eventLogger.info(
+            "API getWorkspacePastEvents succeeded (workspaceId: \(workspaceId), offset: \(boundedOffset), count: \(events.count))"
+        )
         return events
     }
 
@@ -593,12 +690,81 @@ final class EventService {
         eventLogger.info("API updateEventWithScope succeeded (id: \(eventId), scope: \(scope))")
     }
 
+    /// Atomically updates the workspace identity (exercise name + sport) and
+    /// the selected occurrence/template details. The RPC returns the refreshed
+    /// workspace row so Home can replace its cached team without a second read.
+    func updateExerciseTemplate(
+        workspaceId: UUID,
+        eventId: UUID,
+        scope: String,
+        workspaceName: String,
+        symbol: String,
+        name: String,
+        location: String,
+        startDate: Date,
+        endDate: Date?,
+        maxParticipants: Int?,
+        totalPrice: Int,
+        latitude: Double?,
+        longitude: Double?,
+        paymentMethods: [PaymentMethodDraft],
+        fallbackPaymentMethodIds: [UUID]
+    ) async throws -> ExerciseTemplateUpdateResult {
+        let iso = ISO8601DateFormatter()
+        let paymentMethodDrafts = paymentMethods.map { draft in
+            AnyJSON.object([
+                "provider": .string(draft.provider.rawValue),
+                "mobile_number": draft.normalizedMobileNumber.map(AnyJSON.string) ?? .null,
+                "iban": draft.normalizedIBAN.map(AnyJSON.string) ?? .null,
+                "account_number": draft.normalizedAccountNumber.map(AnyJSON.string) ?? .null
+            ])
+        }
+        let params: [String: AnyJSON] = [
+            "p_workspace_id": .string(workspaceId.uuidString),
+            "p_event_id": .string(eventId.uuidString),
+            "p_scope": .string(scope),
+            "p_workspace_name": .string(workspaceName),
+            "p_symbol": .string(symbol),
+            "p_name": .string(name),
+            "p_location": .string(location),
+            "p_start_date": .string(iso.string(from: startDate)),
+            "p_end_date": endDate.map { .string(iso.string(from: $0)) } ?? .null,
+            "p_max_participants": maxParticipants.map(AnyJSON.integer) ?? .null,
+            "p_total_price": .integer(totalPrice),
+            "p_latitude": latitude.map(AnyJSON.double) ?? .null,
+            "p_longitude": longitude.map(AnyJSON.double) ?? .null,
+            "p_payment_methods": .array(paymentMethodDrafts),
+            "p_existing_payment_method_ids": .array(
+                fallbackPaymentMethodIds.map { .string($0.uuidString) }
+            )
+        ]
+
+        let response: PostgrestResponse<Void>
+        do {
+            response = try await client
+                .rpc("update_exercise_template", params: params)
+                .execute()
+        } catch {
+            throw Self.translatedPaymentSchemaError(error)
+        }
+
+        let result = try Self.makePostgresDecoder().decode(
+            ExerciseTemplateUpdateResult.self,
+            from: response.data
+        )
+        eventLogger.info(
+            "API updateExerciseTemplate succeeded (event: \(eventId), workspace: \(workspaceId), scope: \(scope))"
+        )
+        return result
+    }
+
     private static func translatedPaymentSchemaError(_ error: Error) -> Error {
         let description = error.localizedDescription.lowercased()
         let postgrestCode = (error as? PostgrestError)?.code
         let isPaymentSchemaError = description.contains("payment_method")
             || description.contains("create_event")
             || description.contains("update_event_with_scope")
+            || description.contains("update_exercise_template")
         let isMissingSchemaEntry = postgrestCode == "PGRST202"
             || postgrestCode == "PGRST203"
             || postgrestCode == "PGRST204"
@@ -1183,5 +1349,18 @@ final class EventService {
             .rpc("end_recurrence", params: params)
             .execute()
         eventLogger.info("API endRecurrence succeeded (templateId: \(templateId))")
+    }
+}
+
+extension EventService {
+    /// Home in one request. The shelf spans every workspace, so asking each one
+    /// in turn cost a round trip per group plus a roster per card, in sequence.
+    func getMyFeed() async throws -> MyFeedRecord {
+        let response = try await client.rpc("get_my_feed").execute()
+        let feed = try Self.makePostgresDecoder().decode(MyFeedRecord.self, from: response.data)
+        eventLogger.info(
+            "API getMyFeed succeeded (workspaces: \(feed.workspaces.count), events: \(feed.events.count))"
+        )
+        return feed
     }
 }

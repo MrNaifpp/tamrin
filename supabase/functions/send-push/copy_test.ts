@@ -37,7 +37,7 @@ Deno.test("event_opened copy interpolates the event name", () => {
   const c = copyFor("event_opened", "تمرين الأربعاء");
   assertEquals(c, {
     title: "انفتح التسجيل ⚽",
-    body: "انفتح التسجيل لتمرين تمرين الأربعاء — احجز مكانك",
+    body: "انفتح التسجيل لتمرين تمرين الأربعاء. احجز مكانك.",
   });
 });
 
@@ -117,7 +117,7 @@ Deno.test("event_fill_75 copy interpolates the event name", () => {
   const c = copyFor("event_fill_75", "تمرين الخميس");
   assertEquals(c, {
     title: "٣ أرباع المقاعد راحت ⏳",
-    body: "تمرين الخميس قارب يكتمل — باقي ربع المقاعد",
+    body: "تمرين الخميس قارب يكتمل. باقي ربع المقاعد.",
   });
 });
 
@@ -131,4 +131,12 @@ Deno.test("event_full copy interpolates the event name", () => {
 
 Deno.test("unknown type returns null", () => {
   assertEquals(copyFor("nope", "x"), null);
+});
+
+Deno.test("seat_available copy interpolates the event name", () => {
+  const c = copyFor("seat_available", "تمرين الخميس");
+  assertEquals(c, {
+    title: "توفر مقعد الآن 🎟️",
+    body: "توفر مقعد في تمرين الخميس. احجزه قبل ما يروح.",
+  });
 });

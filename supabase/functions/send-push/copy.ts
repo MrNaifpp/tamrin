@@ -1,4 +1,7 @@
 // type -> Arabic notification copy. This is the ONLY place push wording lives.
+//
+// No em dashes in any of it. Arabic joins clauses with «و» or ends them with a
+// full stop; the dash is an English habit that reads as a foreign mark here.
 export function copyFor(
   type: string,
   eventName: string,
@@ -42,7 +45,7 @@ export function copyFor(
     case "event_opened":
       return {
         title: "انفتح التسجيل ⚽",
-        body: `انفتح التسجيل لتمرين ${eventName} — احجز مكانك`,
+        body: `انفتح التسجيل لتمرين ${eventName}. احجز مكانك.`,
       };
     case "event_invited":
       return {
@@ -62,12 +65,17 @@ export function copyFor(
     case "event_fill_75":
       return {
         title: "٣ أرباع المقاعد راحت ⏳",
-        body: `${eventName} قارب يكتمل — باقي ربع المقاعد`,
+        body: `${eventName} قارب يكتمل. باقي ربع المقاعد.`,
       };
     case "event_full":
       return {
         title: "اكتمل العدد 🎉",
         body: `امتلأت مقاعد ${eventName}`,
+      };
+    case "seat_available":
+      return {
+        title: "توفر مقعد الآن 🎟️",
+        body: `توفر مقعد في ${eventName}. احجزه قبل ما يروح.`,
       };
     case "waitlist_promoted":
       return {
@@ -78,16 +86,6 @@ export function copyFor(
       return {
         title: "اعتذر لاعب 🏳️",
         body: `اعتذر أحد اللاعبين عن ${eventName}، افتح التمرين لمراجعة القائمة.`,
-      };
-    case "waitlist_promoted":
-      return {
-        title: "تحرر مقعد — أنت داخل 🎉",
-        body: `انضممت من قائمة الانتظار إلى ${eventName}. نراك هناك! 🙌`,
-      };
-    case "member_declined":
-      return {
-        title: "اعتذار عن التمرين",
-        body: `اعتذر أحد اللاعبين عن ${eventName}. افتح التمرين لمراجعة القائمة.`,
       };
     case "event_cancelled":
       return {

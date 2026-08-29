@@ -20,12 +20,16 @@ struct WorkspaceRecord: Codable, Identifiable, Hashable {
     let inviteCode: String?
     let imageUrl: String?
     let symbol: String?
+    /// The sport this group plays, as the database stores it. The symbol above
+    /// is computed from it. Nil on a server that predates the enum, where the
+    /// symbol is still the only answer.
+    let sport: String?
     /// The colour picked beside the symbol. Nil on a server that predates it.
     let color: String?
     let memberCount: Int?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, symbol, color
+        case id, name, symbol, sport, color
         case ownerId = "owner_id"
         case inviteCode = "invite_code"
         case imageUrl = "image_url"
@@ -85,15 +89,14 @@ final class WorkspaceService {
     static let shared = WorkspaceService()
     private let client = SupabaseClientManager.shared.client
 
+    /// The sport is what is sent now. The symbol is computed from it on the
+    /// server, so sending both would only be two ways of saying one thing.
     func createWorkspace(
         name: String,
-        symbol: String? = nil,
+        sport: String = "soccer",
         color: String? = nil
     ) async throws -> WorkspaceRecord {
-        var params = ["p_name": name]
-        if let symbol {
-            params["p_symbol"] = symbol
-        }
+        var params = ["p_name": name, "p_sport": sport]
         if let color {
             params["p_color"] = color
         }
@@ -168,8 +171,15 @@ final class WorkspaceService {
         wsLogger.info("API removeMember succeeded (workspace: \(workspaceId))")
     }
 
-    func renameWorkspace(id: UUID, name: String) async throws -> WorkspaceRecord {
-        let params = ["p_workspace_id": id.uuidString, "p_name": name]
+    func renameWorkspace(
+        id: UUID,
+        name: String,
+        sport: String? = nil
+    ) async throws -> WorkspaceRecord {
+        var params = ["p_workspace_id": id.uuidString, "p_name": name]
+        if let sport {
+            params["p_sport"] = sport
+        }
         let response = try await client.rpc("update_workspace", params: params).execute()
         return try JSONDecoder().decode(WorkspaceRecord.self, from: response.data)
     }

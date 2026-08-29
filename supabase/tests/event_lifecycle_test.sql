@@ -22,11 +22,11 @@ insert into auth.users (id, email) values
   ('20000000-0000-0000-0000-000000000003', 'lifecycle-member-b@test.local'),
   ('20000000-0000-0000-0000-000000000004', 'lifecycle-outsider@test.local');
 
-insert into public.users (user_id, name) values
-  ('20000000-0000-0000-0000-000000000001', 'المنظّم'),
-  ('20000000-0000-0000-0000-000000000002', 'عضو أ'),
-  ('20000000-0000-0000-0000-000000000003', 'عضو ب'),
-  ('20000000-0000-0000-0000-000000000004', 'غريب');
+insert into public.users (user_id, name, avatar_url) values
+  ('20000000-0000-0000-0000-000000000001', 'المنظّم', 'https://avatars.test/owner.jpg'),
+  ('20000000-0000-0000-0000-000000000002', 'عضو أ', 'https://avatars.test/member-a.jpg'),
+  ('20000000-0000-0000-0000-000000000003', 'عضو ب', 'https://avatars.test/member-b.jpg'),
+  ('20000000-0000-0000-0000-000000000004', 'غريب', 'https://avatars.test/outsider.jpg');
 
 do $$
 declare
@@ -193,6 +193,16 @@ begin
   -- Invitations never reserve seats: only the auto-joined creator exists.
   select count(*) into v_count from public.event_participants where event_id = v_event_id;
   if v_count <> 1 then raise exception 'FAIL: invitation reserved a seat'; end if;
+
+  -- The Home poster is fed by this RPC, not by workspace membership. Keep the
+  -- profile photo and registration order in its public contract so the first
+  -- nine discs can render the actual registered players instead of initials.
+  v_result := public.get_event_participants(v_event_id);
+  if json_array_length(v_result) <> 1
+     or v_result->0->>'user_id' <> '20000000-0000-0000-0000-000000000001'
+     or v_result->0->>'avatar_url' <> 'https://avatars.test/owner.jpg' then
+    raise exception 'FAIL: participant avatar/order contract %', v_result;
+  end if;
 
   select count(*) into v_count from public.push_outbox
   where event_id = v_event_id and type = 'event_invited';

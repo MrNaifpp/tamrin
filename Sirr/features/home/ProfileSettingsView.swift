@@ -6,7 +6,9 @@ import PhotosUI
 /// overview-then-editor pair that needed two detents and a mode switch.
 ///
 /// Signing out lives in `AppSettingsView` next to account deletion, so the two
-/// session-ending actions sit together instead of one hiding behind an editor.
+/// session-ending actions sit together instead of one hiding behind an editor —
+/// and that screen is pushed from here, since the profile photo is now the one
+/// way into everything about you and your copy of the app.
 struct ProfileSettingsView: View {
     @Bindable var feed: HomeStore
     /// True when pushed onto the settings sheet's navigation stack rather than
@@ -70,6 +72,10 @@ struct ProfileSettingsView: View {
             avatarPicker
             nameField
             positionPicker
+            // Settings live behind the profile photo, one level in: how the app
+            // behaves is a rarer errand than fixing your own name, and it has
+            // no other door now that the group drawer is gone.
+            if !isPushed { settingsLink }
         }
         .padding(.horizontal, 22)
         .padding(.top, 12)
@@ -97,6 +103,36 @@ struct ProfileSettingsView: View {
                     .fontWeight(.semibold)
             }
         }
+    }
+
+    private var settingsLink: some View {
+        NavigationLink {
+            AppSettingsView(feed: feed, isPushed: true)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28)
+
+                Text("الإعدادات")
+                    .font(TamrinFont.font(size: 17, weight: .medium))
+                    .foregroundStyle(.primary)
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.forward")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 15)
+            .frame(maxWidth: .infinity)
+            .background(TamrinTheme.card, in: .capsule)
+            .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("التنبيهات والهابتك وتسجيل الخروج")
     }
 
     /// A photo to act on: one picked this session, or one already on the profile

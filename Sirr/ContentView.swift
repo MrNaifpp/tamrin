@@ -65,6 +65,8 @@ struct ContentView: View {
                 occurrence: paymentRequestPreview.occurrences[0],
                 artName: "ExerciseArt3"
             )
+        } else if ProcessInfo.processInfo.arguments.contains("-demoLineupScreen") {
+            LineupDebugScreen()
         } else {
             productionContent
         }
@@ -197,6 +199,36 @@ struct ContentView: View {
         #endif
     }
 }
+
+#if DEBUG
+/// A deterministic editor route for checking the dense two-team layout and
+/// drag interactions without walking through the event-detail transition.
+private struct LineupDebugScreen: View {
+    @State private var feed: HomeStore
+    private let occurrence: FeedOccurrence
+
+    init() {
+        let preview = HomeStore.paymentRequestPreview
+        let occurrence = preview.occurrences[0]
+        // Exercise the fresh-creation path. It now reaches the two teams on
+        // its own, so seeding a saved plan would hide a regression in that flow.
+        LineupStore.clear(eventID: occurrence.id)
+        // The cache is the only thing to clear: this screen's exercise exists
+        // on no server, so there is nothing behind it to delete.
+        _feed = State(initialValue: preview)
+        self.occurrence = occurrence
+    }
+
+    var body: some View {
+        LineupFlowView(
+            feed: feed,
+            occurrence: occurrence,
+            artName: "ExerciseArt3",
+            onFinish: { _ in }
+        )
+    }
+}
+#endif
 
 
 #Preview {

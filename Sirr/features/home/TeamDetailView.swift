@@ -18,13 +18,13 @@ struct TeamDetailView: View {
     // Read from `teams` directly (not `currentTeam`, which force-indexes) so the
     // delete → pop transition on the last team can't touch an empty array.
     private var team: FeedTeam? { feed.teams.first { $0.id == feed.selectedTeamID } }
+    private var usesFootballFeatures: Bool {
+        LineupSportStyle(sport: team?.sport).usesFootballFeatures
+    }
     private var teamPlans: [FeedPlan] { feed.teamPlans }
     private var plan: FeedPlan? { teamPlans.first { $0.id == selectedPlanID } ?? teamPlans.first }
     private var members: [FeedTeamMember] {
-        feed.teamMembers.sorted {
-            if $0.role != $1.role { return $0.role == .admin }
-            return $0.displayName < $1.displayName
-        }
+        feed.teamMembers.sorted(by: FeedTeamMember.nameComesBefore)
     }
 
     /// The roster drives the list, but the headline count falls back to the
@@ -170,6 +170,12 @@ struct TeamDetailView: View {
                 member: shape,
                 avatarImageData: member.id == feed.currentUserID ? feed.avatarData : nil,
                 share: 0,
+                loadRating: usesFootballFeatures && feed.canRate(shape)
+                    ? { try await feed.playerRating(for: shape) }
+                    : nil,
+                submitRating: usesFootballFeatures && feed.canRate(shape)
+                    ? { try await feed.submitPlayerRating($0, for: shape) }
+                    : nil,
                 removeTitle: "إزالة من المجموعة",
                 onRemove: feed.isCurrentTeamOwner && member.id != feed.currentUserID
                     ? { memberAwaitingRemoval = member }
@@ -673,4 +679,3 @@ private struct PlanGlassStat: View {
         .accessibilityLabel("\(title): \(value)")
     }
 }
-

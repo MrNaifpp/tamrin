@@ -35,7 +35,7 @@ struct WelcomeView: View {
                         WelcomeChoiceCard(title: "انضم لتمرين", subtitle: "ادخل برمز الدعوة ووفر مكانك", symbol: "link", accent: TamrinTheme.secondary)
                     }.buttonStyle(SpringCardPressStyle()).padding(.top, 12)
                     Spacer()
-                    Text("تمارينك خاصة — ما يدخلها إلا بدعوة").font(TamrinFont.footnote).foregroundStyle(.tertiary)
+                    Text("تمارينك خاصة، ما يدخلها إلا بدعوة").font(TamrinFont.footnote).foregroundStyle(.tertiary)
                         .frame(maxWidth: .infinity).padding(.bottom, 24)
                 }
                 .padding(.horizontal, 22)

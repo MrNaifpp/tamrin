@@ -8,6 +8,10 @@ struct FeedTeam: Identifiable {
     let id: UUID
     let name: String
     let symbol: String
+    /// The sport this group plays, as the database stores it. It picks the
+    /// folder the exercise artwork is drawn from, and the symbol above is the
+    /// server's rendering of the same fact.
+    var sport: String = "soccer"
     /// The colour picked with the symbol. Every surface that draws the group's
     /// icon tints it with this, so the choice is the group's identity rather
     /// than a flourish on the creation screen.
@@ -133,8 +137,6 @@ struct PlanDraft: Identifiable, Hashable {
     var paymentMethods: [PaymentMethodDraft] = []
     var scheduleKind: FeedScheduleKind = .recurring
     var oneOffDate = Calendar.current.date(byAdding: .day, value: 7, to: .now) ?? .now
-    var publishLeadDays = 2
-    var publishTime = Calendar.current.date(from: DateComponents(hour: 12)) ?? .now
 
     var pricePerPerson: Double {
         guard capacity > 0 else { return 0 }
@@ -156,6 +158,69 @@ struct FeedTeamMember: Identifiable {
     /// Their position, so the member list can open a sheet that knows how to
     /// weight a rating.
     var position: String = ""
+}
+
+extension FeedTeamMember {
+    /// The organizer always leads every member list. Within the organizer and
+    /// member groups, Arabic-script names come first, followed by names written
+    /// in English/another script, with locale-aware alphabetical ordering.
+    nonisolated static func nameComesBefore(_ lhs: FeedTeamMember, _ rhs: FeedTeamMember) -> Bool {
+        switch (lhs.role, rhs.role) {
+        case (.admin, .member): return true
+        case (.member, .admin): return false
+        default: break
+        }
+
+        let lhsAlphabet = alphabetRank(for: lhs.displayName)
+        let rhsAlphabet = alphabetRank(for: rhs.displayName)
+        if lhsAlphabet != rhsAlphabet { return lhsAlphabet < rhsAlphabet }
+
+        let comparison = collationName(for: lhs.displayName).compare(
+            collationName(for: rhs.displayName),
+            options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive, .numeric],
+            range: nil,
+            locale: Locale(identifier: "ar_SA@numbers=latn")
+        )
+        if comparison != .orderedSame { return comparison == .orderedAscending }
+
+        // Keep equal-looking names deterministic across refreshes.
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+
+    /// Leading spaces, punctuation, emoji and digits do not decide the
+    /// alphabet. The first real letter does; names without letters come last.
+    nonisolated private static func alphabetRank(for name: String) -> Int {
+        guard let firstLetter = name.unicodeScalars.first(where: { $0.properties.isAlphabetic }) else {
+            return 2
+        }
+        return isArabicScript(firstLetter) ? 0 : 1
+    }
+
+    /// Decorations before a name (emoji, @, a jersey number) should not move
+    /// it ahead of the first Arabic letter when the list is alphabetized.
+    nonisolated private static func collationName(for name: String) -> String {
+        guard let firstLetter = name.firstIndex(where: { character in
+            character.unicodeScalars.contains(where: { $0.properties.isAlphabetic })
+        }) else {
+            return name
+        }
+        return String(name[firstLetter...])
+    }
+
+    nonisolated private static func isArabicScript(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x0600...0x06FF,
+             0x0750...0x077F,
+             0x0870...0x089F,
+             0x08A0...0x08FF,
+             0xFB50...0xFDFF,
+             0xFE70...0xFEFF,
+             0x1EE00...0x1EEFF:
+            return true
+        default:
+            return false
+        }
+    }
 }
 
 /// Training-plan template a team runs. Backs the team-details page.
@@ -241,6 +306,9 @@ struct FeedOccurrence: Identifiable {
     let id: UUID
     let title: String
     let startAt: Date
+    /// Explicit finish when the backend has one. Legacy exercises fall back
+    /// to `startAt` when deciding whether they belong in the archive.
+    var endAt: Date? = nil
     let locationName: String
     let capacity: Int
     let price: Double        // 0 == free
@@ -265,15 +333,22 @@ struct FeedOccurrence: Identifiable {
     /// registered player can always return to the transfer details.
     var paymentReminderSentAt: Date? = nil
     var memberResponse: FeedMemberResponse? = nil
-    /// What happens once every seat is taken. Defaults to `.waitlist`, which
-    /// is both the column default and how the app behaved before the choice
-    /// was storable.
-    var capacityPolicy: CapacityPolicy = .waitlist
+    /// Personal feed metadata: this finished occurrence stays on the current
+    /// shelf until this member declares that their contribution was paid.
+    var requiresPaymentAction: Bool = false
+    /// What happens once every seat is taken: a reserve list the organizer
+    /// opened, or a closed door. Defaults to the reserve list, which is what
+    /// every event did before the choice existed.
+    var capacityPolicy: FeedCapacityPolicy = .waitlist
 
     /// Compatibility convenience for surfaces that only need a representative
     /// method (the participant flow always uses `paymentMethodIds`).
     var paymentMethodId: UUID? { paymentMethodIds.first }
     var isPublished: Bool { publishedAt != nil }
+    var effectiveEndAt: Date { endAt ?? startAt }
+    func isPast(relativeTo date: Date = .now) -> Bool {
+        effectiveEndAt < date
+    }
     var hasCancellationReason: Bool {
         cancellationReasonText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
             || cancellationReasonCode != nil
@@ -289,6 +364,10 @@ final class HomeStore {
     var teams: [FeedTeam] = []
     var selectedTeamID: UUID = UUID()          // dummy until the first workspace loads
     var occurrencesByTeam: [UUID: [FeedOccurrence]] = [:]
+    /// Loaded independently and lazily from the live/upcoming feed. Keeping
+    /// history out of `occurrencesByTeam` prevents Home bootstrap from doing
+    /// roster work for every exercise a workspace has ever held.
+    var pastOccurrencesByTeam: [UUID: [FeedOccurrence]] = [:]
     var plansByTeam: [UUID: [FeedPlan]] = [:]
     var membersByTeam: [UUID: [FeedTeamMember]] = [:]
     var profileName: String = ""
@@ -299,6 +378,15 @@ final class HomeStore {
 
     var isLoading = false
     var errorMessage: String?
+    private(set) var isLoadingPastOccurrences = false
+    private(set) var isLoadingMorePastOccurrences = false
+    /// History failures are intentionally isolated from `errorMessage`: the
+    /// upcoming Home feed remains usable even if this optional shelf fails.
+    private(set) var pastOccurrencesError: String?
+    /// A later-page failure has a different retry path from the first page or
+    /// a refresh. Keeping it separate prevents the archive from accidentally
+    /// restarting when the person only needs the next page retried.
+    private(set) var pastLoadMoreError: String?
 
     /// Set by DesignerHomeView so selection changes persist to AppState and the
     /// profile screen can sign out.
@@ -325,6 +413,15 @@ final class HomeStore {
     /// Original records are retained so editing a card opens that exact event,
     /// rather than the first synthesized plan in the workspace.
     private var eventRecordsByID: [UUID: EventRecord] = [:]
+    /// A successful empty response is still loaded. Tracking this separately
+    /// avoids requesting an empty workspace's history on every presentation.
+    private var loadedPastTeamIDs: Set<UUID> = []
+    /// Offset pagination is scoped to the fixed boundary used for each
+    /// workspace's current archive session. A forced refresh commits a new
+    /// boundary/cursor only after that workspace's first page succeeds.
+    private var pastBoundaryByTeam: [UUID: Date] = [:]
+    private var pastOffsetByTeam: [UUID: Int] = [:]
+    private var exhaustedPastTeamIDs: Set<UUID> = []
 
     /// Preview/testing stores skip all network calls.
     private let isPreview: Bool
@@ -337,6 +434,9 @@ final class HomeStore {
         return teamID == HomeDebugMemberFixture.teamID
             || teamID == HomeDebugMemberFixture.paidMemberTeamID
             || teamID == HomeDebugMemberFixture.ownerTeamID
+            || teamID == HomeDebugMemberFixture.volleyTeamID
+            || teamID == HomeDebugMemberFixture.basketTeamID
+            || teamID == HomeDebugMemberFixture.padelTeamID
         #else
         return false
         #endif
@@ -347,6 +447,13 @@ final class HomeStore {
         return eventID == HomeDebugMemberFixture.eventID
             || eventID == HomeDebugMemberFixture.paidMemberEventID
             || eventID == HomeDebugMemberFixture.ownerEventID
+            || eventID == HomeDebugMemberFixture.volleyOpenEventID
+            || eventID == HomeDebugMemberFixture.volleyLeagueEventID
+            || eventID == HomeDebugMemberFixture.basketEventID
+            || eventID == HomeDebugMemberFixture.padelEventID
+            || eventID == HomeDebugMemberFixture.volleyPastEventID
+            || eventID == HomeDebugMemberFixture.basketPastEventID
+            || eventID == HomeDebugMemberFixture.padelPastEventID
         #else
         return false
         #endif
@@ -361,12 +468,114 @@ final class HomeStore {
         return ownerByTeam[selectedTeamID] == uid
     }
     var occurrences: [FeedOccurrence] { occurrencesByTeam[selectedTeamID] ?? [] }
-    var teamPlans: [FeedPlan] { plansByTeam[selectedTeamID] ?? [] }
-    var teamMembers: [FeedTeamMember] { membersByTeam[selectedTeamID] ?? [] }
-    func methodsForCurrentTeam() -> [PaymentMethodRecord] {
-        let newestFirst = (paymentMethodsByTeam[selectedTeamID] ?? []).sorted { $0.createdAt > $1.createdAt }
+
+    /// Every cached exercise the signed-in person is part of, whichever group
+    /// it belongs to and whether they run it or just play in it, nearest date
+    /// first. History joins this list only after its lazy load, while duplicate
+    /// ids from an event crossing the live/history boundary collapse to one.
+    var allOccurrences: [FeedOccurrence] {
+        let activeTeamIDs = Set(teams.map(\.id))
+        var byID: [UUID: FeedOccurrence] = [:]
+        for teamID in activeTeamIDs {
+            for occurrence in pastOccurrencesByTeam[teamID] ?? [] {
+                byID[occurrence.id] = occurrence
+            }
+            // The live endpoint is refreshed more often, so let its copy win
+            // during the narrow moment an exercise can appear in both feeds.
+            for occurrence in occurrencesByTeam[teamID] ?? [] {
+                byID[occurrence.id] = occurrence
+            }
+        }
+        return byID.values.sorted { $0.startAt < $1.startAt }
+    }
+
+    /// Historical exercises across active workspaces, newest first. The
+    /// server bounds each workspace's result; this final id map also protects
+    /// the UI from duplicates if a backend row is ever returned twice.
+    var allPastOccurrences: [FeedOccurrence] {
+        let activeTeamIDs = Set(teams.map(\.id))
+        var byID: [UUID: FeedOccurrence] = [:]
+        for teamID in activeTeamIDs {
+            for occurrence in pastOccurrencesByTeam[teamID] ?? [] {
+                byID[occurrence.id] = occurrence
+            }
+        }
+        return byID.values.sorted { $0.startAt > $1.startAt }
+    }
+
+    func pastOccurrences(for teamID: UUID) -> [FeedOccurrence] {
+        (pastOccurrencesByTeam[teamID] ?? []).sorted { $0.startAt > $1.startAt }
+    }
+
+    /// True only after every workspace currently on Home has produced either
+    /// a history page or a successful empty response.
+    var hasLoadedPastOccurrences: Bool {
+        Set(teams.map(\.id)).isSubset(of: loadedPastTeamIDs)
+    }
+
+    /// At least one active workspace has another bounded archive page.
+    var canLoadMorePastOccurrences: Bool {
+        teams.contains { team in
+            loadedPastTeamIDs.contains(team.id)
+                && !exhaustedPastTeamIDs.contains(team.id)
+        }
+    }
+
+    /// The group an exercise belongs to. Home mixes groups on one shelf, so
+    /// nothing can assume the selected one any more.
+    func team(for occurrence: FeedOccurrence) -> FeedTeam? {
+        guard let teamID = teamID(for: occurrence) else { return nil }
+        return teams.first { $0.id == teamID }
+    }
+
+    func teamID(for occurrence: FeedOccurrence) -> UUID? {
+        if let liveTeamID = occurrencesByTeam.first(where: {
+            $0.value.contains(where: { $0.id == occurrence.id })
+        })?.key {
+            return liveTeamID
+        }
+        return pastOccurrencesByTeam.first(where: {
+            $0.value.contains(where: { $0.id == occurrence.id })
+        })?.key
+    }
+
+    /// Whether the signed-in person runs the group this exercise belongs to.
+    func isOwner(of occurrence: FeedOccurrence) -> Bool {
+        guard let teamID = teamID(for: occurrence) else { return false }
+        return isOwner(ofTeamID: teamID)
+    }
+
+    func isOwner(ofTeamID teamID: UUID) -> Bool {
+        guard let uid = currentUserID else { return false }
+        return ownerByTeam[teamID] == uid
+    }
+
+    /// Points the store's group-scoped surface at the card in front of the
+    /// person, without reloading: every team's data is already in memory, and
+    /// the actions on a card read `selectedTeamID` to know whose rules apply.
+    func focusTeam(for occurrence: FeedOccurrence) {
+        guard let teamID = teamID(for: occurrence), teamID != selectedTeamID else { return }
+        selectedTeamID = teamID
+        onSelectWorkspace?(teamID)
+    }
+    func plans(for teamID: UUID) -> [FeedPlan] {
+        plansByTeam[teamID] ?? []
+    }
+
+    func members(for teamID: UUID) -> [FeedTeamMember] {
+        membersByTeam[teamID] ?? []
+    }
+
+    func methods(for teamID: UUID) -> [PaymentMethodRecord] {
+        let newestFirst = (paymentMethodsByTeam[teamID] ?? []).sorted { $0.createdAt > $1.createdAt }
         var seen: Set<PaymentProvider> = []
         return newestFirst.filter { seen.insert($0.provider).inserted }
+    }
+
+    var teamPlans: [FeedPlan] { plans(for: selectedTeamID) }
+    var teamMembers: [FeedTeamMember] { members(for: selectedTeamID) }
+    func methodsForCurrentTeam() -> [PaymentMethodRecord] {
+        methods(for: selectedTeamID)
     }
 
     func roster(for occurrence: FeedOccurrence) -> [FeedMember] { rosterCache[occurrence.id] ?? [] }
@@ -508,7 +717,7 @@ final class HomeStore {
             currentUserID = HomeDebugMemberFixture.memberFallbackID
         }
         if profileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            profileName = "أنا — حساب التجربة"
+            profileName = "حساب التجربة"
         }
         if playerPosition.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             playerPosition = "وسط"
@@ -554,6 +763,18 @@ final class HomeStore {
                 profileName: profileName
             )
             myEventStatus[paid.id] = .registered
+            // Seeded only when nobody has split this exercise yet, so a tester
+            // who rearranges the sides keeps his own work across a relaunch.
+            if LineupStore.cached(eventID: paid.id) == nil {
+                LineupStore.save(
+                    HomeDebugMemberFixture.paidMemberPlan(
+                        currentUserID: fixtureUserID,
+                        profileName: profileName
+                    ),
+                    positions: LineupPositions(),
+                    eventID: paid.id
+                )
+            }
         }
 
         // The third group is mine, so the organizer's side of every screen is
@@ -574,6 +795,60 @@ final class HomeStore {
             plansByTeam[ownerTeamID] = [HomeDebugMemberFixture.plan(for: mine)]
             paymentMethodsByTeam[ownerTeamID] = []
             rosterCache[mine.id] = HomeDebugMemberFixture.ownerRoster()
+        }
+
+        // The three groups above all play football. These carry the rest of
+        // the sports, so Home actually shows what a volleyball or padel card
+        // looks like — the sport is what picks the photograph.
+        installFixtureSportGroup(
+            HomeDebugMemberFixture.volleyTeam,
+            fixtureUserID: fixtureUserID,
+            occurrences: [
+                (HomeDebugMemberFixture.volleyOpenOccurrence(), HomeDebugMemberFixture.volleyOpenRoster()),
+                (HomeDebugMemberFixture.volleyLeagueOccurrence(), HomeDebugMemberFixture.volleyLeagueRoster()),
+                (HomeDebugMemberFixture.volleyPastOccurrence(), HomeDebugMemberFixture.volleyLeagueRoster())
+            ]
+        )
+        installFixtureSportGroup(
+            HomeDebugMemberFixture.basketTeam,
+            fixtureUserID: fixtureUserID,
+            occurrences: [
+                (HomeDebugMemberFixture.basketOccurrence(), HomeDebugMemberFixture.basketRoster()),
+                (HomeDebugMemberFixture.basketPastOccurrence(), HomeDebugMemberFixture.basketRoster())
+            ]
+        )
+        installFixtureSportGroup(
+            HomeDebugMemberFixture.padelTeam,
+            fixtureUserID: fixtureUserID,
+            occurrences: [
+                (HomeDebugMemberFixture.padelOccurrence(), HomeDebugMemberFixture.padelRoster()),
+                (HomeDebugMemberFixture.padelPastOccurrence(), HomeDebugMemberFixture.padelRoster())
+            ]
+        )
+    }
+
+    /// One sport group and its exercises. Owned by the signed-in tester, so
+    /// each is reachable from the organizer's side without another set of
+    /// member-side scenarios to keep in step.
+    private func installFixtureSportGroup(
+        _ team: FeedTeam,
+        fixtureUserID: UUID,
+        occurrences: [(FeedOccurrence, [FeedMember])]
+    ) {
+        if !teams.contains(where: { $0.id == team.id }) {
+            teams.append(team)
+        }
+        ownerByTeam[team.id] = fixtureUserID
+        membersByTeam[team.id] = HomeDebugMemberFixture.ownerTeamMembers(
+            currentUserID: fixtureUserID,
+            profileName: profileName
+        )
+        guard occurrencesByTeam[team.id] == nil else { return }
+        occurrencesByTeam[team.id] = occurrences.map(\.0)
+        plansByTeam[team.id] = occurrences.map { HomeDebugMemberFixture.plan(for: $0.0) }
+        paymentMethodsByTeam[team.id] = []
+        for (occurrence, roster) in occurrences {
+            rosterCache[occurrence.id] = roster
         }
     }
     #endif
@@ -609,7 +884,15 @@ final class HomeStore {
         guard !isPreview else { return }
         do {
             let records = try await WorkspaceService.shared.getMyWorkspaces()
-            teams = records.map(mapTeam)
+            // Read before `teams` is replaced. A record can come back with no
+            // member count, and mapping that straight through blanks the number
+            // every group is already showing — which is what the fallback on
+            // `mapTeam` exists to stop, and what the update path opposite
+            // already does with its own prior count.
+            let priorCounts = Dictionary(
+                uniqueKeysWithValues: teams.map { ($0.id, $0.memberCount) }
+            )
+            teams = records.map { mapTeam($0, fallbackMemberCount: priorCounts[$0.id]) }
             ownerByTeam = Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0.ownerId) })
             #if DEBUG
             installDebugMemberFixtureIfNeeded()
@@ -632,7 +915,7 @@ final class HomeStore {
             } else {
                 onSelectWorkspace?(nil)
             }
-            if !teams.isEmpty { await loadSelectedTeamData() }
+            if !teams.isEmpty { await loadAllTeamsData() }
         } catch {
             #if DEBUG
             // The local member journey remains testable when the development
@@ -656,22 +939,272 @@ final class HomeStore {
         }
     }
 
-    /// Loads the selected workspace's events, members, a synthesized plan, and
-    /// participant rosters for the events shown on Home.
+    /// Home shows every group at once, so every group's data has to be here.
+    /// Sequential rather than a task group: each pass already fans out over its
+    /// own events, and a handful of groups times a dozen requests each is a
+    /// burst worth spreading out.
+    /// Home in one request.
+    ///
+    /// The shelf spans every workspace, so asking each one in turn made a
+    /// launch cost a round trip per group, plus a roster for every card, run in
+    /// sequence. get_my_feed answers all of it at once, and the rows arrive in
+    /// the shapes the existing mapping already reads.
+    ///
+    /// loadTeamData stays for the single workspace refresh after a write.
+    func loadAllTeamsData() async {
+        guard let feed = try? await EventService.shared.getMyFeed() else {
+            // One failed request must not leave Home blank when the per
+            // workspace path can still answer.
+            for team in teams { await loadTeamData(team.id) }
+            return
+        }
+
+        for event in feed.events { eventRecordsByID[event.id] = event }
+
+        // EventRecord.workspaceId is optional, so an event from before
+        // workspaces existed groups under nothing rather than crashing the shelf.
+        let eventsByTeam = Dictionary(
+            grouping: feed.events.filter { $0.workspaceId != nil },
+            by: { $0.workspaceId! }
+        )
+        for team in teams {
+            let events = eventsByTeam[team.id] ?? []
+            occurrencesByTeam[team.id] = events.map(mapOccurrence)
+            plansByTeam[team.id] = events.map(synthesizePlan)
+            for event in events {
+                memberResponseByEvent[event.id] =
+                    event.myResponseStatus.flatMap(FeedMemberResponse.init(rawValue:))
+            }
+        }
+
+        // The rows are ParticipantRecords, so the existing mapping applies
+        // unchanged. An exercise whose roster emptied still has to be applied,
+        // or its card keeps the count it had at the last launch.
+        var rostersByEvent: [UUID: [ParticipantRecord]] = [:]
+        for event in feed.events { rostersByEvent[event.id] = [] }
+        for row in feed.participants { rostersByEvent[row.eventId, default: []].append(row.participant) }
+        for (eventId, parts) in rostersByEvent { applyParticipants(parts, to: eventId) }
+
+        for event in feed.events { memberResponseRecordsByEvent[event.id] = nil }
+        var responsesByEvent: [UUID: [EventMemberResponseRecord]] = [:]
+        for row in feed.responses { responsesByEvent[row.eventId, default: []].append(row.response) }
+        for (eventId, responses) in responsesByEvent {
+            memberResponseRecordsByEvent[eventId] = responses
+        }
+    }
+
+    /// Lazily loads one bounded history page for each workspace currently on
+    /// Home. This path intentionally maps event metadata only: compact history
+    /// cards do not need rosters, invitation responses, plans, or payment
+    /// catalogs, and those can be fetched by the detail screen if it is opened.
+    ///
+    /// A failed workspace remains eligible for a later retry. Successful
+    /// workspaces (including an empty result) are cached independently, and a
+    /// failure here never clears or reports through the upcoming feed.
+    func loadPastOccurrencesIfNeeded(
+        force: Bool = false,
+        limitPerTeam: Int = 60
+    ) async {
+        if isLoadingPastOccurrences || isLoadingMorePastOccurrences {
+            // A team may join while another SwiftUI task owns the request.
+            // Wait in this newer caller, then recompute targets here. Running
+            // the retry from the old task is unsafe because `.task(id:)` has
+            // already cancelled that task when the team-id key changed.
+            while isLoadingPastOccurrences || isLoadingMorePastOccurrences {
+                guard !Task.isCancelled else { return }
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            guard !Task.isCancelled else { return }
+            await loadPastOccurrencesIfNeeded(
+                force: force,
+                limitPerTeam: limitPerTeam
+            )
+            return
+        }
+
+        let activeTeamIDs = teams.map(\.id)
+        let targets = activeTeamIDs.filter {
+            force || !loadedPastTeamIDs.contains($0)
+        }
+        guard !targets.isEmpty else { return }
+
+        let pageLimit = min(max(limitPerTeam, 1), 120)
+        isLoadingPastOccurrences = true
+        pastOccurrencesError = nil
+        pastLoadMoreError = nil
+
+        // All first-page requests in this pass observe the same instant. Each
+        // workspace commits that boundary only with a successful page, so a
+        // failed forced refresh keeps its old cache and compatible cursor.
+        let refreshBoundary = Date.now
+        var failedCount = 0
+
+        for teamID in targets {
+            // Preview and the opt-in local fixture have no matching backend
+            // workspaces. Preserve any seeded history and count an empty cache
+            // as a successful load instead of attempting an RPC that must fail.
+            if isPreview || isDebugMemberFixtureTeam(teamID) {
+                var byID: [UUID: FeedOccurrence] = [:]
+                for occurrence in pastOccurrencesByTeam[teamID] ?? [] {
+                    byID[occurrence.id] = occurrence
+                }
+                for occurrence in occurrencesByTeam[teamID] ?? []
+                    where occurrence.isPast(relativeTo: refreshBoundary) {
+                    byID[occurrence.id] = occurrence
+                }
+                pastOccurrencesByTeam[teamID] = byID.values.sorted {
+                    $0.startAt > $1.startAt
+                }
+                pastBoundaryByTeam[teamID] = refreshBoundary
+                pastOffsetByTeam[teamID] = byID.count
+                exhaustedPastTeamIDs.insert(teamID)
+                loadedPastTeamIDs.insert(teamID)
+                continue
+            }
+
+            do {
+                let records = try await EventService.shared.getWorkspacePastEvents(
+                    workspaceId: teamID,
+                    before: refreshBoundary,
+                    limit: pageLimit,
+                    offset: 0
+                )
+                for record in records { eventRecordsByID[record.id] = record }
+
+                var byID: [UUID: FeedOccurrence] = [:]
+                for occurrence in records.map(mapOccurrence) {
+                    byID[occurrence.id] = occurrence
+                }
+                pastOccurrencesByTeam[teamID] = byID.values.sorted {
+                    $0.startAt > $1.startAt
+                }
+                pastBoundaryByTeam[teamID] = refreshBoundary
+                pastOffsetByTeam[teamID] = records.count
+                if records.count < pageLimit {
+                    exhaustedPastTeamIDs.insert(teamID)
+                } else {
+                    exhaustedPastTeamIDs.remove(teamID)
+                }
+                loadedPastTeamIDs.insert(teamID)
+            } catch {
+                // Keep a previously cached page on forced refresh and leave a
+                // first-time failure unloaded so the next presentation retries.
+                failedCount += 1
+            }
+        }
+
+        if failedCount > 0 {
+            pastOccurrencesError = failedCount == targets.count
+                ? "تعذر تحميل التمارين الماضية الآن. حاول مرة أخرى."
+                : "تعذر تحديث بعض التمارين الماضية."
+        }
+
+        isLoadingPastOccurrences = false
+    }
+
+    /// Appends the next archive page for every active workspace that still has
+    /// history. Cursors advance by raw server rows (not the deduplicated UI
+    /// count), and every request retains the boundary of its successful first
+    /// page so newly-finished exercises cannot shift later offsets.
+    func loadMorePastOccurrences(limitPerTeam: Int = 60) async {
+        if isLoadingPastOccurrences || isLoadingMorePastOccurrences {
+            while isLoadingPastOccurrences || isLoadingMorePastOccurrences {
+                guard !Task.isCancelled else { return }
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            guard !Task.isCancelled else { return }
+            await loadMorePastOccurrences(limitPerTeam: limitPerTeam)
+            return
+        }
+
+        let targets = teams.map(\.id).filter {
+            loadedPastTeamIDs.contains($0)
+                && !exhaustedPastTeamIDs.contains($0)
+        }
+        guard !targets.isEmpty else { return }
+
+        let pageLimit = min(max(limitPerTeam, 1), 120)
+        isLoadingMorePastOccurrences = true
+        pastLoadMoreError = nil
+
+        var failedCount = 0
+        for teamID in targets {
+            guard let boundary = pastBoundaryByTeam[teamID] else {
+                // Do not mix an old offset with a newly-invented boundary.
+                // A forced/initial first-page load will repair this state.
+                failedCount += 1
+                continue
+            }
+
+            let offset = pastOffsetByTeam[teamID] ?? 0
+            do {
+                let records = try await EventService.shared.getWorkspacePastEvents(
+                    workspaceId: teamID,
+                    before: boundary,
+                    limit: pageLimit,
+                    offset: offset
+                )
+                for record in records { eventRecordsByID[record.id] = record }
+
+                var byID: [UUID: FeedOccurrence] = [:]
+                for occurrence in pastOccurrencesByTeam[teamID] ?? [] {
+                    byID[occurrence.id] = occurrence
+                }
+                for occurrence in records.map(mapOccurrence) {
+                    byID[occurrence.id] = occurrence
+                }
+                pastOccurrencesByTeam[teamID] = byID.values.sorted {
+                    $0.startAt > $1.startAt
+                }
+                pastOffsetByTeam[teamID] = offset + records.count
+                if records.count < pageLimit {
+                    exhaustedPastTeamIDs.insert(teamID)
+                }
+            } catch {
+                // Cache, boundary, cursor, and exhausted state remain untouched
+                // so the exact page can be retried without losing stale data.
+                failedCount += 1
+            }
+        }
+
+        if failedCount > 0 {
+            pastLoadMoreError = failedCount == targets.count
+                ? "تعذر تحميل المزيد من التمارين الماضية الآن. حاول مرة أخرى."
+                : "تعذر تحميل المزيد لبعض التمارين الماضية."
+        }
+
+
+        isLoadingMorePastOccurrences = false
+    }
+
+    /// Loads the selected workspace's data. Kept for the callers that mutate
+    /// the current group and want only it refreshed.
     func loadSelectedTeamData() async {
-        guard !isPreview, !isDebugMemberFixtureTeam(selectedTeamID) else { return }
-        let id = selectedTeamID
+        await loadTeamData(selectedTeamID)
+    }
+
+    /// Loads one workspace's events, members, synthesized plans, and
+    /// participant rosters for the events shown on Home.
+    func loadTeamData(_ id: UUID) async {
+        guard !isPreview, !isDebugMemberFixtureTeam(id) else { return }
         let isOwner = currentUserID.map { ownerByTeam[id] == $0 } ?? false
 
         if isOwner {
-            paymentMethodsByTeam[id] = (try? await ManualPaymentService.shared.getMyWorkspaceMethods(workspaceId: id)) ?? []
+            if let methods = try? await ManualPaymentService.shared.getMyWorkspaceMethods(workspaceId: id) {
+                paymentMethodsByTeam[id] = methods
+            }
         } else {
             // Destination details are intentionally member-gated through the
             // event RPC; members never receive the organizer's whole catalog.
             paymentMethodsByTeam[id] = []
         }
 
-        let events = (try? await EventService.shared.getWorkspaceEvents(workspaceId: id)) ?? []
+        // A refresh is best-effort. Keep the last authoritative feed if this
+        // read fails; replacing it with an empty array makes a saved exercise
+        // and all its plans appear deleted during a transient outage.
+        guard let events = try? await EventService.shared.getWorkspaceEvents(workspaceId: id) else {
+            return
+        }
         for event in events { eventRecordsByID[event.id] = event }
         occurrencesByTeam[id] = events.map(mapOccurrence)
         for event in events {
@@ -681,14 +1214,15 @@ final class HomeStore {
                 memberResponseByEvent[event.id] = nil
             }
         }
-        plansByTeam[id] = events.first.map { [synthesizePlan(from: $0)] } ?? []
+        plansByTeam[id] = events.map(synthesizePlan)
 
         if let detail = try? await WorkspaceService.shared.getWorkspace(id: id) {
             membersByTeam[id] = detail.members.map(mapMember)
         }
 
-        // Rosters for the visible cards (Home shows counts on each poster).
-        let visible = Array(events.prefix(6))
+        // Home is an unbounded horizontal shelf, so every card needs an
+        // authoritative roster and participation state before it is shown.
+        let visible = events
         await withTaskGroup(of: (UUID, [ParticipantRecord]?).self) { group in
             for ev in visible {
                 group.addTask {
@@ -750,9 +1284,19 @@ final class HomeStore {
             let event = try await EventService.shared.getEventById(eventId)
             eventRecordsByID[event.id] = event
             guard let workspaceID = event.workspaceId else { return }
-            let mapped = mapOccurrence(event)
+            var mapped = mapOccurrence(event)
             if let index = occurrencesByTeam[workspaceID]?.firstIndex(where: { $0.id == eventId }) {
+                // get_event_by_id returns the event row, while the workspace
+                // feed adds this caller-specific debt flag. An event-level
+                // refresh must not erase the flag and make the only payment
+                // door disappear behind an open detail screen.
+                mapped.requiresPaymentAction = occurrencesByTeam[workspaceID]?[index]
+                    .requiresPaymentAction ?? false
                 occurrencesByTeam[workspaceID]?[index] = mapped
+            } else if let index = pastOccurrencesByTeam[workspaceID]?.firstIndex(where: { $0.id == eventId }) {
+                mapped.requiresPaymentAction = pastOccurrencesByTeam[workspaceID]?[index]
+                    .requiresPaymentAction ?? false
+                pastOccurrencesByTeam[workspaceID]?[index] = mapped
             }
         } catch {
             // Keep the last known event. A transient event refresh must not
@@ -837,6 +1381,11 @@ final class HomeStore {
         let isOwner = ownerByTeam[id] == currentUserID
         teams.removeAll { $0.id == id }
         occurrencesByTeam[id] = nil
+        pastOccurrencesByTeam[id] = nil
+        loadedPastTeamIDs.remove(id)
+        pastBoundaryByTeam[id] = nil
+        pastOffsetByTeam[id] = nil
+        exhaustedPastTeamIDs.remove(id)
         plansByTeam[id] = nil
         membersByTeam[id] = nil
         paymentMethodsByTeam[id] = nil
@@ -916,7 +1465,7 @@ final class HomeStore {
         do {
             let ws = try await WorkspaceService.shared.createWorkspace(
                 name: name,
-                symbol: draft.teamSymbol,
+                sport: Sport.named(draft.teamSymbol)?.key ?? "soccer",
                 color: draft.teamColor.rawValue
             )
             createdWorkspace = ws
@@ -1013,6 +1562,118 @@ final class HomeStore {
         await loadSelectedTeamData()
     }
 
+    /// Updates the exercise identity and the concrete event/template in one
+    /// backend transaction, then replaces the local workspace snapshot before
+    /// refreshing every event-derived surface for that exact team.
+    func updateExerciseTemplate(
+        plan: PlanDraft,
+        symbol: String,
+        teamID: UUID,
+        eventID: UUID,
+        templateID: UUID?
+    ) async throws {
+        guard !isPreview else { return }
+        #if DEBUG
+        // A fixture exercise has no rows to update, but it still has to answer
+        // the edit — the whole point of the fixture is that a feature can be
+        // tried without a backend. Returning early here meant saving changed
+        // nothing at all: not the name, and not the sport, which is what picks
+        // the photograph the card wears.
+        if isDebugMemberFixtureEvent(eventID) {
+            applyFixtureExerciseEdit(plan: plan, symbol: symbol, teamID: teamID, eventID: eventID)
+            return
+        }
+        #endif
+
+        let scope: EventEditScope = templateID == nil ? .occurrenceOnly : .seriesTemplate
+        let cal = Calendar(identifier: .gregorian)
+        let start: Date
+        if scope == .occurrenceOnly,
+           templateID != nil,
+           let originalStart = eventRecordsByID[eventID]?.startDate {
+            start = combine(day: originalStart, time: plan.startTime, cal: cal)
+        } else if plan.scheduleKind == .oneOff {
+            start = combine(day: plan.oneOffDate, time: plan.startTime, cal: cal)
+        } else if let weekday = plan.weekdays.sorted().first {
+            let anchor = eventRecordsByID[eventID]
+                .map { cal.startOfDay(for: $0.startDate) }
+                ?? Date()
+            start = nextWeekday(weekday, at: plan.startTime, onOrAfter: anchor, cal: cal)
+        } else {
+            start = combine(day: Date(), time: plan.startTime, cal: cal)
+        }
+
+        var end = combine(day: start, time: plan.endTime, cal: cal)
+        if end <= start {
+            end = cal.date(byAdding: .hour, value: 1, to: start) ?? start
+        }
+
+        do {
+            let paymentMethodSelection = try templateEditorPaymentSelection(
+                for: plan,
+                eventID: eventID
+            )
+            let result = try await EventService.shared.updateExerciseTemplate(
+                workspaceId: teamID,
+                eventId: eventID,
+                scope: scope.rpcValue,
+                workspaceName: plan.name,
+                symbol: symbol,
+                name: plan.name.trimmingCharacters(in: .whitespacesAndNewlines),
+                location: plan.locationName,
+                startDate: start,
+                endDate: end,
+                maxParticipants: plan.capacity,
+                totalPrice: Int(plan.totalVenueCost.rounded()),
+                latitude: plan.latitude,
+                longitude: plan.longitude,
+                paymentMethods: paymentMethodSelection.drafts,
+                fallbackPaymentMethodIds: paymentMethodSelection.existingIDs
+            )
+
+            let priorMemberCount = teams.first(where: { $0.id == teamID })?.memberCount
+            let updatedTeam = mapTeam(
+                result.workspace,
+                fallbackMemberCount: priorMemberCount
+            )
+            if let index = teams.firstIndex(where: { $0.id == teamID }) {
+                teams[index] = updatedTeam
+            } else {
+                teams.append(updatedTeam)
+            }
+            ownerByTeam[teamID] = result.workspace.ownerId
+
+            var cachedMethods = paymentMethodsByTeam[teamID] ?? []
+            for method in result.paymentMethods {
+                cachedMethods.removeAll { $0.id == method.id }
+                cachedMethods.append(method)
+            }
+            paymentMethodsByTeam[teamID] = cachedMethods
+
+            // Apply the authoritative rows before the best-effort refresh. A
+            // transient read failure therefore cannot make a successful save
+            // look reverted until the next app launch.
+            eventRecordsByID[eventID] = result.event
+            let occurrence = mapOccurrence(result.event)
+            if let index = occurrencesByTeam[teamID]?.firstIndex(where: { $0.id == eventID }) {
+                occurrencesByTeam[teamID]?[index] = occurrence
+            } else {
+                occurrencesByTeam[teamID, default: []].append(occurrence)
+            }
+            let refreshedPlan = synthesizePlan(from: result.event)
+            if let index = plansByTeam[teamID]?.firstIndex(where: { $0.sourceEventID == eventID }) {
+                plansByTeam[teamID]?[index] = refreshedPlan
+            } else {
+                plansByTeam[teamID, default: []].append(refreshedPlan)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+            throw error
+        }
+
+        await loadTeamData(teamID)
+    }
+
     /// Maps each wizard plan to real event(s). Backend recurrence is weekly-only,
     /// so a recurring plan with multiple weekdays becomes one weekly series per
     /// day; a one-off plan becomes a single non-recurring event.
@@ -1102,17 +1763,8 @@ final class HomeStore {
     /// attached to this event. Provider uniqueness keeps the picker and server
     /// contract deterministic.
     private func persistPaymentMethods(for plan: PlanDraft, workspaceId: UUID) async throws -> [UUID] {
-        guard plan.totalVenueCost > 0 else { return [] }
-        let drafts = plan.paymentMethods
-        guard !drafts.isEmpty,
-              drafts.allSatisfy(\.isValid),
-              Set(drafts.map(\.provider)).count == drafts.count else {
-            throw NSError(
-                domain: "HomeStore.Payment",
-                code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "أضف وسيلة دفع صحيحة واحدة على الأقل قبل الحفظ."]
-            )
-        }
+        let drafts = try validatedPaymentMethodDrafts(for: plan)
+        guard !drafts.isEmpty else { return [] }
 
         var methods = paymentMethodsByTeam[workspaceId] ?? []
         var ids: [UUID] = []
@@ -1127,6 +1779,48 @@ final class HomeStore {
         }
         paymentMethodsByTeam[workspaceId] = methods
         return ids
+    }
+
+    /// The template editor sends destination drafts to the same RPC as the
+    /// event/workspace update. If the owner's method catalog failed to load,
+    /// retain the event's already-selected immutable IDs instead of clearing
+    /// them or forcing a duplicate destination to be typed.
+    private func templateEditorPaymentSelection(
+        for plan: PlanDraft,
+        eventID: UUID
+    ) throws -> (drafts: [PaymentMethodDraft], existingIDs: [UUID]) {
+        guard plan.totalVenueCost > 0 else { return ([], []) }
+        if !plan.paymentMethods.isEmpty {
+            return (try validatedPaymentMethodDrafts(for: plan), [])
+        }
+
+        let event = eventRecordsByID[eventID]
+        let existingIDs = event?.paymentMethodIds.isEmpty == false
+            ? event?.paymentMethodIds ?? []
+            : event?.paymentMethodId.map { [$0] } ?? []
+        guard !existingIDs.isEmpty else {
+            throw invalidPaymentMethodSelectionError()
+        }
+        return ([], existingIDs)
+    }
+
+    private func validatedPaymentMethodDrafts(for plan: PlanDraft) throws -> [PaymentMethodDraft] {
+        guard plan.totalVenueCost > 0 else { return [] }
+        let drafts = plan.paymentMethods
+        guard !drafts.isEmpty,
+              drafts.allSatisfy(\.isValid),
+              Set(drafts.map(\.provider)).count == drafts.count else {
+            throw invalidPaymentMethodSelectionError()
+        }
+        return drafts
+    }
+
+    private func invalidPaymentMethodSelectionError() -> NSError {
+        NSError(
+            domain: "HomeStore.Payment",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "أضف وسيلة دفع صحيحة واحدة على الأقل قبل الحفظ."]
+        )
     }
 
     /// Next date matching `weekday` (1=Sun…7=Sat) at `time`, on or after `base`.
@@ -1504,6 +2198,109 @@ final class HomeStore {
         }
     }
 
+    // MARK: Player ratings
+
+    /// True when this player can receive a rating from the current user:
+    /// someone with an account who is not me. Reading one's own anonymous
+    /// average is handled separately by `playerRating(for:)`.
+    func canRate(_ member: FeedMember) -> Bool {
+        guard let userId = member.userId else { return false }
+        return userId != currentUserID
+    }
+
+    func playerRating(for member: FeedMember) async throws -> PlayerRatingSummary {
+        guard let userId = member.userId else {
+            throw NSError(
+                domain: "HomeStore.Rating",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "هذا اللاعب بدون حساب."]
+            )
+        }
+
+        #if DEBUG
+        if HomeDebugMemberFixture.isFixturePlayer(userId) {
+            return debugRatingSummary(for: userId, position: member.position)
+        }
+        #endif
+
+        return try await RatingService.shared.getPlayerRating(
+            workspaceId: selectedTeamID,
+            userId: userId
+        )
+    }
+
+    func submitPlayerRating(
+        _ scores: PlayerRatingScores,
+        for member: FeedMember
+    ) async throws -> SubmitRatingResult {
+        guard let userId = member.userId else { return .notAMember }
+
+        #if DEBUG
+        if HomeDebugMemberFixture.isFixturePlayer(userId) {
+            HomeDebugMemberFixture.submittedRatings[userId] = scores
+            return .saved(debugRatingSummary(for: userId, position: member.position))
+        }
+        #endif
+
+        return try await RatingService.shared.submitPlayerRating(
+            workspaceId: selectedTeamID,
+            userId: userId,
+            scores: scores
+        )
+    }
+
+    #if DEBUG
+    /// The fixture's rating backend: what I submitted, held in memory for the
+    /// life of the session, blended with the seeded ratings so the average is
+    /// a crowd's. Same shape and same arithmetic as the RPC, so the sheet
+    /// cannot tell the two apart.
+    private func debugRatingSummary(for playerID: UUID, position: String) -> PlayerRatingSummary {
+        let resolved = PlayerPosition.resolved(from: position)
+        let seeded = HomeDebugMemberFixture.seededRatings(for: playerID)
+        let mine = HomeDebugMemberFixture.submittedRatings[playerID]
+
+        let all = seeded + (mine.map { [$0] } ?? [])
+        guard !all.isEmpty else {
+            return PlayerRatingSummary(
+                position: position,
+                hasRated: mine != nil,
+                ratingsCount: 0,
+                mine: mine,
+                average: nil,
+                averageOverall: nil,
+                myOverall: mine?.overall(for: resolved)
+            )
+        }
+
+        var averaged = PlayerRatingScores.neutral
+        for attribute in PlayerAttribute.allCases {
+            let total = all.reduce(0) { $0 + $1[attribute] }
+            averaged[attribute] = roundedMean(total: total, count: all.count)
+        }
+
+        let overallTotal = all.reduce(0) { $0 + $1.overall(for: resolved) }
+        let averageOverall = roundedMean(total: overallTotal, count: all.count)
+
+        return PlayerRatingSummary(
+            position: position,
+            hasRated: mine != nil,
+            ratingsCount: all.count,
+            mine: mine,
+            average: averaged,
+            averageOverall: averageOverall,
+            myOverall: mine?.overall(for: resolved)
+        )
+    }
+
+    /// PostgreSQL `round()` and the product rule both round a positive .5 up.
+    /// Keeping the fixture in integer arithmetic makes it match the RPC exactly
+    /// (Swift's default floating-point `.rounded()` is easy to change subtly).
+    private func roundedMean(total: Int, count: Int) -> Int {
+        guard count > 0 else { return 0 }
+        return ((2 * total) + count) / (2 * count)
+    }
+    #endif
+
     func paymentDestination(for occurrence: FeedOccurrence) async throws -> PaymentDestination {
         #if DEBUG
         if isDebugMemberFixtureEvent(occurrence.id) {
@@ -1604,14 +2401,17 @@ final class HomeStore {
     ) async -> RegistrationOutcome {
         guard !isPreview else {
             setMyStatus(.paymentPending, on: occurrence)
+            resolvePaymentAction(for: occurrence.id)
             return .success
         }
         #if DEBUG
         if isDebugMemberFixtureEvent(occurrence.id) {
             setMyStatus(.paymentPending, on: occurrence)
+            resolvePaymentAction(for: occurrence.id)
             return .success
         }
         #endif
+        let workspaceID = teamID(for: occurrence)
         do {
             let status = try await EventService.shared.declareEventPayment(
                 eventId: occurrence.id,
@@ -1620,6 +2420,14 @@ final class HomeStore {
             await reloadRoster(occurrence.id)
             switch status {
             case "declared", "nothing_due", "free_event":
+                // The transfer declaration is the member-facing completion
+                // point. Move the old occurrence off the current shelf now,
+                // while the success step is still covering Home, then fetch the
+                // newly unlocked occurrence without delaying that success UI.
+                resolvePaymentAction(for: occurrence.id)
+                if let workspaceID {
+                    Task { await loadTeamData(workspaceID) }
+                }
                 return .success
             case "payment_method_required", "event_terms_changed":
                 return .failure("تغيّرت وسائل الدفع لهذا الموعد. أغلق النافذة وافتحها مجددًا.")
@@ -1643,6 +2451,25 @@ final class HomeStore {
             roster[index].status = status
         }
         rosterCache[occurrence.id] = roster
+    }
+
+    /// Clears the personal payment gate in both caches. History may already be
+    /// loaded while the same row is also present in the live payment exception;
+    /// updating only one copy would either leave it stuck on Home or keep it
+    /// hidden from the archive until a manual refresh.
+    private func resolvePaymentAction(for eventID: UUID) {
+        for teamID in occurrencesByTeam.keys {
+            guard let index = occurrencesByTeam[teamID]?.firstIndex(where: { $0.id == eventID }) else {
+                continue
+            }
+            occurrencesByTeam[teamID]?[index].requiresPaymentAction = false
+        }
+        for teamID in pastOccurrencesByTeam.keys {
+            guard let index = pastOccurrencesByTeam[teamID]?.firstIndex(where: { $0.id == eventID }) else {
+                continue
+            }
+            pastOccurrencesByTeam[teamID]?[index].requiresPaymentAction = false
+        }
     }
 
     /// Adds only new guest seats for a member who is already confirmed. This
@@ -1833,6 +2660,57 @@ final class HomeStore {
         }
     }
 
+
+    #if DEBUG
+    /// The same edit, applied to the copy the fixture holds in memory.
+    private func applyFixtureExerciseEdit(
+        plan: PlanDraft,
+        symbol: String,
+        teamID: UUID,
+        eventID: UUID
+    ) {
+        let name = plan.name.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let index = teams.firstIndex(where: { $0.id == teamID }) {
+            let team = teams[index]
+            // `FeedTeam` is immutable in the fields that matter here, so the
+            // group is rebuilt rather than edited.
+            teams[index] = FeedTeam(
+                id: team.id,
+                name: name.isEmpty ? team.name : name,
+                symbol: symbol,
+                color: team.color,
+                avatarData: team.avatarData,
+                memberCount: team.memberCount,
+                inviteCode: team.inviteCode,
+                inviteURL: team.inviteURL
+            )
+        }
+
+        let calendar = Calendar(identifier: .gregorian)
+        updateOccurrence(eventID) { occurrence in
+            let start = combine(day: occurrence.startAt, time: plan.startTime, cal: calendar)
+            occurrence = FeedOccurrence(
+                id: occurrence.id,
+                title: name.isEmpty ? occurrence.title : name,
+                startAt: start,
+                endAt: combine(day: start, time: plan.endTime, cal: calendar),
+                locationName: plan.locationName,
+                capacity: plan.capacity,
+                price: plan.totalVenueCost,
+                isCancelled: occurrence.isCancelled,
+                artIndex: occurrence.artIndex,
+                latitude: plan.latitude,
+                longitude: plan.longitude,
+                isRecurring: occurrence.isRecurring,
+                templateId: occurrence.templateId,
+                paymentMethodIds: occurrence.paymentMethodIds,
+                publishedAt: occurrence.publishedAt
+            )
+        }
+    }
+    #endif
+
     private func updateOccurrence(_ eventID: UUID, mutate: (inout FeedOccurrence) -> Void) {
         for teamID in occurrencesByTeam.keys {
             guard let index = occurrencesByTeam[teamID]?.firstIndex(where: { $0.id == eventID }) else { continue }
@@ -1892,7 +2770,10 @@ final class HomeStore {
         guard workspaceRecords.contains(where: { $0.id == workspaceID }) else {
             return nil
         }
-        teams = workspaceRecords.map(mapTeam)
+        let priorCounts = Dictionary(
+            uniqueKeysWithValues: teams.map { ($0.id, $0.memberCount) }
+        )
+        teams = workspaceRecords.map { mapTeam($0, fallbackMemberCount: priorCounts[$0.id]) }
         ownerByTeam = Dictionary(uniqueKeysWithValues: workspaceRecords.map { ($0.id, $0.ownerId) })
         selectedTeamID = workspaceID
         onSelectWorkspace?(workspaceID)
@@ -1954,11 +2835,16 @@ final class HomeStore {
     }
 
     // MARK: Mappers
-    private func mapTeam(_ ws: WorkspaceRecord) -> FeedTeam {
+    private func mapTeam(
+        _ ws: WorkspaceRecord,
+        fallbackMemberCount: Int? = nil
+    ) -> FeedTeam {
         FeedTeam(id: ws.id, name: ws.name, symbol: ws.symbol ?? "figure.soccer",
+                 sport: ws.sport ?? Sport.named(ws.symbol ?? "")?.key ?? "soccer",
                  color: TeamColor(rawValue: ws.color ?? "") ?? TeamColor.allCases[0],
                  avatarData: nil,
-                 memberCount: ws.memberCount ?? 0, inviteCode: ws.inviteCode ?? "",
+                 memberCount: ws.memberCount ?? fallbackMemberCount ?? 0,
+                 inviteCode: ws.inviteCode ?? "",
                  inviteURL: ws.inviteURL)
     }
 
@@ -1973,6 +2859,7 @@ final class HomeStore {
             ? ev.paymentMethodId.map { [$0] } ?? []
             : ev.paymentMethodIds
         return FeedOccurrence(id: ev.id, title: ev.name, startAt: ev.startDate,
+                              endAt: ev.endDate,
                               locationName: ev.location, capacity: ev.maxParticipants ?? 0,
                               price: ev.pricePerPerson ?? Double(ev.totalPrice ?? 0),
                               isCancelled: ev.cancelledAt != nil, artIndex: Self.stableIndex(ev.id),
@@ -1985,6 +2872,7 @@ final class HomeStore {
                               cancellationReasonText: ev.cancellationReasonText,
                               paymentReminderSentAt: ev.paymentReminderSentAt,
                               memberResponse: ev.myResponseStatus.flatMap(FeedMemberResponse.init(rawValue:)),
+                              requiresPaymentAction: ev.requiresPaymentAction,
                               capacityPolicy: ev.capacityPolicy ?? .waitlist)
     }
 
