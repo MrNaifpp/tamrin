@@ -143,6 +143,69 @@ begin
   end if;
 end $$;
 
+-- ============================================================
+-- Section 4: a finished exercise the member still owes stays in
+-- the feed, flagged. This is the whole reason the shelf can offer
+-- «دفع القطة»: the archive is read only, and the registration
+-- guard refuses the next occurrence until the debt is declared, so
+-- dropping the row here strands the member with no way to pay.
+-- ============================================================
+do $$
+declare
+  w_id uuid;
+  e_id uuid;
+  feed json;
+  row_json json;
+begin
+  perform pg_temp.set_auth('00000000-0000-0000-0000-000000000001');
+  w_id := (public.create_workspace('نادي الدين', 'soccer'::public.sport)->>'id')::uuid;
+  insert into public.workspace_members (workspace_id, user_id)
+  values (w_id, '00000000-0000-0000-0000-000000000002');
+
+  -- Seated while it was still ahead, because joining an exercise that has
+  -- already ended is refused, then moved into the past the way time does it.
+  insert into public.events (workspace_id, creator_id, name, start_date, end_date,
+                             total_price, max_participants, published_at)
+  values (w_id, '00000000-0000-0000-0000-000000000001', 'تمرين فات',
+          now() + interval '1 hour', now() + interval '3 hours', 100, 10, now())
+  returning id into e_id;
+
+  insert into public.event_participants (event_id, user_id, payment_status)
+  values (e_id, '00000000-0000-0000-0000-000000000002', 'pending');
+
+  update public.events
+  set start_date = now() - interval '1 day',
+      end_date = now() - interval '22 hours'
+  where id = e_id;
+
+  perform pg_temp.set_auth('00000000-0000-0000-0000-000000000002');
+  feed := public.get_my_feed();
+
+  select value into row_json
+  from json_array_elements(feed->'events') value
+  where value->>'id' = e_id::text;
+
+  if row_json is null then
+    raise exception 'FAIL: an unpaid finished exercise fell out of the feed, so nothing can offer to pay it';
+  end if;
+  if (row_json->>'requires_payment_action')::boolean is not true then
+    raise exception 'FAIL: the unpaid finished exercise is not flagged, so the shelf will not offer «دفع القطة»';
+  end if;
+
+  -- And once declared, it stops being held back.
+  update public.event_participants
+  set payment_declared_at = now()
+  where event_id = e_id and user_id = '00000000-0000-0000-0000-000000000002';
+
+  feed := public.get_my_feed();
+  if exists (
+    select 1 from json_array_elements(feed->'events') value
+    where value->>'id' = e_id::text
+  ) then
+    raise exception 'FAIL: a declared finished exercise is still held on the shelf';
+  end if;
+end $$;
+
 select 'get_my_feed: all sections passed' as result;
 
 rollback;
