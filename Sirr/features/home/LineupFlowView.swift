@@ -334,7 +334,7 @@ struct LineupFlowView: View {
                     action: splitTeams
                 )
 
-                TamrinActionButton(title: "حفظ", action: saveLineup)
+                TamrinActionButton(title: "نشر", action: publishLineup)
             }
         }
     }
@@ -624,10 +624,11 @@ struct LineupFlowView: View {
         }
     }
 
-    /// «حفظ» is the moment the split becomes the group's. Every drag before it
-    /// was a draft only the organizer could see, which is the point: reading a
-    /// half finished lineup tells a player he is dropped when he is not.
-    private func saveLineup() {
+    /// «نشر» is the moment the split becomes the group's, and the button says
+    /// so. Every drag before it was a draft only the organizer could see, which
+    /// is the point: reading a half finished lineup tells a player he is
+    /// dropped when he is not.
+    private func publishLineup() {
         let plan = LineupPlan(teams: teams)
         LineupStore.save(plan, positions: positions, eventID: occurrence.id)
         Task { await LineupStore.publish(eventID: occurrence.id) }
