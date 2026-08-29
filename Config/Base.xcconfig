@@ -14,9 +14,10 @@
 // another build to 1.1 fails with "Invalid Pre-Release Train" — so the first
 // production-backed build is a new version, not a new build number.
 MARKETING_VERSION = 1.6
-// 1.6 (2) is already uploaded, so the next build is 3. Build numbers are what
-// App Store Connect rejects duplicates on, not the marketing version.
-CURRENT_PROJECT_VERSION = 3
+// Build numbers are what App Store Connect rejects duplicates on, not the
+// marketing version. 1.6 (2) was uploaded, then (3) was cut before the rating
+// call site was repaired, so the build carrying that fix is (4).
+CURRENT_PROJECT_VERSION = 4
 
 // Here rather than in the target so Staging.xcconfig can override it — a
 // staging build on the home screen has to be tellable from a real one.
