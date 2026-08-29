@@ -22,6 +22,7 @@ struct ExerciseDetailsOverlayPage: View {
     /// turns true the two sections below have nothing to show — and saying
     /// «تعذر تحميل» then is a lie: nothing has been attempted yet.
     @State private var hasLoadedGroupDetails = false
+    @State private var showsDeleteConfirm = false
 
     /// The editor refreshes HomeStore before it dismisses. Reading the event
     /// back by id keeps this still-present details page in sync instead of
@@ -151,6 +152,15 @@ struct ExerciseDetailsOverlayPage: View {
             await feed.loadGroupDetails(teamID)
             hasLoadedGroupDetails = true
         }
+        .alert("حذف «\(team?.name ?? "التمرين")»؟", isPresented: $showsDeleteConfirm) {
+            Button("حذف التمرين", role: .destructive) {
+                feed.deleteTeam(teamID)
+                onClose()
+            }
+            Button("تراجع", role: .cancel) {}
+        } message: {
+            Text("بيُحذف التمرين وكل مواعيده وأعضائه وطرق الدفع من عندك. تقدر تنشئ تمرينًا جديدًا أي وقت.")
+        }
         // Pull still does the full refresh, occurrences and rosters included.
         .refreshable { await feed.loadTeamData(teamID) }
         .sheet(item: $memberInDetails) { member in
@@ -191,22 +201,38 @@ struct ExerciseDetailsOverlayPage: View {
                 .foregroundStyle(.white)
 
             HStack {
-                if canEditTemplate {
-                    Button {
-                        Haptics.impact(.light)
-                        showsTemplateEditor = true
+                // Contextual actions live in an ellipsis menu, the same
+                // pattern the exercise's own page uses. Circular glass to match
+                // the close button opposite it rather than the capsule the lone
+                // edit button used to wear.
+                if isOwner {
+                    Menu {
+                        // A past occurrence is a receipt: there is no future
+                        // template left to change, so only the deletion stays.
+                        if canEditTemplate {
+                            Button("تعديل التمرين", systemImage: "pencil") {
+                                Haptics.impact(.light)
+                                showsTemplateEditor = true
+                            }
+                        }
+
+                        Button("حذف التمرين", systemImage: "trash", role: .destructive) {
+                            showsDeleteConfirm = true
+                        }
                     } label: {
-                        Text("تعديل")
-                            .font(TamrinFont.font(size: 15, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 17)
-                            .frame(height: TamrinControlMetrics.glassIconContent)
+                        Label("خيارات التمرين", systemImage: "ellipsis")
+                            .labelStyle(.iconOnly)
+                            .font(.system(size: 17, weight: .semibold))
+                            .frame(
+                                width: TamrinControlMetrics.glassIconContent,
+                                height: TamrinControlMetrics.glassIconContent
+                            )
                     }
                     .buttonStyle(.glass)
-                    .buttonBorderShape(.capsule)
+                    .buttonBorderShape(.circle)
                     .controlSize(.regular)
-                    .accessibilityLabel("تعديل قالب التمرين")
-                    .accessibilityHint("يفتح الاسم ونوع الرياضة وبقية تفاصيل القالب")
+                    .accessibilityLabel("خيارات التمرين")
+                    .accessibilityHint("تعديل التمرين أو حذفه")
                 }
 
                 Spacer(minLength: 0)
