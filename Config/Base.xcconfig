@@ -15,10 +15,10 @@
 // production-backed build is a new version, not a new build number.
 MARKETING_VERSION = 1.6
 // Build numbers are what App Store Connect rejects duplicates on, not the
-// marketing version. 1.6 (2) was uploaded; (3) predates the rating call-site
-// repair and (4) predates the details-page and lineup-permission fixes, so the
-// build worth testing is (5).
-CURRENT_PROJECT_VERSION = 5
+// marketing version. Every number below is spent: (2) was uploaded, (3)
+// predates the rating repair, (4) the details-page and lineup-permission
+// fixes, and (5) the exercise actions menu.
+CURRENT_PROJECT_VERSION = 6
 
 // Here rather than in the target so Staging.xcconfig can override it — a
 // staging build on the home screen has to be tellable from a real one.
