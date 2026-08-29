@@ -287,6 +287,47 @@ enum MemberReminderResult {
 /// A member invitation response returned by `get_event_member_responses`.
 /// The RPC only exposes the full list to the event organizer; regular members
 /// receive their own row server-side.
+/// A roster row as the feed returns it: everything `get_event_participants`
+/// gives, plus the exercise it belongs to. Composed rather than redeclared, so
+/// a column added to ParticipantRecord arrives here too.
+struct FeedParticipantRow: Decodable {
+    let eventId: UUID
+    let participant: ParticipantRecord
+
+    enum CodingKeys: String, CodingKey {
+        case eventId = "event_id"
+    }
+
+    init(from decoder: Decoder) throws {
+        eventId = try decoder.container(keyedBy: CodingKeys.self)
+            .decode(UUID.self, forKey: .eventId)
+        participant = try ParticipantRecord(from: decoder)
+    }
+}
+
+struct FeedResponseRow: Decodable {
+    let eventId: UUID
+    let response: EventMemberResponseRecord
+
+    enum CodingKeys: String, CodingKey {
+        case eventId = "event_id"
+    }
+
+    init(from decoder: Decoder) throws {
+        eventId = try decoder.container(keyedBy: CodingKeys.self)
+            .decode(UUID.self, forKey: .eventId)
+        response = try EventMemberResponseRecord(from: decoder)
+    }
+}
+
+/// Everything Home needs to paint its shelf, in one answer.
+struct MyFeedRecord: Decodable {
+    let workspaces: [WorkspaceRecord]
+    let events: [EventRecord]
+    let participants: [FeedParticipantRow]
+    let responses: [FeedResponseRow]
+}
+
 struct EventMemberResponseRecord: Codable, Identifiable {
     let userId: UUID
     let displayName: String
@@ -349,7 +390,9 @@ final class EventService {
 
     /// Decoder handling Postgres timestamp formats (same strategy the RPC
     /// decoders in this file use inline).
-    private static func makePostgresDecoder() -> JSONDecoder {
+    /// Shared with LineupService, which decodes the same date shapes. One
+    /// decoder rather than two that drift.
+    static func makePostgresDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
@@ -1269,5 +1312,18 @@ final class EventService {
             .rpc("end_recurrence", params: params)
             .execute()
         eventLogger.info("API endRecurrence succeeded (templateId: \(templateId))")
+    }
+}
+
+extension EventService {
+    /// Home in one request. The shelf spans every workspace, so asking each one
+    /// in turn cost a round trip per group plus a roster per card, in sequence.
+    func getMyFeed() async throws -> MyFeedRecord {
+        let response = try await client.rpc("get_my_feed").execute()
+        let feed = try Self.makePostgresDecoder().decode(MyFeedRecord.self, from: response.data)
+        eventLogger.info(
+            "API getMyFeed succeeded (workspaces: \(feed.workspaces.count), events: \(feed.events.count))"
+        )
+        return feed
     }
 }

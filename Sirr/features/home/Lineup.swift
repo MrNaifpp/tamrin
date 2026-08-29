@@ -432,6 +432,13 @@ struct LineupPositions: Codable, Equatable {
     /// Row id → the organizer's explicit position for this occurrence.
     private var byPlayer: [String: String] = [:]
 
+    init(byPlayer: [String: String] = [:]) {
+        self.byPlayer = byPlayer
+    }
+
+    /// What the server stores. Only LineupStore should need this.
+    var rawValues: [String: String] { byPlayer }
+
     var isEmpty: Bool { byPlayer.isEmpty }
 
     func has(_ playerID: UUID) -> Bool { byPlayer[playerID.uuidString] != nil }
@@ -470,29 +477,6 @@ struct LineupPositions: Codable, Equatable {
     }
 }
 
-/// Same shape, and the same reasoning, as `LineupStore`.
-enum LineupPositionStore {
-    private static func key(for eventID: UUID) -> String {
-        "lineup.positions.\(eventID.uuidString)"
-    }
-
-    static func load(eventID: UUID) -> LineupPositions {
-        guard
-            let data = UserDefaults.standard.data(forKey: key(for: eventID)),
-            var stored = try? JSONDecoder().decode(LineupPositions.self, from: data)
-        else { return LineupPositions() }
-        if stored.normalizeLegacyValues() {
-            save(stored, eventID: eventID)
-        }
-        return stored
-    }
-
-    static func save(_ positions: LineupPositions, eventID: UUID) {
-        guard let data = try? JSONEncoder().encode(positions) else { return }
-        UserDefaults.standard.set(data, forKey: key(for: eventID))
-    }
-}
-
 // MARK: - Saved plan
 
 /// What survives the screen closing: who was on which side, and when it was
@@ -507,6 +491,12 @@ struct LineupPlan: Codable, Equatable {
     init(teams: LineupTeams, updatedAt: Date = .now) {
         first = teams.first.map(\.id)
         second = teams.second.map(\.id)
+        self.updatedAt = updatedAt
+    }
+
+    init(first: [UUID], second: [UUID], updatedAt: Date = .now) {
+        self.first = first
+        self.second = second
         self.updatedAt = updatedAt
     }
 
@@ -525,30 +515,101 @@ struct LineupPlan: Codable, Equatable {
     }
 }
 
-/// Where a saved split lives.
+/// Where a saved split lives: the group's database, through LineupService.
 ///
-/// On the device, for now: the split is the organizer's working copy of an
-/// exercise he is about to run, and it needs no table to be useful. Sharing it
-/// with the group is a separate step — it wants a Supabase table and an RPC of
-/// its own — and nothing here assumes local storage stays the only backing:
-/// every caller goes through these three functions.
+/// A read-through cache sits in front of it for one reason. `lineupCandidates`
+/// is synchronous and is called while the pitch is being drawn, which is no
+/// place to await a request; it reads `positions(for:)` off the cache instead.
+/// Every screen that shows a lineup calls `load` before drawing one, so by the
+/// time a candidate list is built the cache is warm. A cold read returns no
+/// overrides, which is exactly what an exercise with no saved split looks like.
+///
+/// Writes go to the cache first and to the server behind them. The organizer
+/// dragging a player sees the pitch move at once, and a failed write leaves the
+/// screen right and the row stale rather than the other way round.
+///
+/// The debug fixture exercises exist on no server at all. They work here
+/// because the cache answers for them and the write that follows simply fails.
+@MainActor
 enum LineupStore {
-    private static func key(for eventID: UUID) -> String {
-        "lineup.plan.\(eventID.uuidString)"
+    private static var plans: [UUID: LineupPlan] = [:]
+    private static var positionsByEvent: [UUID: LineupPositions] = [:]
+    private static var published: Set<UUID> = []
+
+    /// The overrides this exercise carries, as far as the last load knows.
+    static func positions(for eventID: UUID) -> LineupPositions {
+        positionsByEvent[eventID] ?? LineupPositions()
     }
 
-    static func load(eventID: UUID) -> LineupPlan? {
-        guard let data = UserDefaults.standard.data(forKey: key(for: eventID)) else { return nil }
-        return try? JSONDecoder().decode(LineupPlan.self, from: data)
+    static func isPublished(eventID: UUID) -> Bool { published.contains(eventID) }
+
+    /// Reads the split from the server and warms the cache. Nil means there is
+    /// no lineup to show: either none was saved, or one exists as a draft that
+    /// this reader is not entitled to yet.
+    @discardableResult
+    static func load(eventID: UUID) async -> LineupPlan? {
+        let fetched: LineupRecord?
+        do {
+            fetched = try await LineupService.shared.get(eventID: eventID)
+        } catch {
+            // A failed read must not empty a split the screen is already
+            // showing. Keep what is cached and let the next load correct it.
+            return plans[eventID]
+        }
+        guard let record = fetched else {
+            plans[eventID] = nil
+            positionsByEvent[eventID] = nil
+            published.remove(eventID)
+            return nil
+        }
+
+        var positions = LineupPositions(byPlayer: record.positions)
+        // Values written by a build that offered «غير محدد» are canonicalized
+        // on the way in, the same as they were when this read from the device.
+        positions.normalizeLegacyValues()
+        positionsByEvent[eventID] = positions
+
+        let plan = LineupPlan(first: record.first, second: record.second)
+        plans[eventID] = plan
+        if record.isPublished { published.insert(eventID) } else { published.remove(eventID) }
+        return plan
     }
 
-    static func save(_ plan: LineupPlan, eventID: UUID) {
-        guard let data = try? JSONEncoder().encode(plan) else { return }
-        UserDefaults.standard.set(data, forKey: key(for: eventID))
+    /// The cached split, without going to the server. For a screen that has
+    /// already loaded one and is redrawing.
+    static func cached(eventID: UUID) -> LineupPlan? { plans[eventID] }
+
+    static func save(_ plan: LineupPlan, positions: LineupPositions, eventID: UUID) {
+        plans[eventID] = plan
+        positionsByEvent[eventID] = positions
+        Task {
+            _ = try? await LineupService.shared.save(
+                eventID: eventID,
+                first: plan.first,
+                second: plan.second,
+                positions: positions.rawValues
+            )
+        }
+    }
+
+    /// Saves the positions against the split already held. Called when the
+    /// organizer changes one player's position without moving anybody.
+    static func savePositions(_ positions: LineupPositions, eventID: UUID) {
+        positionsByEvent[eventID] = positions
+        guard let plan = plans[eventID] else { return }
+        save(plan, positions: positions, eventID: eventID)
+    }
+
+    /// Hands the split to everyone holding a seat.
+    static func publish(eventID: UUID) async {
+        published.insert(eventID)
+        _ = try? await LineupService.shared.publish(eventID: eventID)
     }
 
     static func clear(eventID: UUID) {
-        UserDefaults.standard.removeObject(forKey: key(for: eventID))
+        plans[eventID] = nil
+        positionsByEvent[eventID] = nil
+        published.remove(eventID)
     }
 }
 
@@ -566,7 +627,7 @@ extension HomeStore {
         usesFootballPositions: Bool = true
     ) -> [LineupPlayer] {
         let positions = usesFootballPositions
-            ? LineupPositionStore.load(eventID: occurrence.id)
+            ? LineupStore.positions(for: occurrence.id)
             : LineupPositions()
 
         return roster(for: occurrence)

@@ -129,8 +129,11 @@ struct LineupFlowView: View {
     // MARK: - Loading
 
     private func load() async {
+        // The server first, so the candidates below are built against the
+        // overrides this exercise actually carries rather than an empty cache.
+        await LineupStore.load(eventID: occurrence.id)
         positions = usesFootballFeatures
-            ? LineupPositionStore.load(eventID: occurrence.id)
+            ? LineupStore.positions(for: occurrence.id)
             : LineupPositions()
         candidates = feed.lineupCandidates(
             for: occurrence,
@@ -138,7 +141,7 @@ struct LineupFlowView: View {
         )
         var restoredSavedPlan = false
 
-        if let plan = LineupStore.load(eventID: occurrence.id) {
+        if let plan = LineupStore.cached(eventID: occurrence.id) {
             let resolved = plan.resolve(against: candidates)
             // A plan that lost everyone — a roster that was emptied and
             // rebuilt — is no plan at all, so a fresh split is made below.
@@ -588,7 +591,7 @@ struct LineupFlowView: View {
 
     private func resetPosition(for playerID: UUID) {
         positions.clear(playerID)
-        LineupPositionStore.save(positions, eventID: occurrence.id)
+        LineupStore.savePositions(positions, eventID: occurrence.id)
         // Back to whatever the roster says, which is what a fresh read gives.
         let profilePosition = feed.lineupCandidates(for: occurrence)
             .first { $0.id == playerID }?
@@ -601,7 +604,7 @@ struct LineupFlowView: View {
         overridden: Bool,
         for playerID: UUID
     ) {
-        LineupPositionStore.save(positions, eventID: occurrence.id)
+        LineupStore.savePositions(positions, eventID: occurrence.id)
         applyPosition(position, overridden: overridden, for: playerID)
     }
 
@@ -621,9 +624,13 @@ struct LineupFlowView: View {
         }
     }
 
+    /// «حفظ» is the moment the split becomes the group's. Every drag before it
+    /// was a draft only the organizer could see, which is the point: reading a
+    /// half finished lineup tells a player he is dropped when he is not.
     private func saveLineup() {
         let plan = LineupPlan(teams: teams)
-        LineupStore.save(plan, eventID: occurrence.id)
+        LineupStore.save(plan, positions: positions, eventID: occurrence.id)
+        Task { await LineupStore.publish(eventID: occurrence.id) }
         onFinish(plan)
         Haptics.success()
         dismiss()

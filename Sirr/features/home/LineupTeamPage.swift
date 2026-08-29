@@ -150,14 +150,14 @@ struct LineupTeamPage: View {
         .environment(\.layoutDirection, .rightToLeft)
         .colorScheme(.dark)
         .allowsHitTesting(interactionEnabled)
-        .onAppear {
-            if reloadsTeamsOnAppear { reload() }
+        .task {
+            if reloadsTeamsOnAppear { await reload() }
         }
         .fullScreenCover(isPresented: $showEditor) {
             LineupFlowView(feed: feed, occurrence: occurrence, artName: artName) { plan in
                 onFinish(plan)
                 // Nothing left to show this side on: the whole lineup went.
-                if plan == nil { closePage() } else { reload() }
+                if plan == nil { closePage() } else { Task { await reload() } }
             }
         }
     }
@@ -213,11 +213,12 @@ struct LineupTeamPage: View {
 
     /// Reads the saved split against today's roster, the same way the exercise
     /// page does — so a player who left is gone from both at once.
-    private func reload() {
+    private func reload() async {
+        let plan = await LineupStore.load(eventID: occurrence.id)
         positions = sportStyle.usesFootballFeatures
-            ? LineupPositionStore.load(eventID: occurrence.id)
+            ? LineupStore.positions(for: occurrence.id)
             : LineupPositions()
-        guard let plan = LineupStore.load(eventID: occurrence.id) else { return }
+        guard let plan else { return }
         teams = plan.resolve(
             against: feed.lineupCandidates(
                 for: occurrence,
@@ -231,13 +232,13 @@ struct LineupTeamPage: View {
     /// decides someone is playing at the back tonight.
     private func choosePosition(_ position: PlayerPosition, for playerID: UUID) {
         positions.set(position, for: playerID)
-        LineupPositionStore.save(positions, eventID: occurrence.id)
+        LineupStore.savePositions(positions, eventID: occurrence.id)
         apply(position, overridden: true, for: playerID)
     }
 
     private func resetPosition(for playerID: UUID) {
         positions.clear(playerID)
-        LineupPositionStore.save(positions, eventID: occurrence.id)
+        LineupStore.savePositions(positions, eventID: occurrence.id)
         let profilePosition = feed.lineupCandidates(
             for: occurrence,
             usesFootballPositions: true

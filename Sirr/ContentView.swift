@@ -213,6 +213,8 @@ private struct LineupDebugScreen: View {
         // Exercise the fresh-creation path. It now reaches the two teams on
         // its own, so seeding a saved plan would hide a regression in that flow.
         LineupStore.clear(eventID: occurrence.id)
+        // The cache is the only thing to clear: this screen's exercise exists
+        // on no server, so there is nothing behind it to delete.
         _feed = State(initialValue: preview)
         self.occurrence = occurrence
     }

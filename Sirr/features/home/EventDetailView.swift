@@ -543,9 +543,11 @@ struct EventDetailView: View {
         .sheet(item: $feedbackInFlight) { feature in
             FeatureFeedbackSheet(feature: feature)
         }
-        .onAppear {
+        .task {
+            // The lineup is a request now, so this reads it rather than a
+            // defaults key. A member gets nil until the organizer publishes.
             if !occurrence.isCancelled, lineupPlan == nil {
-                lineupPlan = LineupStore.load(eventID: occurrence.id)
+                lineupPlan = await LineupStore.load(eventID: occurrence.id)
             }
         }
         .onDisappear {

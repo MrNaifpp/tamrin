@@ -739,12 +739,13 @@ final class HomeStore {
             myEventStatus[paid.id] = .registered
             // Seeded only when nobody has split this exercise yet, so a tester
             // who rearranges the sides keeps his own work across a relaunch.
-            if LineupStore.load(eventID: paid.id) == nil {
+            if LineupStore.cached(eventID: paid.id) == nil {
                 LineupStore.save(
                     HomeDebugMemberFixture.paidMemberPlan(
                         currentUserID: fixtureUserID,
                         profileName: profileName
                     ),
+                    positions: LineupPositions(),
                     eventID: paid.id
                 )
             }
@@ -916,9 +917,53 @@ final class HomeStore {
     /// Sequential rather than a task group: each pass already fans out over its
     /// own events, and a handful of groups times a dozen requests each is a
     /// burst worth spreading out.
+    /// Home in one request.
+    ///
+    /// The shelf spans every workspace, so asking each one in turn made a
+    /// launch cost a round trip per group, plus a roster for every card, run in
+    /// sequence. get_my_feed answers all of it at once, and the rows arrive in
+    /// the shapes the existing mapping already reads.
+    ///
+    /// loadTeamData stays for the single workspace refresh after a write.
     func loadAllTeamsData() async {
+        guard let feed = try? await EventService.shared.getMyFeed() else {
+            // One failed request must not leave Home blank when the per
+            // workspace path can still answer.
+            for team in teams { await loadTeamData(team.id) }
+            return
+        }
+
+        for event in feed.events { eventRecordsByID[event.id] = event }
+
+        // EventRecord.workspaceId is optional, so an event from before
+        // workspaces existed groups under nothing rather than crashing the shelf.
+        let eventsByTeam = Dictionary(
+            grouping: feed.events.filter { $0.workspaceId != nil },
+            by: { $0.workspaceId! }
+        )
         for team in teams {
-            await loadTeamData(team.id)
+            let events = eventsByTeam[team.id] ?? []
+            occurrencesByTeam[team.id] = events.map(mapOccurrence)
+            plansByTeam[team.id] = events.map(synthesizePlan)
+            for event in events {
+                memberResponseByEvent[event.id] =
+                    event.myResponseStatus.flatMap(FeedMemberResponse.init(rawValue:))
+            }
+        }
+
+        // The rows are ParticipantRecords, so the existing mapping applies
+        // unchanged. An exercise whose roster emptied still has to be applied,
+        // or its card keeps the count it had at the last launch.
+        var rostersByEvent: [UUID: [ParticipantRecord]] = [:]
+        for event in feed.events { rostersByEvent[event.id] = [] }
+        for row in feed.participants { rostersByEvent[row.eventId, default: []].append(row.participant) }
+        for (eventId, parts) in rostersByEvent { applyParticipants(parts, to: eventId) }
+
+        for event in feed.events { memberResponseRecordsByEvent[event.id] = nil }
+        var responsesByEvent: [UUID: [EventMemberResponseRecord]] = [:]
+        for row in feed.responses { responsesByEvent[row.eventId, default: []].append(row.response) }
+        for (eventId, responses) in responsesByEvent {
+            memberResponseRecordsByEvent[eventId] = responses
         }
     }
 
