@@ -132,9 +132,7 @@ struct DesignerHomeView: View {
     /// folder has any, and otherwise the artwork the app ships with. The sport
     /// is the group's, since that is where it is chosen.
     private func art(for occurrence: FeedOccurrence) -> String {
-        let sportKey = feed.team(for: occurrence)
-            .flatMap { Sport.named($0.symbol) }?
-            .key
+        let sportKey = feed.team(for: occurrence)?.sport
         return SportArtLibrary.photo(for: occurrence.id, sportKey: sportKey)
             ?? artName(occurrence.artIndex)
     }

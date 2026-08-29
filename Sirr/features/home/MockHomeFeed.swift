@@ -8,6 +8,10 @@ struct FeedTeam: Identifiable {
     let id: UUID
     let name: String
     let symbol: String
+    /// The sport this group plays, as the database stores it. It picks the
+    /// folder the exercise artwork is drawn from, and the symbol above is the
+    /// server's rendering of the same fact.
+    var sport: String = "soccer"
     /// The colour picked with the symbol. Every surface that draws the group's
     /// icon tints it with this, so the choice is the group's identity rather
     /// than a flourish on the creation screen.
@@ -1381,7 +1385,7 @@ final class HomeStore {
         do {
             let ws = try await WorkspaceService.shared.createWorkspace(
                 name: name,
-                symbol: draft.teamSymbol,
+                sport: Sport.named(draft.teamSymbol)?.key ?? "soccer",
                 color: draft.teamColor.rawValue
             )
             createdWorkspace = ws
@@ -1489,13 +1493,10 @@ final class HomeStore {
         // nothing at all: not the name, and not the sport, which is what picks
         // the photograph the card wears.
         if isDebugMemberFixtureEvent(eventID) {
-            rerollArtIfSportChanged(to: symbol, teamID: teamID, eventID: eventID)
             applyFixtureExerciseEdit(plan: plan, symbol: symbol, teamID: teamID, eventID: eventID)
             return
         }
         #endif
-
-        rerollArtIfSportChanged(to: symbol, teamID: teamID, eventID: eventID)
 
         let scope: EventEditScope = templateID == nil ? .occurrenceOnly : .seriesTemplate
         let cal = Calendar(identifier: .gregorian)
@@ -2562,13 +2563,6 @@ final class HomeStore {
         }
     }
 
-    /// A new sport means a new folder of photographs, and the exercise draws a
-    /// fresh one from it. Only on a change: re-rolling on every save would move
-    /// the picture when the organizer only fixed a typo in the name.
-    private func rerollArtIfSportChanged(to symbol: String, teamID: UUID, eventID: UUID) {
-        guard teams.first(where: { $0.id == teamID })?.symbol != symbol else { return }
-        ExerciseArtSeed.reroll(for: eventID)
-    }
 
     #if DEBUG
     /// The same edit, applied to the copy the fixture holds in memory.
@@ -2749,6 +2743,7 @@ final class HomeStore {
         fallbackMemberCount: Int? = nil
     ) -> FeedTeam {
         FeedTeam(id: ws.id, name: ws.name, symbol: ws.symbol ?? "figure.soccer",
+                 sport: ws.sport ?? Sport.named(ws.symbol ?? "")?.key ?? "soccer",
                  color: TeamColor(rawValue: ws.color ?? "") ?? TeamColor.allCases[0],
                  avatarData: nil,
                  memberCount: ws.memberCount ?? fallbackMemberCount ?? 0,

@@ -44,7 +44,7 @@ struct LineupFlowView: View {
     @State private var isDraggingPlayer = false
 
     private var sportStyle: LineupSportStyle {
-        LineupSportStyle(symbol: feed.team(for: occurrence)?.symbol)
+        LineupSportStyle(sport: feed.team(for: occurrence)?.sport)
     }
 
     private var usesFootballFeatures: Bool {

@@ -19,7 +19,7 @@ struct TeamDetailView: View {
     // delete → pop transition on the last team can't touch an empty array.
     private var team: FeedTeam? { feed.teams.first { $0.id == feed.selectedTeamID } }
     private var usesFootballFeatures: Bool {
-        LineupSportStyle(symbol: team?.symbol).usesFootballFeatures
+        LineupSportStyle(sport: team?.sport).usesFootballFeatures
     }
     private var teamPlans: [FeedPlan] { feed.teamPlans }
     private var plan: FeedPlan? { teamPlans.first { $0.id == selectedPlanID } ?? teamPlans.first }

@@ -29,7 +29,7 @@ struct ExerciseDetailsOverlayPage: View {
     }
 
     private var usesFootballFeatures: Bool {
-        LineupSportStyle(symbol: team?.symbol).usesFootballFeatures
+        LineupSportStyle(sport: team?.sport).usesFootballFeatures
     }
 
     private var plans: [FeedPlan] {

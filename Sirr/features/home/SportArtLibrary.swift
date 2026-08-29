@@ -99,17 +99,10 @@ enum SportArtLibrary {
         return names
     }
 
-    /// The photo this exercise wears. Random-looking across exercises, and
-    /// fixed for any one of them *until it is edited*: the same card must not
-    /// change picture every time the shelf redraws, so the choice cannot be
-    /// drawn fresh at draw time.
-    ///
-    /// It is drawn fresh at *edit* time instead. The id alone gave one answer
-    /// per exercise and sport for ever, so moving an exercise to another sport
-    /// and back handed it the same photograph again — the choice looked like a
-    /// fixed order because, for a given exercise, it was one. `ExerciseArtSeed`
-    /// is what makes it a choice: re-rolled when the sport changes, and read
-    /// back unchanged on every draw in between.
+    /// The photo this exercise wears. Fixed for any one exercise, and the same
+    /// on every device, because both halves of the choice now come from the
+    /// server: the sport is the group's, and the index is a stable hash of the
+    /// exercise's own id.
     ///
     /// Nil when the sport has no photos yet, which is the caller's cue to fall
     /// back to the artwork the app ships with.
@@ -117,8 +110,7 @@ enum SportArtLibrary {
         guard let sportKey else { return nil }
         let all = photos(forSport: sportKey)
         guard !all.isEmpty else { return nil }
-        let offset = ExerciseArtSeed.value(for: eventID)
-        return all[(stableIndex(for: eventID, count: all.count) + offset) % all.count]
+        return all[stableIndex(for: eventID, count: all.count)]
     }
 
     /// A decoded, display-sized image for a bundle-relative sport photo.
@@ -233,36 +225,6 @@ enum SportArtLibrary {
     }
 }
 
-/// What turns one exercise's photograph from a fixed answer into a choice.
-///
-/// Held per exercise and only ever changed by an edit, never by a draw — a
-/// picture that moved while the shelf scrolled would be worse than one that
-/// never moved at all.
-enum ExerciseArtSeed {
-    private static func key(for eventID: UUID) -> String {
-        "exercise.art.seed.\(eventID.uuidString)"
-    }
-
-    /// Kept in memory as well: the shelf asks for this on every redraw of every
-    /// card, which is no place for a defaults read.
-    private static var cache: [UUID: Int] = [:]
-
-    static func value(for eventID: UUID) -> Int {
-        if let cached = cache[eventID] { return cached }
-        let stored = UserDefaults.standard.integer(forKey: key(for: eventID))
-        cache[eventID] = stored
-        return stored
-    }
-
-    /// A new photograph for this exercise. Random rather than the next one
-    /// along, so switching sports back and forth does not walk a folder in
-    /// order — which is the pattern that gave the whole thing away.
-    static func reroll(for eventID: UUID) {
-        let next = Int.random(in: 1...997)
-        cache[eventID] = next
-        UserDefaults.standard.set(next, forKey: key(for: eventID))
-    }
-}
 
 extension Image {
     /// An exercise's artwork, whichever kind it is: a photo from a sport folder

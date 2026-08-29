@@ -80,7 +80,7 @@ struct LineupTeamPage: View {
     }
 
     private var sportStyle: LineupSportStyle {
-        LineupSportStyle(symbol: feed.team(for: occurrence)?.symbol)
+        LineupSportStyle(sport: feed.team(for: occurrence)?.sport)
     }
 
     /// Back to front, the way a squad list is read — and the same order the

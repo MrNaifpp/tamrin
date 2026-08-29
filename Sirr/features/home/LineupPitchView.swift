@@ -20,10 +20,12 @@ enum LineupSportStyle: Equatable {
     case volleyball
     case generic
 
-    init(symbol: String?) {
-        switch symbol {
-        case "figure.soccer": self = .football
-        case "figure.volleyball": self = .volleyball
+    /// Built from the sport the database stores, rather than from the symbol
+    /// that is now only a rendering of it.
+    init(sport: String?) {
+        switch sport {
+        case "soccer": self = .football
+        case "volleyball": self = .volleyball
         default: self = .generic
         }
     }

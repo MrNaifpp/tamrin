@@ -136,7 +136,7 @@ struct EventDetailView: View {
     /// Workspace sport is the source of truth for both the court drawing and
     /// football-only features such as ratings and positions.
     private var lineupSportStyle: LineupSportStyle {
-        LineupSportStyle(symbol: feed.team(for: occurrence)?.symbol)
+        LineupSportStyle(sport: feed.team(for: occurrence)?.sport)
     }
 
     /// My own photo can still be only in memory — the upload lags the pick,
