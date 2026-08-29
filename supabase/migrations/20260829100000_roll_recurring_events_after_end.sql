@@ -449,7 +449,7 @@ begin
     if v_event_id is not null then
       insert into public.event_participants (event_id, user_id)
       values (v_event_id, tpl.creator_id)
-      on conflict (event_id, user_id) do nothing;
+      on conflict (event_id, user_id) where user_id is not null do nothing;
 
       perform public.publish_recurring_event_internal(v_event_id, tpl.creator_id);
 
@@ -502,7 +502,7 @@ begin
 
     insert into public.event_participants (event_id, user_id)
     values (v_event_id, tpl.creator_id)
-    on conflict (event_id, user_id) do nothing;
+    on conflict (event_id, user_id) where user_id is not null do nothing;
 
     perform public.publish_recurring_event_internal(v_event_id, tpl.creator_id);
 
