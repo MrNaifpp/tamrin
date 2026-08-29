@@ -42,6 +42,12 @@ struct LineupTeamPage: View {
     @State private var positions = LineupPositions()
     @State private var showEditor = false
 
+    /// Who may change this lineup. Resolved from the exercise's own group, not
+    /// the selected one: Home spans every group now, so the exercise in front
+    /// of you often belongs to a different group than the one selected, and
+    /// `isCurrentTeamOwner` answers about the wrong one.
+    private var canEditLineup: Bool { feed.isOwner(of: occurrence) }
+
     init(
         feed: HomeStore,
         occurrence: FeedOccurrence,
@@ -257,8 +263,14 @@ struct LineupTeamPage: View {
             ) {
                 LineupRowTag(
                     row: player.row,
-                    onChoose: { choosePosition($0, for: player.id) },
-                    onReset: player.isPositionOverridden
+                    // The split is the organizer's to make; everyone else
+                    // reads it. Handing the tag no closure renders it as a
+                    // plain label instead of a menu, so there is nothing to
+                    // press rather than something that presses and is refused.
+                    onChoose: canEditLineup
+                        ? { (position: PlayerPosition) in choosePosition(position, for: player.id) }
+                        : nil,
+                    onReset: canEditLineup && player.isPositionOverridden
                         ? { resetPosition(for: player.id) }
                         : nil
                 )
@@ -330,7 +342,7 @@ struct LineupTeamPage: View {
                 // Clock's «تعديل» — rather than a small pill: the system's
                 // 17pt bar-button text, and enough width around it that the
                 // capsule reads as a sibling of the circle across from it.
-                if feed.isCurrentTeamOwner {
+                if canEditLineup {
                     Button {
                         showEditor = true
                     } label: {
