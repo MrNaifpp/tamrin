@@ -1,5 +1,51 @@
 import SwiftUI
 
+/// What a score looks like.
+///
+/// Hue carries it — red through amber to green — because that reading is
+/// already in everyone before they open the app, and it needs no legend beside
+/// the number.
+///
+/// The stops are not evenly spread on purpose. Half the range is spent getting
+/// out of red, green proper is not reached until 85, and the deep green belongs
+/// to 95 and up: a ramp that turned green at the midpoint would tell a rater he
+/// had said something good when he had said something average, which is the
+/// exact judgement the colour exists to sharpen.
+enum RatingTint {
+    /// Score → hue in degrees, interpolated between.
+    private static let stops: [(score: Double, hue: Double)] = [
+        (0, 0),      // red
+        (50, 20),    // burnt orange — the neutral start, still nearer red
+        (70, 58),    // yellow-green
+        (85, 124),   // green proper
+        (95, 140),   // deep green
+        (100, 146)
+    ]
+
+    static func of(_ score: Int) -> Color {
+        let value = Double(min(max(score, 0), 100))
+        var hue = stops[stops.count - 1].hue
+        for index in 1..<stops.count where value <= stops[index].score {
+            let low = stops[index - 1]
+            let high = stops[index]
+            let span = high.score - low.score
+            let progress = span > 0 ? (value - low.score) / span : 0
+            hue = low.hue + (high.hue - low.hue) * progress
+            break
+        }
+        // Deepening rather than only turning: the top of the scale reads as a
+        // richer, darker green rather than a brighter one, so the nineties do
+        // not glare. Full depth by 95, which is where the scale is meant to
+        // look like it has been earned.
+        let depth = min(max((value - 85) / 10, 0), 1)
+        return Color(
+            hue: hue / 360,
+            saturation: 0.72 + 0.22 * depth,
+            brightness: 0.98 - 0.30 * depth
+        )
+    }
+}
+
 /// The colour this flow moves forward on, shared by its progress track and its
 /// primary button so they read as one motion.
 private let ratingForward = Color(red: 0.20, green: 0.47, blue: 0.96)
@@ -168,6 +214,11 @@ struct PlayerRatingFlowView: View {
             Text(scores[attribute].tamrinNumber)
                 .font(TamrinFont.font(size: 74, weight: .bold))
                 .monospacedDigit()
+                // The number says what it means while it is being set. A rater
+                // meeting this scale for the first time has no idea whether 62
+                // is generous or harsh; the colour is the part of the answer
+                // that needs no reading.
+                .foregroundStyle(RatingTint.of(scores[attribute]))
                 .contentTransition(.numericText(value: Double(scores[attribute])))
                 .animation(.smooth(duration: 0.35), value: scores[attribute])
 
@@ -216,7 +267,7 @@ struct PlayerRatingFlowView: View {
             })
 
             Label(
-                "التقييمات مجهولة — اللاعب يشوف متوسط تقييمه فقط.",
+                "التقييمات مجهولة، واللاعب يشوف متوسط تقييمه فقط.",
                 systemImage: "eye.slash.fill"
             )
             .font(TamrinFont.font(size: 11, weight: .regular))

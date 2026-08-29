@@ -8,6 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		DC216E002F2D282B00EE600A /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = DC216DFF2F2D282B00EE600A /* Supabase */; };
+		DCA0C1002F8B000100000010 /* SportArt in Resources */ = {isa = PBXBuildFile; fileRef = DCA0C1012F8B000100000011 /* SportArt */; };
+		DCA0C1002F8B000100000012 /* DemoFaces in Resources */ = {isa = PBXBuildFile; fileRef = DCA0C1012F8B000100000013 /* DemoFaces */; };
+		DCA0C1002F8B000100000014 /* FeatureMedia in Resources */ = {isa = PBXBuildFile; fileRef = DCA0C1012F8B000100000015 /* FeatureMedia */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -15,6 +18,9 @@
 		DCA0C0F22F8B000100000002 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Config/Debug.xcconfig; sourceTree = "<group>"; };
 		DCA0C0F32F8B000100000003 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Config/Release.xcconfig; sourceTree = "<group>"; };
 		DCA0C0F42F8B000100000004 /* Staging.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Staging.xcconfig; path = Config/Staging.xcconfig; sourceTree = "<group>"; };
+		DCA0C1012F8B000100000011 /* SportArt */ = {isa = PBXFileReference; lastKnownFileType = folder; path = SportArt; sourceTree = "<group>"; };
+		DCA0C1012F8B000100000013 /* DemoFaces */ = {isa = PBXFileReference; lastKnownFileType = folder; path = DemoFaces; sourceTree = "<group>"; };
+		DCA0C1012F8B000100000015 /* FeatureMedia */ = {isa = PBXFileReference; lastKnownFileType = folder; path = FeatureMedia; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -54,6 +60,9 @@
 			isa = PBXGroup;
 			children = (
 				DCA0C0F12F8B000100000001 /* Config */,
+				DCA0C1012F8B000100000011 /* SportArt */,
+				DCA0C1012F8B000100000013 /* DemoFaces */,
+				DCA0C1012F8B000100000015 /* FeatureMedia */,
 				5A8B1AB22E8AE2E900BA3398 /* Sirr */,
 				DC216DFE2F2D281C00EE600A /* Frameworks */,
 				5A8B1AB12E8AE2E900BA3398 /* Products */,
@@ -153,6 +162,9 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DCA0C1002F8B000100000010 /* SportArt in Resources */,
+				DCA0C1002F8B000100000012 /* DemoFaces in Resources */,
+				DCA0C1002F8B000100000014 /* FeatureMedia in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

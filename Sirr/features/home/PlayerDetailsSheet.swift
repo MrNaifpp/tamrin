@@ -56,6 +56,15 @@ struct PlayerDetailsSheet: View {
     @State private var isLoadingRating = true
     @State private var ratingLoadFailed = false
     @State private var isRatingFlowOpen = false
+    /// Shown once, ahead of the first rating anyone gives.
+    ///
+    /// A wrong mental model here produces wrong numbers rather than a confused
+    /// user — someone who believes his score is published rates politely, and
+    /// someone who believes he is judging against professionals rates the whole
+    /// group in the thirties. Neither can be taken back out of the average
+    /// afterwards, so the explaining has to come first.
+    @State private var isRatingOnboardingOpen = false
+    @State private var detent: PresentationDetent = .large
 
     private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
@@ -163,11 +172,26 @@ struct PlayerDetailsSheet: View {
         // Left at the system's default content interaction — `.scrolls` gave
         // the scroll view first claim on an upward drag, so pulling the sheet
         // open did nothing and only the grabber could resize it.
-        .presentationDetents([.medium, .large])
+        // Opens full rather than at half. Everything worth reading here — the
+        // player, the rating panel, the money — sits below the fold at the
+        // medium detent, so opening there showed the header and asked for a
+        // drag before the sheet said anything. Both detents stay: pulling it
+        // back down is still allowed, it is just no longer where it starts.
+        .presentationDetents([.medium, .large], selection: $detent)
         .presentationDragIndicator(.visible)
         // The rating flow is its own sheet on top of this one, not a second
         // face of it: it is a fixed half sheet that never scrolls, while this
         // one scrolls and expands. One surface could not be both.
+        // Full screen, not a sheet: the first card plays the feature running,
+        // and a clip in a half sheet is a thumbnail.
+        .fullScreenCover(isPresented: $isRatingOnboardingOpen) {
+            RatingOnboardingSheet {
+                isRatingOnboardingOpen = false
+                // Straight into the thing it just explained, rather than back
+                // to the button to press again.
+                isRatingFlowOpen = true
+            }
+        }
         .sheet(isPresented: $isRatingFlowOpen) {
             if let submitRating, let ratingPosition {
                 PlayerRatingSheet(
@@ -181,6 +205,14 @@ struct PlayerDetailsSheet: View {
                     }
                 )
             }
+        }
+    }
+
+    private func openRating() {
+        if RatingOnboarding.hasSeen {
+            isRatingFlowOpen = true
+        } else {
+            isRatingOnboardingOpen = true
         }
     }
 
@@ -237,9 +269,24 @@ struct PlayerDetailsSheet: View {
 
     // MARK: - Rating
 
+    /// Whether this person has earned the right to see the number.
+    ///
+    /// Rating is a trade, not a lookup: you get the group's verdict once you
+    /// have given yours. Showing it first lets someone read the room and then
+    /// rate to match it, which quietly turns an average of independent opinions
+    /// into an average of one opinion repeated.
+    ///
+    /// Anyone who cannot rate at all is not being asked for anything, so
+    /// nothing is withheld from them — a player's own sheet still shows him
+    /// what the group thinks.
+    private var revealsRating: Bool {
+        guard canSubmitRating else { return true }
+        return rating?.hasRated == true
+    }
+
     @ViewBuilder
     private var ratingPanel: some View {
-        if let rating, let average = rating.average,
+        if revealsRating, let rating, let average = rating.average,
            let overall = rating.averageOverall {
             RatedPanel(
                 average: average,
@@ -250,7 +297,7 @@ struct PlayerDetailsSheet: View {
                     ? (rating.hasRated ? "عدّل تقييمك" : "قيّم اللاعب")
                     : nil,
                 onAction: ratingPosition != nil && canSubmitRating
-                    ? { isRatingFlowOpen = true }
+                    ? { openRating() }
                     : nil
             )
         } else {
@@ -263,7 +310,7 @@ struct PlayerDetailsSheet: View {
                 canSubmit: canSubmitRating,
                 positionRequired: canSubmitRating && ratingPosition == nil,
                 onRate: canSubmitRating && ratingPosition != nil
-                    ? { isRatingFlowOpen = true }
+                    ? { openRating() }
                     : nil
             )
         }
@@ -478,6 +525,15 @@ private struct RatedPanel: View {
 }
 
 /// The empty/loading state before an anonymous group average exists.
+/// One step lighter than the panel it sits on, rather than the app's lime.
+/// The accent made the action the loudest thing on a sheet that is mostly
+/// about the player, and rating is an offer here, not the point of the screen.
+private let ratingActionTint = Color(uiColor: UIColor { traits in
+    traits.userInterfaceStyle == .dark
+        ? UIColor(white: 0.30, alpha: 1)
+        : UIColor(white: 0.90, alpha: 1)
+})
+
 private struct LockedRatingPanel: View {
     let isUnrated: Bool
     let ratersCount: Int
@@ -519,7 +575,7 @@ private struct LockedRatingPanel: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
-                .tamrinPrimaryAction(tint: TamrinTheme.lime)
+                .tamrinPrimaryAction(tint: ratingActionTint)
                 .disabled(isLoading)
             }
         }
@@ -533,7 +589,9 @@ private struct LockedRatingPanel: View {
         if isLoading { return "التقييم" }
         if loadFailed { return "تعذّر جلب التقييم" }
         if positionRequired { return "المركز مطلوب" }
-        return isUnrated ? "باقي ما قُيم" : "التقييم غير متاح"
+        // Not "unavailable": it is available, and there is one thing to do
+        // about it. Saying so is the whole point of the panel in this state.
+        return isUnrated ? "باقي ما قُيم" : "قيّمه تشوف تقييمه"
     }
 
     private var caption: String {
@@ -547,7 +605,7 @@ private struct LockedRatingPanel: View {
         }
         return isUnrated
             ? "كن أول من يقيّمه في ست معايير."
-            : "عنده \(ratersCount.ratingsCounted)."
+            : "عنده \(ratersCount.ratingsCounted). قيّمه وينفتح لك."
     }
 }
 

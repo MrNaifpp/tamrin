@@ -51,6 +51,10 @@ struct EventRecord: Codable {
     /// Current authenticated member's private response, computed by the list
     /// RPC. Organizers do not receive other members' reasons here.
     let myResponseStatus: String?
+    /// A finished occurrence that remains actionable solely because the current
+    /// member still owes its contribution. Older servers omit this computed
+    /// field, so decoding deliberately falls back to false.
+    let requiresPaymentAction: Bool
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -79,6 +83,7 @@ struct EventRecord: Codable {
         case cancellationReasonText = "cancellation_reason_text"
         case paymentReminderSentAt = "payment_reminder_sent_at"
         case myResponseStatus = "my_response_status"
+        case requiresPaymentAction = "requires_payment_action"
     }
 
     init(from decoder: Decoder) throws {
@@ -111,6 +116,7 @@ struct EventRecord: Codable {
         cancellationReasonText = try container.decodeIfPresent(String.self, forKey: .cancellationReasonText)
         paymentReminderSentAt = try container.decodeIfPresent(Date.self, forKey: .paymentReminderSentAt)
         myResponseStatus = try container.decodeIfPresent(String.self, forKey: .myResponseStatus)
+        requiresPaymentAction = try container.decodeIfPresent(Bool.self, forKey: .requiresPaymentAction) ?? false
     }
 }
 
@@ -120,6 +126,20 @@ struct SavedLocation: Identifiable, Hashable {
     let latitude: Double
     let longitude: Double
     var id: String { "\(name)|\(latitude)|\(longitude)" }
+}
+
+/// Authoritative rows returned by the all-or-nothing template editor RPC.
+/// Returning the edited event and selected payment destinations lets Home
+/// update immediately even when its follow-up feed refresh is offline.
+struct ExerciseTemplateUpdateResult: Decodable {
+    let workspace: WorkspaceRecord
+    let event: EventRecord
+    let paymentMethods: [PaymentMethodRecord]
+
+    enum CodingKeys: String, CodingKey {
+        case workspace, event
+        case paymentMethods = "payment_methods"
+    }
 }
 
 
@@ -376,6 +396,40 @@ final class EventService {
         return events
     }
 
+    /// Historical events of one workspace, newest first.
+    ///
+    /// This deliberately uses a separate bounded RPC from `getWorkspaceEvents`.
+    /// The live Home feed eagerly prepares rosters for everything returned by
+    /// that endpoint; returning history there would make an ordinary launch do
+    /// work proportional to the lifetime of every workspace.
+    func getWorkspacePastEvents(
+        workspaceId: UUID,
+        before: Date = .now,
+        limit: Int = 60,
+        offset: Int = 0
+    ) async throws -> [EventRecord] {
+        let boundedLimit = min(max(limit, 1), 120)
+        let boundedOffset = max(offset, 0)
+        let params: [String: AnyJSON] = [
+            "p_workspace_id": .string(workspaceId.uuidString),
+            "p_before": .string(ISO8601DateFormatter().string(from: before)),
+            "p_limit": .integer(boundedLimit),
+            "p_offset": .integer(boundedOffset)
+        ]
+        let response = try await client
+            .rpc("get_workspace_past_events", params: params)
+            .execute()
+
+        let events = try Self.makePostgresDecoder().decode(
+            [EventRecord].self,
+            from: response.data
+        )
+        eventLogger.info(
+            "API getWorkspacePastEvents succeeded (workspaceId: \(workspaceId), offset: \(boundedOffset), count: \(events.count))"
+        )
+        return events
+    }
+
     /// Create a new event and add the current user as first participant.
     /// Uses a server-side RPC (SECURITY DEFINER) to bypass RLS for inserts.
     func createEvent(
@@ -577,12 +631,81 @@ final class EventService {
         eventLogger.info("API updateEventWithScope succeeded (id: \(eventId), scope: \(scope))")
     }
 
+    /// Atomically updates the workspace identity (exercise name + sport) and
+    /// the selected occurrence/template details. The RPC returns the refreshed
+    /// workspace row so Home can replace its cached team without a second read.
+    func updateExerciseTemplate(
+        workspaceId: UUID,
+        eventId: UUID,
+        scope: String,
+        workspaceName: String,
+        symbol: String,
+        name: String,
+        location: String,
+        startDate: Date,
+        endDate: Date?,
+        maxParticipants: Int?,
+        totalPrice: Int,
+        latitude: Double?,
+        longitude: Double?,
+        paymentMethods: [PaymentMethodDraft],
+        fallbackPaymentMethodIds: [UUID]
+    ) async throws -> ExerciseTemplateUpdateResult {
+        let iso = ISO8601DateFormatter()
+        let paymentMethodDrafts = paymentMethods.map { draft in
+            AnyJSON.object([
+                "provider": .string(draft.provider.rawValue),
+                "mobile_number": draft.normalizedMobileNumber.map(AnyJSON.string) ?? .null,
+                "iban": draft.normalizedIBAN.map(AnyJSON.string) ?? .null,
+                "account_number": draft.normalizedAccountNumber.map(AnyJSON.string) ?? .null
+            ])
+        }
+        let params: [String: AnyJSON] = [
+            "p_workspace_id": .string(workspaceId.uuidString),
+            "p_event_id": .string(eventId.uuidString),
+            "p_scope": .string(scope),
+            "p_workspace_name": .string(workspaceName),
+            "p_symbol": .string(symbol),
+            "p_name": .string(name),
+            "p_location": .string(location),
+            "p_start_date": .string(iso.string(from: startDate)),
+            "p_end_date": endDate.map { .string(iso.string(from: $0)) } ?? .null,
+            "p_max_participants": maxParticipants.map(AnyJSON.integer) ?? .null,
+            "p_total_price": .integer(totalPrice),
+            "p_latitude": latitude.map(AnyJSON.double) ?? .null,
+            "p_longitude": longitude.map(AnyJSON.double) ?? .null,
+            "p_payment_methods": .array(paymentMethodDrafts),
+            "p_existing_payment_method_ids": .array(
+                fallbackPaymentMethodIds.map { .string($0.uuidString) }
+            )
+        ]
+
+        let response: PostgrestResponse<Void>
+        do {
+            response = try await client
+                .rpc("update_exercise_template", params: params)
+                .execute()
+        } catch {
+            throw Self.translatedPaymentSchemaError(error)
+        }
+
+        let result = try Self.makePostgresDecoder().decode(
+            ExerciseTemplateUpdateResult.self,
+            from: response.data
+        )
+        eventLogger.info(
+            "API updateExerciseTemplate succeeded (event: \(eventId), workspace: \(workspaceId), scope: \(scope))"
+        )
+        return result
+    }
+
     private static func translatedPaymentSchemaError(_ error: Error) -> Error {
         let description = error.localizedDescription.lowercased()
         let postgrestCode = (error as? PostgrestError)?.code
         let isPaymentSchemaError = description.contains("payment_method")
             || description.contains("create_event")
             || description.contains("update_event_with_scope")
+            || description.contains("update_exercise_template")
         let isMissingSchemaEntry = postgrestCode == "PGRST202"
             || postgrestCode == "PGRST203"
             || postgrestCode == "PGRST204"

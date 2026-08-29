@@ -22,10 +22,24 @@ struct MemberAvatar: View {
         return UIImage(data: imageData)
     }
 
+    /// A photo that ships inside the bundle rather than sitting on a server.
+    /// `AsyncImage` is built around a network fetch and does not reliably load
+    /// a `file:` URL, and there is nothing to await here anyway — the bytes are
+    /// already on disk, so reading them straight through skips a frame of
+    /// placeholder as well.
+    private var bundledImage: UIImage? {
+        guard let imageUrl, let url = URL(string: imageUrl), url.isFileURL else { return nil }
+        return UIImage(contentsOfFile: url.path)
+    }
+
     var body: some View {
         Group {
             if let localImage {
                 Image(uiImage: localImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else if let bundledImage {
+                Image(uiImage: bundledImage)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
             } else if let imageUrl, let url = URL(string: imageUrl) {

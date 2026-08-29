@@ -32,7 +32,10 @@ Deno.serve(async (req) => {
   // 2. Load the outbox row (authoritative).
   const { data: row } = await admin
     .from("push_outbox")
-    .select("id, user_id, type, event_id")
+    // `metadata` is added by a database migration. Selecting the complete row
+    // keeps this Edge Function backward-compatible while that migration is
+    // rolling out: older databases simply return no metadata property.
+    .select("*")
     .eq("id", outbox_id)
     .single();
   if (!row) return new Response("outbox row not found", { status: 404 });
@@ -62,7 +65,7 @@ Deno.serve(async (req) => {
   }
 
   // 5. Copy.
-  const copy = copyFor(row.type, eventName);
+  const copy = copyFor(row.type, eventName, row.metadata);
   if (!copy) return await fail(`no copy for type ${row.type}`);
 
   // 6. Sign + send to every device.

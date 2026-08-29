@@ -4,8 +4,13 @@ import SwiftUI
 /// to HomeStore, including the manual-payment registration and review flow.
 struct EventDetailView: View {
     @Bindable var feed: HomeStore
-    let occurrence: FeedOccurrence
-    var artName: String = "ExerciseArt1"
+    /// Keep the navigation payload only as a recovery snapshot. Editing the
+    /// exercise template replaces the event and workspace values in HomeStore
+    /// while this full-screen detail remains presented, so rendering this copy
+    /// directly would leave the old title, terms and sport photograph onscreen
+    /// until the person closed and reopened the page.
+    private let initialOccurrence: FeedOccurrence
+    private let initialArtName: String
     var initiallyShowsRegistration = false
     #if DEBUG
     /// Opens the post-registration guest flow for deterministic simulator QA.
@@ -33,10 +38,93 @@ struct EventDetailView: View {
     @State private var memberInDetails: FeedMember?
     @State private var removalInFlight: UUID?
     @State private var showDeclinedResponses = false
+    /// Captures the group behind this occurrence while its translucent details
+    /// page is open. The optional itself drives the horizontal transition.
+    @State private var exerciseDetailsTeamID: UUID?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The saved split, held here so the section under the progress bar
+    /// redraws the moment the lineup page closes.
+    @State private var lineupPlan: LineupPlan?
+    /// A stable copy keeps the card that launched the transition available
+    /// until it has flown home, even if the editor replaces or deletes the
+    /// saved plan while the detail page is still presented.
+    @State private var lineupTransitionTeams: LineupTeams?
+    /// The card the lineup page grows out of. A card stays in this view tree so
+    /// it can travel to the top of the detail page as one continuous surface,
+    /// like Wallet, instead of zooming an entire cover from the card's frame.
+    @Namespace private var lineupZoom
+    /// Only the empty-state entry still needs a cover: it opens the editor and
+    /// has no team card to carry into a read-only detail page.
+    @State private var lineupCoverPresentation: LineupZoomSource?
+    /// The selected team is overlaid in this same hierarchy for the Wallet
+    /// transition. Details arrive on a second beat, after the card has lifted.
+    @State private var lineupCardPresentation: LineupSide?
+    @State private var lineupCardExpanded = false
+    @State private var lineupBackdropVisible = false
+    @State private var lineupDetailsVisible = false
+    @State private var lineupCardSettled = false
+    @State private var lineupCardIsClosing = false
+    @State private var lineupTransitionTask: Task<Void, Never>?
+    /// Set when a lineup is saved and this person has not said what they think
+    /// of the feature yet. The question waits for the lineup page to close —
+    /// a sheet raised while a cover is dismissing has nothing to sit on.
+    @State private var pendingFeedback: TamrinFeature?
+    @State private var feedbackInFlight: TamrinFeature?
     /// Live top edge of the content panel, in screen coordinates. The blurred
     /// artwork is revealed from here down, so the frost follows the panel
     /// through every scroll and every added row.
     @State private var panelTop: CGFloat = .greatestFiniteMagnitude
+
+    #if DEBUG
+    init(
+        feed: HomeStore,
+        occurrence: FeedOccurrence,
+        artName: String = "ExerciseArt1",
+        initiallyShowsRegistration: Bool = false,
+        initiallyShowsGuestRegistration: Bool = false,
+        initiallyShowsGuestOnlyRegistration: Bool = false
+    ) {
+        self.feed = feed
+        self.initialOccurrence = occurrence
+        self.initialArtName = artName
+        self.initiallyShowsRegistration = initiallyShowsRegistration
+        self.initiallyShowsGuestRegistration = initiallyShowsGuestRegistration
+        self.initiallyShowsGuestOnlyRegistration = initiallyShowsGuestOnlyRegistration
+    }
+    #else
+    init(
+        feed: HomeStore,
+        occurrence: FeedOccurrence,
+        artName: String = "ExerciseArt1",
+        initiallyShowsRegistration: Bool = false
+    ) {
+        self.feed = feed
+        self.initialOccurrence = occurrence
+        self.initialArtName = artName
+        self.initiallyShowsRegistration = initiallyShowsRegistration
+    }
+    #endif
+
+    /// The event id is stable across template edits. Prefer the refreshed store
+    /// value and fall back to the navigation snapshot only while a reload is in
+    /// flight or after the event leaves the active caches.
+    private var occurrence: FeedOccurrence {
+        feed.allOccurrences.first { $0.id == initialOccurrence.id }
+            ?? initialOccurrence
+    }
+
+    /// Sport artwork belongs to the live workspace identity, not to the poster
+    /// snapshot that launched this page. A sport with no bundled photograph
+    /// falls back to the event's deterministic generic artwork; a missing team
+    /// keeps the caller-provided image so loading never flashes another asset.
+    private var artName: String {
+        guard let team = feed.team(for: occurrence),
+              let sportKey = Sport.named(team.symbol)?.key else {
+            return initialArtName
+        }
+        return SportArtLibrary.photo(for: occurrence.id, sportKey: sportKey)
+            ?? "ExerciseArt\((occurrence.artIndex % 3) + 1)"
+    }
 
     private var roster: [FeedMember] { feed.roster(for: occurrence) }
     private var myRegistration: FeedMember? { feed.myRegistration(for: occurrence) }
@@ -44,6 +132,11 @@ struct EventDetailView: View {
     private var waitingCount: Int { feed.waitlistCount(for: occurrence) }
     private var declinedResponses: [EventMemberResponseRecord] {
         feed.declinedResponses(for: occurrence)
+    }
+    /// Workspace sport is the source of truth for both the court drawing and
+    /// football-only features such as ratings and positions.
+    private var lineupSportStyle: LineupSportStyle {
+        LineupSportStyle(symbol: feed.team(for: occurrence)?.symbol)
     }
 
     /// My own photo can still be only in memory — the upload lags the pick,
@@ -62,14 +155,14 @@ struct EventDetailView: View {
     /// Nil only for a guest. A player can open their own sheet and read the
     /// anonymous group average; self-rating is prevented by the submitter.
     private func ratingLoader(for member: FeedMember) -> (@MainActor () async throws -> PlayerRatingSummary)? {
-        guard member.userId != nil else { return nil }
+        guard lineupSportStyle.usesFootballFeatures, member.userId != nil else { return nil }
         return { try await feed.playerRating(for: member) }
     }
 
     private func ratingSubmitter(
         for member: FeedMember
     ) -> (@MainActor (PlayerRatingScores) async throws -> SubmitRatingResult)? {
-        guard feed.canRate(member) else { return nil }
+        guard lineupSportStyle.usesFootballFeatures, feed.canRate(member) else { return nil }
         return { try await feed.submitPlayerRating($0, for: member) }
     }
 
@@ -97,7 +190,7 @@ struct EventDetailView: View {
         ZStack {
             GeometryReader { proxy in
                 ZStack(alignment: .top) {
-                    Image(artName)
+                    Image(exerciseArt: artName)
                         .resizable().aspectRatio(contentMode: .fill)
                         .frame(width: proxy.size.width, height: proxy.size.height).clipped()
 
@@ -106,7 +199,7 @@ struct EventDetailView: View {
                     // edge dissolves as a change in focus rather than a veil
                     // laid over the picture — and the mask is measured from the
                     // panel's live position, so the frost travels with it.
-                    Image(artName)
+                    Image(exerciseArt: artName)
                         .resizable().aspectRatio(contentMode: .fill)
                         .frame(width: proxy.size.width, height: proxy.size.height).clipped()
                         .blur(radius: 26, opaque: true)
@@ -156,6 +249,43 @@ struct EventDetailView: View {
             .padding(.top, 6)
             .accessibilityLabel("إغلاق")
         }
+        .overlay(alignment: .topTrailing) {
+            Button {
+                guard let teamID = feed.teamID(for: occurrence) else {
+                    Haptics.error()
+                    return
+                }
+                feed.focusTeam(for: occurrence)
+                Haptics.impact(.light)
+                withAnimation(reduceMotion ? .easeOut(duration: 0.18) : .smooth(duration: 0.36)) {
+                    exerciseDetailsTeamID = teamID
+                }
+            } label: {
+                // A page of listed details, which is literally what opens:
+                // the day and time, the pitch, the money, who is in it.
+                //
+                // Not «i», which in system language means "here is a note
+                // about this screen" rather than "here is a page of its
+                // particulars". And not a clipboard: in software that glyph
+                // belongs to copy and paste before it belongs to anything a
+                // coach carries.
+                Label("تفاصيل التمرين", systemImage: "list.bullet.rectangle.portrait")
+                    .labelStyle(.iconOnly)
+                    .font(.system(size: 18, weight: .semibold))
+                    .frame(
+                        width: TamrinControlMetrics.glassIconContent,
+                        height: TamrinControlMetrics.glassIconContent
+                    )
+            }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .controlSize(.regular)
+            .padding(.horizontal, 20)
+            .padding(.top, 6)
+            .accessibilityLabel("تفاصيل التمرين")
+            .accessibilityHint("يفتح قالب التمرين وأعضاءه وطرق الدفع")
+            .disabled(feed.teamID(for: occurrence) == nil)
+        }
         .overlay(alignment: .top) {
             if let reminderToast {
                 Label(reminderToast, systemImage: "checkmark.circle.fill")
@@ -167,6 +297,97 @@ struct EventDetailView: View {
                     .padding(.top, 8)
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .zIndex(20)
+            }
+        }
+        // Wallet leaves the selected card crisp while the stack behind it
+        // falls away. Blurring this whole tree also blurs SwiftUI's matched
+        // source snapshot during the flight, so the destination page supplies
+        // the soft backdrop while this tree only fades and darkens.
+        .opacity(!lineupBackdropVisible || reduceMotion ? 1 : 0)
+        .brightness(!lineupBackdropVisible || reduceMotion ? 0 : -0.08)
+        .allowsHitTesting(lineupCardPresentation == nil && exerciseDetailsTeamID == nil)
+        .overlay {
+            if let side = lineupCardPresentation {
+                LineupTeamPage(
+                    feed: feed,
+                    occurrence: occurrence,
+                    artName: artName,
+                    side: side,
+                    initialTeams: displayedLineup,
+                    transitionSource: reduceMotion ? nil : side,
+                    transitionNamespace: reduceMotion ? nil : lineupZoom,
+                    heroExpanded: lineupCardExpanded,
+                    backdropVisible: lineupBackdropVisible,
+                    detailsVisible: lineupDetailsVisible,
+                    interactionEnabled: lineupCardSettled,
+                    onTransitionReady: { startLineupCardTransition(for: side) },
+                    onRequestClose: closeLineupCard
+                ) { plan in
+                    finishLineup(with: plan)
+                }
+                .opacity(reduceMotion ? (lineupDetailsVisible ? 1 : 0) : 1)
+                .zIndex(100)
+            }
+        }
+        .overlay {
+            // This outer reader keeps the host's safe-area frame. The moving
+            // page inside expands to the physical display, but can still use
+            // the outer frame's global top edge to place its header correctly.
+            GeometryReader { hostProxy in
+                GeometryReader { proxy in
+                    // The page moves on the screen's physical x-axis. Keeping this
+                    // wrapper LTR prevents SwiftUI from mirroring the offset under
+                    // the app's Arabic layout; the page restores RTL for its own
+                    // content below.
+                    ZStack(alignment: .leading) {
+                        if let teamID = exerciseDetailsTeamID {
+                            ZStack {
+                                Rectangle()
+                                    .fill(.ultraThinMaterial)
+                                    .ignoresSafeArea()
+
+                                Color.black.opacity(0.3)
+                                    .ignoresSafeArea()
+
+                                ExerciseDetailsOverlayPage(
+                                    feed: feed,
+                                    occurrence: occurrence,
+                                    teamID: teamID,
+                                    screenTopInset: max(hostProxy.frame(in: .global).minY, 0)
+                                ) {
+                                    withAnimation(reduceMotion
+                                                  ? .easeOut(duration: 0.18)
+                                                  : .smooth(duration: 0.36)) {
+                                        exerciseDetailsTeamID = nil
+                                    }
+                                }
+                            }
+                            .frame(width: proxy.size.width, height: proxy.size.height)
+                            // Clip before the transition so every moving frame
+                            // already carries the iPhone's own rounded silhouette.
+                            .clipShape(
+                                ConcentricRectangle(
+                                    corners: .concentric,
+                                    isUniform: true
+                                )
+                            )
+                            .environment(\.colorScheme, .dark)
+                            .transition(
+                                reduceMotion
+                                    ? .opacity
+                                    : .offset(x: -max(proxy.size.width, 1), y: 0)
+                            )
+                            .zIndex(200)
+                        }
+                    }
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .environment(\.layoutDirection, .leftToRight)
+                }
+                // The host detail view is laid out inside the safe area. Expand
+                // this presented page to the physical screen before clipping it,
+                // so its rounded moving silhouette follows the device itself
+                // instead of looking like a sheet cropped below the status bar.
+                .ignoresSafeArea(.container)
             }
         }
         .environment(\.layoutDirection, .rightToLeft)
@@ -214,7 +435,8 @@ struct EventDetailView: View {
                 feed: feed,
                 occurrence: occurrence,
                 artName: artName,
-                reviewOnly: true
+                reviewOnly: true,
+                onSuccessDismiss: occurrence.requiresPaymentAction ? { dismiss() } : nil
             )
         }
         .task {
@@ -226,6 +448,7 @@ struct EventDetailView: View {
                !handledInitialRegistration,
                !feed.isCurrentTeamOwner,
                [.available, .declined].contains(feed.participationState(for: occurrence)),
+               !isHistorical,
                !occurrence.isCancelled {
                 handledInitialRegistration = true
                 await Task.yield()
@@ -237,6 +460,7 @@ struct EventDetailView: View {
                !feed.isCurrentTeamOwner,
                feed.participationState(for: occurrence) == .registered
                  || feed.participationState(for: occurrence) == .awaitingPayment,
+               !isHistorical,
                !occurrence.isCancelled {
                 handledInitialRegistration = true
                 await Task.yield()
@@ -249,6 +473,17 @@ struct EventDetailView: View {
                   !feed.isCurrentTeamOwner,
                   !occurrence.isCancelled else { return }
             handledInitialRegistration = true
+            if isHistorical {
+                // Roster refresh above can reveal that this payment was
+                // already declared on another device after Home built its
+                // card. Use the reconciled state instead of reopening a stale
+                // payment flow from the immutable launch value.
+                if showsOverduePaymentAction {
+                    await Task.yield()
+                    showPaymentReview = true
+                }
+                return
+            }
             let state = feed.participationState(for: occurrence)
             if state == .available || state == .declined {
                 await Task.yield()
@@ -292,6 +527,29 @@ struct EventDetailView: View {
                 }
                 .environment(\.colorScheme, .dark)
             }
+        }
+        .fullScreenCover(item: $lineupCoverPresentation) { source in
+            LineupFlowView(feed: feed, occurrence: occurrence, artName: artName) { plan in
+                finishLineup(with: plan)
+            }
+            .navigationTransition(.zoom(sourceID: source, in: lineupZoom))
+        }
+        .onChange(of: lineupCoverPresentation) { _, presented in
+            if presented == nil { presentPendingFeedback() }
+        }
+        .onChange(of: lineupCardPresentation) { _, presented in
+            if presented == nil { presentPendingFeedback() }
+        }
+        .sheet(item: $feedbackInFlight) { feature in
+            FeatureFeedbackSheet(feature: feature)
+        }
+        .onAppear {
+            if !occurrence.isCancelled, lineupPlan == nil {
+                lineupPlan = LineupStore.load(eventID: occurrence.id)
+            }
+        }
+        .onDisappear {
+            lineupTransitionTask?.cancel()
         }
         .sheet(isPresented: $showMemberReminder) {
             MemberReminderSheet { kind in
@@ -384,6 +642,10 @@ struct EventDetailView: View {
 
             if occurrence.isCancelled {
                 cancellationPanel
+            } else if showsOverduePaymentAction {
+                overduePaymentCTA
+            } else if isHistorical {
+                historicalStatusPanel
             } else if !feed.isCurrentTeamOwner {
                 participationCTA
             }
@@ -404,6 +666,13 @@ struct EventDetailView: View {
             if hasDirections { directionsButton }
 
             progressPanel
+
+            // Between the count and the names: the split is what the organizer
+            // does once he knows how many showed up, and before he reads the
+            // list person by person.
+            if showsLineup {
+                lineupSection
+            }
 
             Text("القائمة")
                 .font(TamrinFont.font(size: 15, weight: .medium))
@@ -505,13 +774,92 @@ struct EventDetailView: View {
         }
     }
 
+    private var isHistorical: Bool {
+        occurrence.isPast(relativeTo: .now)
+    }
+
+    /// The API metadata keeps the payment door open after the clock has ended.
+    /// Once declaration succeeds the roster becomes payment-pending before the
+    /// success sheet is dismissed, so the old detail settles back to read-only.
+    private var showsOverduePaymentAction: Bool {
+        guard isHistorical,
+              occurrence.requiresPaymentAction,
+              !feed.isCurrentTeamOwner else { return false }
+        let paymentRows = roster.filter { $0.paymentOwnerId == feed.currentUserID }
+        if paymentRows.contains(where: { $0.status == .awaitingPayment }) {
+            return true
+        }
+        if paymentRows.contains(where: { $0.status == .paymentPending }) {
+            return false
+        }
+        // Before the roster arrives, the server-computed occurrence flag is
+        // authoritative. This also covers a standalone guest debt where the
+        // payer never reserved a self seat.
+        return true
+    }
+
+    private var overduePaymentCTA: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("باقي دفع القطة", systemImage: "banknote.fill")
+                .font(TamrinFont.font(size: 15, weight: .bold))
+                .foregroundStyle(.white)
+
+            Text("انتهى الموعد، وتقدر تسدد قطتك الآن قبل الانتقال للموعد القادم.")
+                .font(TamrinFont.font(size: 13, weight: .regular))
+                .foregroundStyle(.white.opacity(0.68))
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button {
+                Haptics.impact(.light)
+                showPaymentReview = true
+            } label: {
+                Label("دفع القطة", systemImage: "banknote.fill")
+                    .font(TamrinFont.font(size: 16, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: TamrinControlMetrics.glassActionHeight)
+                    .contentShape(.capsule)
+            }
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.capsule)
+            .controlSize(.regular)
+            .tint(Self.moneyGreen)
+            .accessibilityHint("يفتح مبلغ القطة ووسائل الدفع المتاحة")
+        }
+        .padding(16)
+        .tamrinGlassCard()
+    }
+
+    private var historicalStatusPanel: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.72))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("تمرين سابق")
+                    .font(TamrinFont.font(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                Text("انتهى التسجيل والتعديل لهذا الموعد")
+                    .font(TamrinFont.font(size: 13, weight: .regular))
+                    .foregroundStyle(.white.opacity(0.62))
+            }
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .tamrinGlassCard()
+        .accessibilityElement(children: .combine)
+    }
+
     @ViewBuilder
     private var participationCTA: some View {
         if feed.participationState(for: occurrence) == .unavailable {
             Button {
                 Task { await feed.reloadRoster(occurrence.id) }
             } label: {
-                Label("تعذر التحقق من تسجيلك — حاول مجددًا", systemImage: "arrow.clockwise")
+                Label("تعذر التحقق من تسجيلك. حاول مجددًا", systemImage: "arrow.clockwise")
                     .font(TamrinFont.font(size: 15, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
@@ -804,6 +1152,262 @@ struct EventDetailView: View {
         .accessibilityHint("يفتح قائمة المعتذرين وأسبابهم")
     }
 
+    // MARK: - Lineup
+
+    /// Splitting the sides is the organizer's job, and only while the exercise
+    /// is still going ahead.
+    private var canBuildLineup: Bool {
+        feed.isCurrentTeamOwner && !occurrence.isCancelled && !isHistorical
+    }
+
+    /// Splitting the sides is the organizer's job; reading the result is
+    /// everyone's. Gating the whole section on ownership meant a player could
+    /// not see which side he was on — which is the one thing he opens this page
+    /// for once a split exists.
+    private var showsLineup: Bool {
+        !occurrence.isCancelled && (canBuildLineup || resolvedLineup != nil)
+    }
+
+    /// The saved split against today's roster. Names, positions and photos are
+    /// read fresh, so a player who left the exercise simply is not drawn.
+    private var resolvedLineup: LineupTeams? {
+        guard let lineupPlan else { return nil }
+        let teams = lineupPlan.resolve(
+            against: feed.lineupCandidates(
+                for: occurrence,
+                usesFootballPositions: lineupSportStyle.usesFootballFeatures
+            )
+        ).teams
+        return teams.allPlayers.isEmpty ? nil : teams
+    }
+
+    private var displayedLineup: LineupTeams? {
+        if lineupCardPresentation != nil, let lineupTransitionTeams {
+            return lineupTransitionTeams
+        }
+        return resolvedLineup
+    }
+
+    /// The side the signed-in person plays on, when he is in the split at all.
+    ///
+    /// Matched through the roster rather than against `currentUserID` directly:
+    /// a lineup player carries the registration row's id, not the account's,
+    /// and the two are only the same by coincidence in some rows.
+    private func mySide(in teams: LineupTeams) -> LineupSide? {
+        guard let mine = roster.first(where: { $0.userId == feed.currentUserID }) else { return nil }
+        return LineupSide.allCases.first { side in
+            teams[side].contains { $0.id == mine.id }
+        }
+    }
+
+    @ViewBuilder
+    private var lineupSection: some View {
+        Text("التشكيلة")
+            .font(TamrinFont.font(size: 15, weight: .medium))
+            .foregroundStyle(.white.opacity(0.75))
+            .padding(.top, 8)
+            .padding(.horizontal, 4)
+
+        if let teams = displayedLineup {
+            // Each side is one card you press to go in — one showing its pitch,
+            // the other resting under it. The level each side adds up to is the
+            // organizer's working number while he splits; here the cards are
+            // only the answer.
+            //
+            // The open one is the side this person is on. He came to see where
+            // he is playing, and having to open the other card to find himself
+            // is a step that exists for no one. The first side stays the
+            // default for anyone not in the split — an organizer who is not
+            // playing, or someone reading before he registers.
+            let openSide = mySide(in: teams) ?? .first
+            ForEach(LineupSide.allCases) { side in
+                let card = LineupTeamCard(
+                    side: side,
+                    players: teams[side],
+                    isExpanded: side == openSide,
+                    sportStyle: lineupSportStyle,
+                    onOpen: { openLineup(from: .card(side)) },
+                    showsLevel: false
+                )
+                .clipShape(TamrinCard.shape)
+
+                let isPresentedCard = lineupCardPresentation == side
+                card
+                    .matchedGeometryEffect(
+                        id: LineupZoomSource.card(side),
+                        in: lineupZoom,
+                        properties: .frame,
+                        anchor: .center,
+                        // Hand ownership to the always-visible overlay hero on
+                        // open, then back to this hidden anchor on close.
+                        isSource: !isPresentedCard || !lineupCardExpanded
+                    )
+                    // Keep the source's geometry alive without crossfading a
+                    // second card over the hero while either flight is moving.
+                    .opacity(isPresentedCard ? 0 : 1)
+                    // Wallet's stacked card is four points narrower per side
+                    // than the detail card, giving the flight a 1.023× breath.
+                    .padding(.horizontal, 4)
+            }
+        } else if canBuildLineup {
+            buildLineupButton
+        }
+    }
+
+    /// The lineup page closed. A saved split means the feature was used all
+    /// the way through, which is the moment worth asking about it.
+    private func finishLineup(with plan: LineupPlan?) {
+        lineupPlan = plan
+        guard plan != nil, FeatureFeedbackStore.shouldAsk(about: .lineup) else { return }
+        pendingFeedback = .lineup
+    }
+
+    private func presentPendingFeedback() {
+        guard let pending = pendingFeedback else { return }
+        pendingFeedback = nil
+        feedbackInFlight = pending
+    }
+
+    /// Opens the page out of the card that was pressed.
+    private func openLineup(from source: LineupZoomSource) {
+        Haptics.impact(.light)
+        lineupTransitionTask?.cancel()
+
+        switch source {
+        case .entry:
+            lineupTransitionTeams = nil
+            lineupCoverPresentation = source
+
+        case .card(let side):
+            lineupTransitionTeams = resolvedLineup
+            lineupCardExpanded = false
+            lineupBackdropVisible = false
+            lineupDetailsVisible = false
+            lineupCardSettled = false
+            lineupCardIsClosing = false
+            // Install an invisible destination first. Its measured geometry
+            // starts the hand-off once SwiftUI has actually laid it out.
+            lineupCardPresentation = side
+        }
+    }
+
+    /// `onGeometryChange` in the destination calls this only after its card
+    /// has a real frame. That makes the first matched frame deterministic even
+    /// when a device misses a display refresh under load.
+    private func startLineupCardTransition(for side: LineupSide) {
+        guard lineupCardPresentation == side,
+              !lineupCardExpanded,
+              !lineupCardIsClosing else { return }
+
+        lineupTransitionTask?.cancel()
+
+        if reduceMotion {
+            withAnimation(.easeOut(duration: 0.18)) {
+                lineupCardExpanded = true
+                lineupBackdropVisible = true
+                lineupDetailsVisible = true
+            }
+            lineupTransitionTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(190))
+                guard !Task.isCancelled,
+                      lineupCardPresentation == side,
+                      !lineupCardIsClosing else { return }
+                lineupCardSettled = true
+            }
+            return
+        }
+
+        // A fixed timing curve keeps the card's travel direct and predictable:
+        // no overshoot, damping, or second settling beat at either endpoint.
+        withAnimation(.easeInOut(duration: 0.32)) {
+            lineupCardExpanded = true
+        }
+        // The old page falls away on its own curve. An ease-in starts almost
+        // clear, keeping the selected card sharp at hand-off, then reaches a
+        // full fade over the destination's already-soft art at about 220 ms.
+        withAnimation(.easeIn(duration: 0.22)) {
+            lineupBackdropVisible = true
+        }
+
+        lineupTransitionTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled,
+                  lineupCardPresentation == side,
+                  !lineupCardIsClosing else { return }
+            withAnimation(.easeOut(duration: 0.20)) {
+                lineupDetailsVisible = true
+            }
+
+            // The header can be visible during the last part of the flight, but
+            // it must not swap teams underneath the moving hero.
+            try? await Task.sleep(for: .milliseconds(170))
+            guard !Task.isCancelled,
+                  lineupCardPresentation == side,
+                  !lineupCardIsClosing else { return }
+            lineupCardSettled = true
+        }
+    }
+
+    /// The list begins softening on the same frame as the card returns.
+    private func closeLineupCard() {
+        guard let side = lineupCardPresentation, !lineupCardIsClosing else { return }
+        lineupTransitionTask?.cancel()
+        lineupCardIsClosing = true
+        lineupCardSettled = false
+
+        if reduceMotion {
+            withAnimation(.easeOut(duration: 0.18)) {
+                lineupDetailsVisible = false
+                lineupCardExpanded = false
+                lineupBackdropVisible = false
+            }
+        } else {
+            withAnimation(.easeIn(duration: 0.14)) {
+                lineupDetailsVisible = false
+            }
+            withAnimation(.easeInOut(duration: 0.28)) {
+                lineupCardExpanded = false
+            }
+            withAnimation(.easeOut(duration: 0.20)) {
+                lineupBackdropVisible = false
+            }
+        }
+
+        // Keep the transparent page alive until the returning card has reached
+        // the source exactly; removing it earlier exposes the folded anchor.
+        lineupTransitionTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(reduceMotion ? 190 : 300))
+            guard !Task.isCancelled,
+                  lineupCardPresentation == side,
+                  !lineupCardExpanded else { return }
+            lineupCardPresentation = nil
+            lineupTransitionTeams = nil
+            lineupCardIsClosing = false
+        }
+    }
+
+    private var buildLineupButton: some View {
+        Button {
+            openLineup(from: .entry)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "shuffle")
+                    .font(.system(size: 15, weight: .semibold))
+                Text("قسّم الفريقين")
+                    .font(TamrinFont.font(size: 15, weight: .medium))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, minHeight: 56)
+            .padding(.horizontal, 14)
+            .tamrinGlassCard()
+            .contentShape(.rect)
+        }
+        .buttonStyle(SpringCardPressStyle())
+        .matchedTransitionSource(id: LineupZoomSource.entry, in: lineupZoom)
+        .accessibilityLabel("قسّم الفريقين")
+        .accessibilityHint("يفتح صفحة التشكيلة لتقسيم المسجلين على فريقين")
+    }
+
     private func declineReasonDisplay(for response: EventMemberResponseRecord) -> String {
         let customReason = response.reasonText?
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -937,7 +1541,10 @@ struct EventDetailView: View {
     /// Manual registration is a real seat, so it follows the same rules as a
     /// member's own: the exercise must be live and its list still open.
     private var canRegisterManually: Bool {
-        feed.isCurrentTeamOwner && occurrence.isPublished && !occurrence.isCancelled
+        feed.isCurrentTeamOwner
+            && occurrence.isPublished
+            && !occurrence.isCancelled
+            && !isHistorical
     }
 
     private func showReminderToast(_ message: String) {
@@ -1071,7 +1678,10 @@ struct EventDetailView: View {
 
     /// A reminder is only meaningful once the exercise is out and still live.
     private var canRemindMembers: Bool {
-        feed.isCurrentTeamOwner && occurrence.isPublished && !occurrence.isCancelled
+        feed.isCurrentTeamOwner
+            && occurrence.isPublished
+            && !occurrence.isCancelled
+            && !isHistorical
     }
 
     private var remindMembersButton: some View {
@@ -1119,8 +1729,10 @@ struct EventDetailView: View {
                 Button("تفاصيل اللاعب", systemImage: "info.circle") {
                     memberInDetails = member
                 }
-                Button("إزالة اللاعب من التمرين", systemImage: "person.badge.minus", role: .destructive) {
-                    memberAwaitingRemoval = member
+                if !isHistorical {
+                    Button("إزالة اللاعب من التمرين", systemImage: "person.badge.minus", role: .destructive) {
+                        memberAwaitingRemoval = member
+                    }
                 }
             } label: {
                 Image(systemName: "ellipsis")
@@ -1155,7 +1767,8 @@ struct EventDetailView: View {
     /// Only the organizer decides, once per payer — a follow-up request can
     /// carry several guest rows that share one transfer.
     private func showsPaymentReview(for member: FeedMember) -> Bool {
-        feed.isCurrentTeamOwner
+        !isHistorical
+            && feed.isCurrentTeamOwner
             && member.status == .paymentPending
             && isPrimaryPendingPaymentRow(member)
     }
@@ -1397,6 +2010,7 @@ struct RegistrationFlowSheet: View {
     var artName: String = "ExerciseArt1"
     var mode: Mode = .selfAndGuests
     var reviewOnly = false
+    var onSuccessDismiss: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @State private var step: Step
@@ -1428,13 +2042,15 @@ struct RegistrationFlowSheet: View {
         occurrence: FeedOccurrence,
         artName: String = "ExerciseArt1",
         mode: Mode = .selfAndGuests,
-        reviewOnly: Bool = false
+        reviewOnly: Bool = false,
+        onSuccessDismiss: (() -> Void)? = nil
     ) {
         self.feed = feed
         self.occurrence = occurrence
         self.artName = artName
         self.mode = mode
         self.reviewOnly = reviewOnly
+        self.onSuccessDismiss = onSuccessDismiss
         _step = State(initialValue: reviewOnly ? .paymentMethod : .selection)
         _guestNames = State(initialValue: mode == .selfAndGuests ? [] : [""])
         _showGuestSection = State(initialValue: mode != .selfAndGuests)
@@ -1927,7 +2543,9 @@ struct RegistrationFlowSheet: View {
                 // this is where its owner says the money is on its way.
                 if reviewOnly {
                     primaryButton(
-                        title: destination.provider == .cash ? "سأسدد في الملعب" : "حوّلت المبلغ",
+                        title: destination.provider == .cash
+                            ? (occurrence.isPast(relativeTo: .now) ? "سددت للمشرف" : "سأسدد في الملعب")
+                            : "حوّلت المبلغ",
                         color: destination.provider?.brandColor ?? Self.accent,
                         isLoading: submitting,
                         isEnabled: !submitting && destination.selectedMethod != nil
@@ -1975,6 +2593,7 @@ struct RegistrationFlowSheet: View {
 
             primaryButton(title: "تم", color: .white, foregroundColor: .black) {
                 dismiss()
+                onSuccessDismiss?()
             }
         }
     }
@@ -2021,7 +2640,9 @@ struct RegistrationFlowSheet: View {
     private var successSubtitle: String {
         if declaredPayment {
             return destination?.provider == .cash
-                ? "تسدد للمشرف في الملعب، وينتظر تأكيده"
+                ? (occurrence.isPast(relativeTo: .now)
+                    ? "سُجّل سدادك للمشرف، وينتظر تأكيده"
+                    : "تسدد للمشرف في الملعب، وينتظر تأكيده")
                 : "طلبك الآن بانتظار تأكيد وصول القطة من المشرف"
         }
         if isGuestRequest { return "أضيف الضيوف إلى قائمة التمرين" }

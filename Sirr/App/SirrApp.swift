@@ -19,6 +19,9 @@ struct SirrApp: App {
         WindowGroup {
             RootView()
                 .applyAppFont()
+                // Every zoom presentation reveals the window for a few frames.
+                // Unpainted, that window is white.
+                .tamrinWindowBackground()
                 // Anything that formats against the environment locale rather
                 // than passing one explicitly still has to land on 0123456789.
                 .environment(\.locale, .tamrin)
