@@ -17,6 +17,10 @@ private let manualPaymentLogger = Logger(
 enum ManualPaymentSubmissionResult {
     case submitted(destination: PaymentDestination, groupSize: Int, totalAmount: Double)
     case seatsFull
+    /// Every seat is taken on a session that closes at capacity. Distinct from
+    /// `seatsFull` because there is no queue to offer — the caller shows the
+    /// closed state instead of the waiting-list sheet.
+    case closedAtCapacity
     case alreadyJoined(PaymentStatus)
     case pendingGuestRequest
     case creatorMissingPaymentMethod
@@ -267,6 +271,9 @@ final class ManualPaymentService {
         case "seats_full":
             return .seatsFull
 
+        case "registration_closed_full":
+            return .closedAtCapacity
+
         case "already_joined":
             let status = PaymentStatus(rawValue: payload.paymentStatus ?? "confirmed") ?? .confirmed
             return .alreadyJoined(status)
@@ -296,10 +303,12 @@ final class ManualPaymentService {
         expectedDestination: PaymentDestination,
         withoutSelf: Bool = false
     ) async throws -> GuestRegistrationSubmissionResult {
-        if expectedDestination.status == .available,
-           expectedDestination.paymentMethodId == nil {
-            throw ManualPaymentServiceError.paymentMethodNotSelected
-        }
+        // No method is picked here any more. The seat is taken first and the
+        // money is declared later from «دفع القطة», so guests are registered
+        // the same way register_event_seat takes the member's own seat.
+        // get_event_guest_payment_destination only ever returns the list of
+        // methods and never a selected one, so guarding on it threw on every
+        // paid event before the sheet could reach the server.
 
         struct SubmissionPayload: Decodable {
             let status: String

@@ -364,6 +364,10 @@ begin
     raise exception 'FAIL: paid self registration returned %', v_result;
   end if;
 
+  -- Holding a seat is enough. Since pay-after-registering, a paid
+  -- registration sits at 'pending' until the organizer confirms the transfer,
+  -- and that is the state the app offers «سجّل معك أحد» in. Requiring
+  -- 'confirmed' here made the feature unreachable for every paid event.
   select count(*) into v_before
   from public.event_participants
   where event_id = v_paid_event_id;
@@ -374,15 +378,21 @@ begin
     p_expected_price_per_person => 100,
     p_payment_method_id => v_method_one_id
   );
-  if v_result->>'status' <> 'not_registered' then
-    raise exception 'FAIL: pending member added guests %', v_result;
+  if v_result->>'status' <> 'submitted' then
+    raise exception 'FAIL: pending member could not add guests %', v_result;
   end if;
   select count(*) into v_count
   from public.event_participants
   where event_id = v_paid_event_id;
-  if v_count <> v_before then
-    raise exception 'FAIL: pending-member guest request inserted rows';
+  if v_count <> v_before + 1 then
+    raise exception 'FAIL: pending-member guest request seated no one';
   end if;
+
+  -- Undo that batch so the assertions below keep the same preconditions they
+  -- were written against: one confirmed self seat and no open guest batch.
+  delete from public.event_participants
+  where event_id = v_paid_event_id
+    and guest_name = 'ضيف قبل التأكيد';
 
   perform pg_temp.set_auth('44000000-0000-0000-0000-000000000001');
   v_result := public.confirm_payment(
@@ -414,6 +424,9 @@ begin
   from public.event_participants
   where event_id = v_paid_event_id;
 
+  -- A method that the organizer has since withdrawn is no longer a reason to
+  -- refuse: registering a guest picks no method at all. The price is still
+  -- guarded, which the next case covers.
   v_result := public.register_event_guests(
     p_event_id => v_paid_event_id,
     p_guest_names => array['قديم'],
@@ -421,9 +434,11 @@ begin
     p_expected_price_per_person => 100,
     p_payment_method_id => v_method_one_id
   );
-  if v_result->>'status' <> 'event_terms_changed' then
-    raise exception 'FAIL: removed method was accepted %', v_result;
+  if v_result->>'status' <> 'submitted' then
+    raise exception 'FAIL: withdrawn method blocked a seat %', v_result;
   end if;
+  delete from public.event_participants
+  where event_id = v_paid_event_id and guest_name = 'قديم';
 
   v_result := public.register_event_guests(
     p_event_id => v_paid_event_id,
@@ -457,20 +472,23 @@ begin
     raise exception 'FAIL: paid guest submission %', v_result;
   end if;
 
+  -- Owing, but to nobody in particular yet. declare_event_payment is what
+  -- writes the destination onto these rows, together with the member's seat.
   select count(*) into v_count
   from public.event_participants
   where event_id = v_paid_event_id
     and user_id is null
     and added_by = '44000000-0000-0000-0000-000000000002'
     and payment_status = 'pending'
-    and payment_method_id = v_method_two_id
-    and payment_provider = 'barq'
-    and paid_to_number = '+966550000002'
+    and payment_declared_at is null
+    and payment_method_id is null
+    and payment_provider is null
+    and paid_to_number is null
     and paid_price_per_person = 100
     and not added_manually
     and not guest_only;
   if v_count <> 2 then
-    raise exception 'FAIL: paid guest snapshot rows';
+    raise exception 'FAIL: paid guest rows were snapshotted too early';
   end if;
 
   select count(*) into v_before
@@ -509,8 +527,8 @@ begin
   where event_id = v_paid_event_id
     and user_id = '44000000-0000-0000-0000-000000000001'
     and type = 'payment_submitted';
-  if v_count <> v_push_count_before + 1 then
-    raise exception 'FAIL: paid guest batch notification count';
+  if v_count <> v_push_count_before then
+    raise exception 'FAIL: adding guests announced a payment nobody declared';
   end if;
 
   -- Existing payment administration stays compatible: confirming by the
@@ -533,8 +551,10 @@ begin
     raise exception 'FAIL: existing confirm_payment missed guests';
   end if;
 
-  -- A paid event with no current destination returns the same explicit status
-  -- from both the read and write surfaces.
+  -- The read and write surfaces deliberately differ now. Asking where to pay
+  -- still reports that the organizer has added nowhere to pay; taking a seat
+  -- no longer needs an answer to that question, so it succeeds anyway — the
+  -- same way register_event_seat seats the member on such an event.
   update public.events
   set payment_method_id = null,
       payment_method_ids = '{}'::uuid[]
@@ -549,8 +569,8 @@ begin
     p_guest_names => array['ضيف بلا وسيلة'],
     p_expected_price_per_person => 100
   );
-  if v_result->>'status' <> 'payment_method_required' then
-    raise exception 'FAIL: missing payment method submission %', v_result;
+  if v_result->>'status' <> 'submitted' then
+    raise exception 'FAIL: a missing destination blocked a guest seat %', v_result;
   end if;
 
   -- guest_only is reserved for real guest rows; the schema refuses to mark a
