@@ -243,7 +243,20 @@ git commit -m "feat(payments): forgive an undeclared seat a day after kickoff"
 
 **Interfaces:**
 - Consumes: nothing
-- Produces: `publish_recurring_event_internal(uuid, uuid)` keeps its signature; it simply no longer excludes anyone.
+- Produces: `publish_recurring_event_internal(uuid, uuid)` keeps its signature; it simply no longer excludes anyone. `invite_after_recurring_debt_declaration` becomes unreachable and is dropped.
+
+**Corrected after the staging merge.** `20260830200000_drop_previous_payment_gate.sql`
+already lifted the *registration* half of this gate — `guard_event_registration_insert`
+no longer raises `Previous event payment is required`, and the suite already
+carries that inverted assertion. That migration describes itself as temporary
+and lists exactly what stays: `publish_recurring_event_internal` still withholds
+the next occurrence's invitation, and `invite_after_recurring_debt_declaration`
+still delivers it on declaration.
+
+This task removes that remaining half and makes the lift permanent. Because
+nothing is withheld any more, `invite_after_recurring_debt_declaration` has
+nothing left to deliver and is dropped with it. Do not re-touch
+`guard_event_registration_insert`; it is already correct.
 
 - [ ] **Step 1: Invert the existing test**
 
@@ -625,7 +638,15 @@ Expected: FAIL — `an owing member must still see the finished occurrence`.
 
 - [ ] **Step 3: Write the migration**
 
-Create `supabase/migrations/20260831130000_linger_unpaid_occurrence.sql`. Copy `get_my_feed` verbatim from `20260830140000_get_my_feed.sql` and widen its three time filters.
+Create `supabase/migrations/20260831130000_linger_unpaid_occurrence.sql`. Copy `get_my_feed` verbatim from **`20260830180000_get_my_feed_from_workspace_events.sql`** — not from `20260830140000_get_my_feed.sql`, which the staging merge superseded — and widen its time filters.
+
+**Corrected after the staging merge.** `20260830180000` rewrote `get_my_feed` to
+read through `get_workspace_events` / `get_workspace_past_events` instead of
+querying the shelf itself. Confirm where the time filter actually lives before
+editing: it may now sit in those two functions rather than in `get_my_feed`, in
+which case widen it there and leave `get_my_feed` alone. Both already carry the
+`payment_declared_at is null` condition, so the debt exception may be mostly
+present already — read them first and write only the difference.
 
 Each of the three currently reads:
 
