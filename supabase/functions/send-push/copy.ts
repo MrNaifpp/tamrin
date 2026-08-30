@@ -72,6 +72,11 @@ export function copyFor(
         title: "اكتمل العدد 🎉",
         body: `امتلأت مقاعد ${eventName}`,
       };
+    case "lineup_published":
+      return {
+        title: "نزلت التشكيلة 🏟️",
+        body: `طلعت تشكيلة ${eventName}. شوف فريقك ومركزك.`,
+      };
     case "seat_available":
       return {
         title: "توفر مقعد الآن 🎟️",
