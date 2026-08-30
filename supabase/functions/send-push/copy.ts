@@ -74,8 +74,8 @@ export function copyFor(
       };
     case "lineup_published":
       return {
-        title: "نزلت التشكيلة 🏟️",
-        body: `طلعت تشكيلة ${eventName}. شوف فريقك ومركزك.`,
+        title: "نزلت التشكيلة🔥",
+        body: "ادخل التطبيق وشف فريقك ومركزك",
       };
     case "seat_available":
       return {

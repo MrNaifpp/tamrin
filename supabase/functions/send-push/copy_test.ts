@@ -144,7 +144,7 @@ Deno.test("seat_available copy interpolates the event name", () => {
 Deno.test("lineup_published copy interpolates the event name", () => {
   const c = copyFor("lineup_published", "تمرين الخميس");
   assertEquals(c, {
-    title: "نزلت التشكيلة 🏟️",
-    body: "طلعت تشكيلة تمرين الخميس. شوف فريقك ومركزك.",
+    title: "نزلت التشكيلة🔥",
+    body: "ادخل التطبيق وشف فريقك ومركزك",
   });
 });
