@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "tamrin-web",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["scripts/serve-web.py"],
+      "port": 8788
+    }
+  ]
+}

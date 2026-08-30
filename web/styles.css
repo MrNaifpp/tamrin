@@ -1,0 +1,1591 @@
+/* The app's design system, transcribed.
+   Values come from Sirr/DesignSystem/DesignSystem.swift and the views that use
+   them, so a screen here should be measurable against the same screen on the
+   phone: TamrinCard is white 10% at radius 26, the poster card is radius 36,
+   a glass action is 40pt tall, a roster row is 72pt with a 40pt avatar. */
+
+@font-face {
+  font-family: 'Thmanyah Sans';
+  src: url('assets/fonts/ThmanyahSans-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Thmanyah Sans';
+  src: url('assets/fonts/ThmanyahSans-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Thmanyah Sans';
+  src: url('assets/fonts/ThmanyahSans-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  /* Surfaces (TamrinTheme). No surface is ever pure black in dark mode. */
+  --floor: #0a0a0a;          /* surfaceFloor — the drawer */
+  --page: #0f0f0f;           /* page, dark */
+  --sheet-dark: #1e1e1e;
+  --card-dark: #303030;
+  --ink: #141414;
+  --on-ink: #ffffff;
+
+  /* Light surfaces, for the sheets that follow the system appearance. */
+  --page-light: #f3f3f3;
+  --sheet-light: #f2f2f2;
+  --secondary-light: #eaeaea;
+  --card-light: #ffffff;
+
+  /* Accents */
+  --lime: #c2eb63;
+  --brand-green: #57ba78;
+  --money-green: #268f61;     /* moneyGreen — the one colour that moves money */
+  --accent-blue: #3378f5;     /* RegistrationFlowSheet.accent */
+  --danger: #ff453a;
+  --orange: #ff9f0a;
+
+  /* Glass (iOS 26 `.glass`, approximated with a translucent fill + blur) */
+  --glass: rgba(255, 255, 255, 0.1);       /* TamrinCard.fill */
+  --glass-strong: rgba(255, 255, 255, 0.16);
+  --glass-quiet: rgba(255, 255, 255, 0.08);
+  --glass-line: rgba(255, 255, 255, 0.14);
+
+  /* Metrics */
+  --card-radius: 26px;        /* TamrinCard.cornerRadius */
+  --poster-radius: 36px;
+  --action-height: 52px;      /* glassActionHeight + its glass inset */
+  --touch: 44px;              /* TamrinControlMetrics.touchTarget */
+  --row-height: 72px;         /* TamrinRowCard */
+  --avatar: 40px;
+  --shell: 430px;             /* one iPhone's worth of width on a desktop */
+  --page-pad: 20px;
+
+  /* ── Motion ───────────────────────────────────────────────────────────
+     The app's springs, transcribed. SwiftUI's spring(response:damping:) has
+     an exact position curve, and CSS `linear()` can carry it point for point
+     — so a drawer opens here on the same curve it opens on there, overshoot
+     and all, instead of on a hand-picked bezier that merely looks close. */
+  --spring: linear(0, 0.04, 0.134, 0.2529, 0.3776, 0.4967, 0.6036, 0.6956, 0.772,
+    0.8337, 0.8821, 0.9193, 0.9471, 0.9673, 0.9815, 0.9913, 0.9977, 1.0016,
+    1.0038, 1.0048, 1.005, 1.0048, 1.0043, 1.0037, 1.0031, 1.0025, 1.002);
+  --spring-dur: 0.45s;                       /* spring(0.35, 0.86) */
+
+  --press: linear(0, 0.0439, 0.1469, 0.2764, 0.4108, 0.5375, 0.6492, 0.7432,
+    0.8192, 0.8785, 0.9231, 0.9556, 0.9782, 0.9933, 1.0027, 1.008, 1.0105,
+    1.0111, 1.0106, 1.0094, 1.0079, 1.0065, 1.0051, 1.0038, 1.0028, 1.002, 1.0013);
+  --press-dur: 0.3s;                         /* spring(0.22, 0.82) */
+
+  --bouncy: linear(0, 0.0461, 0.1541, 0.2893, 0.429, 0.5596, 0.6736, 0.7683,
+    0.8437, 0.9012, 0.9434, 0.973, 0.9927, 1.0049, 1.0116, 1.0146, 1.0151,
+    1.0141, 1.0124, 1.0103, 1.0082, 1.0062, 1.0046, 1.0032, 1.0021, 1.0013, 1.0007);
+  --bouncy-dur: 0.47s;                       /* snappy(0.34, extraBounce 0.08) */
+
+  /* `.smooth` — no overshoot at all, for anything that changes in place:
+     a step in a sheet, an error arriving, a number going up. */
+  --smooth: cubic-bezier(0.32, 0.72, 0, 1);
+  --smooth-dur: 0.3s;
+  --enter-dur: 0.42s;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--floor);
+  color: #fff;
+  overscroll-behavior-y: none;
+}
+
+body {
+  font-family: 'Thmanyah Sans', 'SF Arabic', system-ui, sans-serif;
+  font-size: 17px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100dvh;
+
+  /* Thmanyah's identity alternates — the sweeping مرسلة forms. The browser
+     shapes Arabic and applies kerning, ligatures and marks on its own, exactly
+     as CoreText does, but `ss01` is a brand choice and has to be asked for.
+     TamrinFont turns it on for every glyph the app draws (and asserts the face
+     never falls back), so it is on for every glyph here too. */
+  font-feature-settings: 'ss01' 1;
+  font-kerning: normal;
+  font-variant-ligatures: common-ligatures contextual;
+}
+
+/* Inputs and buttons do not inherit font features from body on their own. */
+button, input, textarea, select {
+  font-feature-settings: inherit;
+  font-kerning: inherit;
+  font-variant-ligatures: inherit;
+}
+
+button, input, textarea {
+  font: inherit;
+  color: inherit;
+  border: 0;
+  background: none;
+}
+button { cursor: pointer; }
+a { color: inherit; }
+img { display: block; }
+
+/* The phone-shaped column every screen lives in. */
+.app {
+  position: relative;
+  width: 100%;
+  max-width: var(--shell);
+  margin: 0 auto;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: var(--page);
+}
+@media (min-width: 480px) {
+  body { background: #050505; }
+  .app { box-shadow: 0 0 60px rgba(0, 0, 0, 0.6); }
+}
+
+/* ── Home ─────────────────────────────────────────────────────────────── */
+
+/* HomeArtBackdrop: the current card's artwork, blurred and dimmed. */
+.home {
+  position: relative;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  isolation: isolate;
+}
+.home-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  background: #252525;
+  max-width: var(--shell);
+  margin: 0 auto;
+}
+.home-backdrop img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.22);
+  filter: blur(58px);
+}
+.home-backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.46);
+}
+
+.home-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: 8px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.home-topbar { display: flex; align-items: center; gap: 8px; }
+.home-section {
+  font-size: 16px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.72);
+  padding: 0 6px;
+}
+
+/* Glass chrome: circle button, capsule pill, action row. */
+.glass, .glass-pill, .glass-circle {
+  background: var(--glass-strong);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border: 0.5px solid var(--glass-line);
+  color: #fff;
+  transition: transform 0.14s ease, opacity 0.14s ease;
+}
+.glass-circle {
+  width: var(--touch);
+  height: var(--touch);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.glass-pill {
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  height: var(--touch);
+  padding: 0 14px;
+  font-size: 17px;
+  font-weight: 500;
+  /* Hugs its label like the app's: it sits beside ☰ as one control pair, and
+     the profile disc is pushed away by the spacer — not by this button
+     stretching across the bar. */
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: calc(100% - 108px);
+}
+.glass-circle:active, .glass-pill:active { transform: scale(0.94); }
+.glass-pill .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.glass-pill .chev { opacity: 0.6; font-size: 13px; }
+
+.avatar-button {
+  width: var(--touch);
+  height: var(--touch);
+  border-radius: 50%;
+  overflow: hidden;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 700;
+}
+.avatar-button img { width: 100%; height: 100%; object-fit: cover; }
+
+/* The poster stack. Each card is a screenful minus 64, and snaps. */
+.poster-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  padding: 0 var(--page-pad) 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 110px;
+  scrollbar-width: none;
+}
+.poster-scroll::-webkit-scrollbar { display: none; }
+
+.poster {
+  position: relative;
+  flex: 0 0 auto;
+  /* Container − 64, the app's measurement: the first card rests with that
+     much page showing beneath it, which is what makes the stack read as a
+     stack rather than a full-bleed screen. */
+  height: calc(100% - 64px);
+  min-height: 320px;
+  border-radius: var(--poster-radius);
+  overflow: hidden;
+  scroll-snap-align: start;
+  background: #1a1a1a;
+  text-align: center;
+  display: block;
+  width: 100%;
+  padding: 0;
+  transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.poster:active { transform: scale(0.985); }
+.poster > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.poster-foot {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  padding: 72px 24px 56px;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  isolation: isolate;
+}
+/* ultraThinMaterial, masked so it dissolves in from the middle of the block —
+   the artwork stays readable above it and the text stays readable on it. */
+.poster-foot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.14) 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.55) 50%, #000 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.55) 50%, #000 100%);
+}
+.poster-foot.has-actions { padding-bottom: 136px; }
+.poster-title {
+  font-size: 27px;
+  font-weight: 700;
+  line-height: 1.22;
+  margin: 0;
+  /* The phone shrinks a long title to fit one line. The web has no such
+     control, so a long title wraps rather than losing its end. */
+  text-wrap: balance;
+}
+.poster-when { font-size: 15px; font-weight: 500; opacity: 0.82; }
+.poster-meta { font-size: 12px; opacity: 0.68; }
+.poster-skipped {
+  align-self: center;
+  background: rgba(255, 59, 48, 0.85);
+  border-radius: 999px;
+  padding: 6px 13px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* The card's own action bar — the member's two decisions. */
+.poster-actions {
+  position: absolute;
+  inset-inline: 16px;
+  bottom: 16px;
+  display: flex;
+  border-radius: 28px;
+  padding: 7px 6px;
+  background: rgba(28, 28, 28, 0.62);
+  backdrop-filter: blur(22px) saturate(1.3);
+  -webkit-backdrop-filter: blur(22px) saturate(1.3);
+}
+.poster-action {
+  flex: 1;
+  min-height: 66px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+.poster-action:disabled { cursor: default; }
+.poster-action.is-disabled { opacity: 0.42; }
+.poster-action .mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+}
+.poster-action .mark.primary { background: var(--lime); color: #17250a; }
+.poster-action .mark.status { background: var(--lime); color: #17250a; }
+.poster-action .mark.destructive { background: rgba(255, 255, 255, 0.28); color: #fff; }
+.poster-action .mark.secondary { background: rgba(255, 255, 255, 0.2); color: #fff; }
+
+.scroll-hint {
+  position: absolute;
+  z-index: 4;
+  inset-inline: 0;
+  bottom: 10px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 22px;
+  animation: hint 1.05s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+@keyframes hint { from { transform: translateY(-3px); } to { transform: translateY(4px); } }
+
+/* EmptyScheduleCard */
+.empty-card {
+  margin: 0 var(--page-pad);
+  border-radius: var(--poster-radius);
+  background: #303030;
+  min-height: 60dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 13px;
+  text-align: center;
+  padding: 24px;
+}
+.empty-card .glyph {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+}
+.empty-card h2 { font-size: 17px; font-weight: 500; margin: 0; }
+.empty-card p { font-size: 15px; margin: 0; color: rgba(255, 255, 255, 0.6); }
+
+/* ── Drawer (TeamSideMenu) ────────────────────────────────────────────── */
+
+/* The page itself moves: the drawer is revealed by pushing the screen aside,
+   clipped to the device's own silhouette, exactly as the app does it. */
+.app > .home,
+.app > .event {
+  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), border-radius 0.32s ease;
+  will-change: transform;
+}
+.app.menu-open > .home {
+  transform: translateX(calc(-1 * min(300px, 82vw)));
+  border-radius: 28px;
+  overflow: hidden;
+  box-shadow: 10px 0 21px rgba(0, 0, 0, 0.25);
+}
+
+.drawer-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: rgba(0, 0, 0, 0.62);
+  max-width: var(--shell);
+  margin: 0 auto;
+  animation: fade 0.2s ease;
+}
+.drawer {
+  position: fixed;
+  inset-block: 0;
+  z-index: 31;
+  width: min(300px, 82vw);
+  background: var(--floor);
+  display: flex;
+  flex-direction: column;
+  padding: 62px 12px 30px;
+  animation: drawer-in 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* The drawer is pinned to the physical right, like the app's. */
+.drawer { right: max(0px, calc(50vw - var(--shell) / 2)); }
+@media (max-width: 480px) { .drawer { right: 0; } }
+@keyframes drawer-in { from { transform: translateX(24%); opacity: 0.4; } }
+@keyframes fade { from { opacity: 0; } }
+
+.drawer-header { padding: 0 6px 18px; }
+.drawer-header h2 { margin: 0; font-size: 22px; font-weight: 700; }
+.drawer-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  scrollbar-width: none;
+}
+.drawer-list::-webkit-scrollbar { display: none; }
+
+.team-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 10px;
+  min-height: 64px;
+  border-radius: 18px;
+  width: 100%;
+  text-align: start;
+  color: #fff;
+}
+.team-row[aria-current='true'] { background: rgba(255, 255, 255, 0.105); }
+.team-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  overflow: hidden;
+}
+.team-row .name { font-size: 16px; font-weight: 500; }
+.team-row[aria-current='true'] .name { font-weight: 700; }
+.team-row .count { font-size: 11px; color: rgba(255, 255, 255, 0.52); }
+
+.account-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  height: 62px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--glass-strong);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  width: 100%;
+  text-align: start;
+  color: #fff;
+  margin-top: 10px;
+}
+.account-row .name { font-size: 15px; font-weight: 700; }
+.account-row .sub { font-size: 11px; color: rgba(255, 255, 255, 0.55); }
+.account-row .pencil {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+
+/* ── Event page ───────────────────────────────────────────────────────── */
+
+.event {
+  position: relative;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  --fade-start: 240px;
+  --fade-end: 390px;
+}
+.event-art { view-transition-name: event-art; }
+.event-art, .event-art-blur {
+  position: fixed;
+  inset: 0;
+  max-width: var(--shell);
+  margin: 0 auto;
+  z-index: 0;
+}
+.event-art img, .event-art-blur img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.event-art-blur img { filter: blur(26px); transform: scale(1.06); }
+/* Sharp above the panel, dissolving into frost over 150px — the app's
+   panelMask, expressed as the blurred layer's own mask. */
+.event-art-blur {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, transparent var(--fade-start, 240px), #000 var(--fade-end, 390px), #000 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, transparent var(--fade-start, 240px), #000 var(--fade-end, 390px), #000 100%);
+}
+.event-shade {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  max-width: var(--shell);
+  margin: 0 auto;
+  background: linear-gradient(to bottom,
+    rgba(0, 0, 0, 0.32) 0%,
+    rgba(0, 0, 0, 0.06) 26%,
+    rgba(0, 0, 0, 0.30) 55%,
+    rgba(0, 0, 0, 0.58) 100%);
+  pointer-events: none;
+}
+
+.event-back {
+  position: fixed;
+  top: 10px;
+  z-index: 6;
+  right: max(20px, calc(50vw - var(--shell) / 2 + 20px));
+}
+@media (max-width: 480px) { .event-back { right: 20px; } }
+
+.event-scroll { position: relative; z-index: 1; }
+.event-window { height: 300px; }
+.event-panel {
+  padding: 26px var(--page-pad) 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: calc(100dvh - 300px);
+}
+
+.hero { text-align: center; display: flex; flex-direction: column; gap: 7px; padding-bottom: 6px; }
+.hero h1 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+.hero .when {
+  font-size: 15px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.82);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.hero .skipped {
+  align-self: center;
+  background: rgba(255, 59, 48, 0.85);
+  border-radius: 999px;
+  padding: 6px 13px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* The app's action shapes: a filled capsule for the one thing to do, glass
+   capsules for everything beside it. */
+.action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: var(--action-height);
+  border-radius: 999px;
+  font-size: 16px;
+  font-weight: 700;
+  transition: transform 0.14s ease, opacity 0.14s ease;
+}
+.action:active:not(:disabled) { transform: scale(0.98); }
+.action:disabled {
+  cursor: default;
+  /* The app greys a control it cannot yet act on rather than dimming the whole
+     capsule, so the label stays readable while the button reads as inert. */
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.4);
+}
+.sheet-light .action:disabled { background: rgba(0, 0, 0, 0.08); color: rgba(0, 0, 0, 0.35); }
+.action-prominent { background: rgba(255, 255, 255, 0.94); color: var(--ink); }
+.action-money { background: var(--money-green); color: #fff; }
+.action-blue { background: var(--accent-blue); color: #fff; }
+.action-glass {
+  background: var(--glass-strong);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border: 0.5px solid var(--glass-line);
+  color: #fff;
+  font-size: 15px;
+}
+.action-quiet { background: var(--glass-quiet); color: rgba(255, 255, 255, 0.55); }
+.action-danger { background: rgba(255, 69, 58, 0.12); color: var(--danger); font-size: 13px; height: 42px; }
+
+/* A state, not a button: waiting on the organizer, or settled. */
+.state-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--action-height);
+  padding: 0 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* «مكانك محفوظ … اعتذر» */
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: var(--action-height);
+  padding: 0 18px;
+  border-radius: 999px;
+  background: var(--glass-strong);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 0.5px solid var(--glass-line);
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+}
+.status-row .leave { color: var(--danger); font-size: 13px; font-weight: 500; margin-inline-start: auto; }
+.dot-check {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  flex: 0 0 auto;
+}
+.dot-lime { background: var(--lime); color: #17250a; }
+.dot-green { background: var(--money-green); color: #fff; }
+.dot-orange { background: var(--orange); color: #3a2500; }
+
+.card {
+  background: var(--glass);
+  border-radius: var(--card-radius);
+  padding: 16px;
+}
+
+.link-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0 18px;
+  height: 56px;
+  border-radius: 999px;
+  background: var(--glass);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 500;
+}
+.link-row .chev { margin-inline-start: auto; opacity: 0.5; font-size: 14px; }
+.link-row, .action, a.action { text-decoration: none; }
+
+.progress-head { display: flex; align-items: center; justify-content: space-between; }
+.progress-head .label { font-size: 15px; font-weight: 500; }
+.progress-head .value { font-size: 15px; font-weight: 700; }
+.progress-track {
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.24);
+  margin-top: 12px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: #fff;
+  transition: width 0.3s ease;
+}
+.progress-note { font-size: 12px; font-weight: 500; margin-top: 8px; }
+.progress-note.waiting { color: var(--orange); }
+.progress-note.closed { color: rgba(255, 255, 255, 0.5); }
+
+.section-label {
+  font-size: 15px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.75);
+  padding: 8px 4px 0;
+}
+.section-hint {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+  padding: 0 4px;
+}
+
+/* TamrinRowCard: 72pt tall, 40pt circle, title over an optional second line. */
+.row-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--row-height);
+  padding: 16px;
+  border-radius: var(--card-radius);
+  background: var(--glass);
+  width: 100%;
+  text-align: start;
+  color: #fff;
+}
+.row-card .title { font-size: 17px; font-weight: 500; }
+.row-card .sub { font-size: 13px; color: rgba(255, 255, 255, 0.6); }
+.row-stack { display: flex; flex-direction: column; gap: 8px; }
+
+.member-avatar {
+  width: var(--avatar);
+  height: var(--avatar);
+  border-radius: 50%;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.28);
+  color: #fff;
+  font-weight: 700;
+  font-size: 17px;
+  overflow: hidden;
+}
+.member-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.queue-number { color: var(--orange); font-weight: 700; font-size: 13px; }
+
+.empty-roster {
+  text-align: center;
+  padding: 22px;
+  border-radius: var(--card-radius);
+  background: var(--glass);
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 15px;
+}
+
+.grow { flex: 1; min-width: 0; }
+.hstack { display: flex; align-items: center; gap: 10px; }
+.vstack { display: flex; flex-direction: column; gap: 10px; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Toast (the app's floating chrome capsule) */
+.toast {
+  position: fixed;
+  top: 8px;
+  inset-inline: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.toast span {
+  background: rgba(28, 28, 28, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  color: #fff;
+  border-radius: 999px;
+  padding: 11px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  max-width: 88%;
+  text-align: center;
+  animation: toast-in 0.22s ease;
+}
+@keyframes toast-in { from { transform: translateY(-14px); opacity: 0; } }
+
+/* ── Sheets ───────────────────────────────────────────────────────────── */
+
+.sheet-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.4);
+  animation: fade 0.2s ease;
+}
+.sheet {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 51;
+  max-width: var(--shell);
+  margin: 0 auto;
+  border-radius: 40px 40px 0 0;
+  padding: 8px 20px calc(20px + env(safe-area-inset-bottom));
+  max-height: 92dvh;
+  overflow-y: auto;
+  animation: sheet-in 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.sheet-dark { background: var(--sheet-dark); color: #fff; }
+.sheet-light { background: var(--sheet-light); color: var(--ink); }
+@keyframes sheet-in { from { transform: translateY(30px); opacity: 0.6; } }
+
+.sheet-grabber {
+  width: 40px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.3);
+  margin: 0 auto 6px;
+}
+.sheet-light .sheet-grabber { background: rgba(0, 0, 0, 0.2); }
+
+.sheet-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  margin-bottom: 10px;
+}
+.sheet-bar h2 {
+  flex: 1;
+  text-align: center;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+.sheet-bar .sub {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  opacity: 0.6;
+  margin-top: 2px;
+}
+.sheet-bar button {
+  min-width: 44px;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 500;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.12);
+}
+.sheet-light .sheet-bar button { background: rgba(0, 0, 0, 0.06); }
+.sheet-bar button.plain { background: none; }
+
+/* Sheet contents share the app's card + capsule shapes, in the sheet's own
+   surface rather than glass over artwork. */
+.sheet-dark .sheet-card { background: #3a3a3a; }
+.sheet-light .sheet-card { background: var(--card-light); }
+.sheet-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--row-height);
+  padding: 16px;
+  border-radius: var(--card-radius);
+  width: 100%;
+  text-align: start;
+  color: inherit;
+}
+.sheet-card .title { font-size: 17px; font-weight: 500; }
+.sheet-card .sub { font-size: 13px; opacity: 0.6; }
+.sheet-dark .sheet-card .member-avatar { background: rgba(255, 255, 255, 0.28); }
+.sheet-light .sheet-card .member-avatar { background: rgba(0, 0, 0, 0.1); color: var(--ink); }
+
+.pick-circle {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  flex: 0 0 auto;
+}
+.pick-circle.on {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.sheet-quiet-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 56px;
+  border-radius: var(--card-radius);
+  font-size: 15px;
+  font-weight: 500;
+  width: 100%;
+  color: inherit;
+}
+.sheet-dark .sheet-quiet-row { background: rgba(255, 255, 255, 0.1); }
+.sheet-light .sheet-quiet-row { background: rgba(0, 0, 0, 0.05); }
+
+.guest-field {
+  height: 48px;
+  border-radius: 999px;
+  padding: 0 16px;
+  width: 100%;
+  font-size: 15px;
+  font-weight: 500;
+  outline: none;
+}
+.sheet-dark .guest-field { background: rgba(255, 255, 255, 0.08); color: #fff; }
+.sheet-light .guest-field { background: var(--card-light); color: var(--ink); }
+.guest-remove {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 69, 58, 0.12);
+  color: var(--danger);
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+.guest-add {
+  height: 42px;
+  border-radius: 999px;
+  width: 100%;
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.amount-block { text-align: center; padding: 6px 0 2px; }
+.amount-block .value { font-size: 40px; font-weight: 700; line-height: 1.1; }
+.amount-block .for { font-size: 13px; opacity: 0.6; margin-top: 4px; }
+
+.pay-method {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: var(--card-radius);
+  text-align: start;
+  color: inherit;
+  border: 1.5px solid transparent;
+}
+.sheet-dark .pay-method { background: rgba(255, 255, 255, 0.1); }
+.sheet-light .pay-method { background: var(--card-light); }
+.pay-method[aria-pressed='true'] { border-color: var(--accent-blue); }
+.pay-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;      /* size * 0.25 */
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  flex: 0 0 auto;
+  font-size: 18px;
+  color: #fff;
+}
+.pay-logo img { width: 76%; height: 76%; object-fit: contain; }
+
+.copy-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.sheet-dark .copy-row { background: rgba(255, 255, 255, 0.08); }
+.sheet-light .copy-row { background: rgba(0, 0, 0, 0.05); }
+.copy-row .value { font-weight: 700; direction: ltr; unicode-bidi: isolate; margin-inline-start: auto; }
+.copy-row button { font-size: 13px; font-weight: 700; color: var(--accent-blue); }
+
+.done-mark { animation: enter-pop var(--bouncy-dur) var(--bouncy) both; }
+.done-mark {
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 52px;
+  margin: 10px auto 18px;
+}
+.done-title { text-align: center; font-size: 22px; font-weight: 700; }
+.done-sub { text-align: center; font-size: 15px; opacity: 0.65; margin-top: 4px; margin-bottom: 20px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  flex: 1 1 88px;
+}
+.sheet-dark .chip { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.sheet-light .chip { background: var(--secondary-light); color: var(--ink); }
+.chip[aria-pressed='true'] { background: var(--accent-blue); color: #fff; }
+
+.field-label { font-size: 13px; font-weight: 500; opacity: 0.6; margin-bottom: 8px; display: block; }
+.text-field {
+  height: 56px;
+  border-radius: 32px;
+  padding: 0 20px;
+  width: 100%;
+  font-size: 18px;
+  font-weight: 700;
+  outline: none;
+}
+.sheet-light .text-field, .light-page .text-field { background: var(--secondary-light); color: var(--ink); }
+.sheet-dark .text-field { background: rgba(255, 255, 255, 0.1); color: #fff; }
+
+.notice {
+  border-radius: 18px;
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.notice-error { background: rgba(255, 69, 58, 0.14); color: #ff8078; }
+.notice-info { background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.75); }
+.sheet-light .notice-error { background: rgba(215, 45, 35, 0.1); color: #b3271c; }
+.sheet-light .notice-info { background: rgba(0, 0, 0, 0.05); color: #555; }
+
+/* ── Auth (LoginOnbord / LoginView / LoginOTPView / SignupView) ────────── */
+
+.light-page {
+  min-height: 100dvh;
+  background: #f8f8f7;
+  color: #333;
+  display: flex;
+  flex-direction: column;
+}
+.onbord-hero {
+  position: relative;
+  height: 65dvh;
+  border-radius: 0 0 32px 32px;
+  background: linear-gradient(to bottom, #d9f0e1, #f5f7f5);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.onbord-hero .ball {
+  position: absolute;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+}
+.onbord-copy { text-align: center; padding-bottom: 24px; }
+.onbord-copy .kicker { font-size: 15px; color: #737373; }
+.onbord-copy h1 { margin: 0; font-size: 28px; font-weight: 700; color: #000; line-height: 1.35; }
+.onbord-copy .green { color: #59b873; }
+.onbord-foot { flex: 1; display: flex; flex-direction: column; padding: 24px; gap: 16px; }
+.onbord-foot p { margin: 0 0 4px; text-align: center; color: rgba(0, 0, 0, 0.5); font-size: 17px; }
+.auth-button {
+  text-decoration: none;
+  min-height: 50px;
+  border-radius: 25px;
+  width: 100%;
+  font-size: 17px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.auth-dark { background: var(--ink); color: #fff; }
+.auth-light { background: #f2f2f2; color: #000; }
+.auth-button:disabled { opacity: 0.5; }
+
+.auth-page { padding: 16px 24px 24px; display: flex; flex-direction: column; gap: 24px; min-height: 100dvh; }
+.auth-avatar {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: #e0e0e0;
+  margin: 16px auto 0;
+  display: grid;
+  place-items: center;
+  color: #a6a6a6;
+  font-size: 44px;
+  overflow: hidden;
+}
+.auth-title { text-align: center; font-size: 20px; font-weight: 700; color: #333; margin: 0; }
+.auth-sub { text-align: center; font-size: 17px; color: #808080; margin: 0; padding: 0 8px; }
+.auth-field {
+  height: 56px;
+  border-radius: 32px;
+  background: #ebebeb;
+  padding: 0 18px;
+  width: 100%;
+  font-size: 17px;
+  color: #333;
+  outline: none;
+}
+.auth-field::placeholder { color: #999; }
+.auth-error { color: #d9342b; font-size: 13px; text-align: center; }
+.auth-quiet { color: #808080; font-size: 17px; text-align: center; }
+.auth-spacer { flex: 1; }
+
+.otp-box {
+  position: relative;
+  height: 64px;
+  border-radius: 16px;
+  background: #ebebeb;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  direction: ltr;
+}
+.otp-box input {
+  position: absolute;
+  inset: 0;
+  opacity: 0.02;
+  width: 100%;
+  height: 100%;
+  font-size: 28px;
+}
+.otp-slots { display: flex; width: 100%; }
+.otp-slot {
+  flex: 1;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  font-size: 28px;
+  font-weight: 500;
+  color: #333;
+}
+.otp-slot .dash { width: 6px; height: 6px; border-radius: 50%; background: #b3b3b3; }
+
+.center-pad { animation: enter-fade 0.3s var(--smooth) both; }
+.spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2.5px solid rgba(255, 255, 255, 0.2);
+  border-top-color: rgba(255, 255, 255, 0.8);
+  animation: spin 0.7s linear infinite;
+  margin: 0 auto;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.center-pad { padding: 80px 0; }
+
+/* SlideToConfirmButton — a seat given up is a deliberate act. */
+.slide-track {
+  position: relative;
+  height: 62px;
+  border-radius: 999px;
+  background: rgba(255, 69, 58, 0.16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  overflow: hidden;
+}
+.slide-label { font-size: 14px; font-weight: 700; color: var(--danger); pointer-events: none; }
+.slide-knob {
+  position: absolute;
+  inset-inline-start: 4px;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: var(--danger);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: grab;
+  touch-action: none;
+}
+.slide-knob:active { cursor: grabbing; }
+
+/* The account screen wears the app's sheet surface: off-white in light, a
+   raised grey in dark, with the same capsule field and position chips. */
+.settings-page {
+  min-height: 100dvh;
+  background: var(--sheet-light);
+  color: var(--ink);
+  padding: 10px 22px calc(24px + env(safe-area-inset-bottom));
+}
+.settings-page .sheet-bar button { background: rgba(0, 0, 0, 0.06); color: inherit; }
+.settings-page .sheet-bar button:disabled { opacity: 0.4; }
+.settings-body { display: flex; flex-direction: column; gap: 20px; padding-top: 12px; }
+.settings-page .field-label { color: rgba(0, 0, 0, 0.5); }
+.settings-page .text-field { background: var(--secondary-light); color: var(--ink); }
+.settings-page .chip { background: var(--secondary-light); color: var(--ink); }
+.settings-page .chip[aria-pressed='true'] { background: var(--accent-blue); color: #fff; }
+.settings-page .notice-info { background: rgba(0, 0, 0, 0.05); color: #555; }
+.settings-page .notice-error { background: rgba(215, 45, 35, 0.1); color: #b3271c; }
+.settings-page .member-avatar { background: var(--secondary-light); color: var(--ink); }
+
+.settings-avatar { position: relative; width: 88px; margin: 4px auto 0; }
+.settings-camera {
+  position: absolute;
+  inset-inline-end: -4px;
+  bottom: -2px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  border: 2px solid var(--sheet-light);
+  text-decoration: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .settings-page { background: var(--sheet-dark); color: #fff; }
+  .settings-page .sheet-bar button { background: rgba(255, 255, 255, 0.12); }
+  .settings-page .field-label { color: rgba(255, 255, 255, 0.6); }
+  .settings-page .text-field,
+  .settings-page .chip { background: rgba(255, 255, 255, 0.1); color: #fff; }
+  .settings-page .notice-info { background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.75); }
+  .settings-page .member-avatar { background: rgba(255, 255, 255, 0.16); color: #fff; }
+  .settings-camera { border-color: var(--sheet-dark); background: #fff; color: var(--ink); }
+}
+
+
+/* ── Team detail (TeamDetailView) ─────────────────────────────────────── */
+
+.team {
+  position: relative;
+  min-height: 100dvh;
+  background: #121212;
+  overflow: hidden;
+}
+/* The group's own colour, once, as a glow behind the badge. */
+.team-glow {
+  position: absolute;
+  top: -320px;
+  inset-inline: 0;
+  margin: 0 auto;
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  opacity: 0.14;
+  filter: blur(120px);
+  pointer-events: none;
+}
+
+.team-bar {
+  /* Fixed rather than sticky: the page scrolls with the window, and .app is a
+     clipping container, which sticky inside it cannot see past. The gradient
+     is what the app's transparent nav bar does — content fades under it
+     instead of colliding with it. */
+  position: fixed;
+  top: 0;
+  inset-inline: 0;
+  z-index: 5;
+  max-width: var(--shell);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px 14px;
+  background: linear-gradient(#121212 62%, rgba(18, 18, 18, 0));
+}
+.team-bar h2 {
+  flex: 1;
+  text-align: center;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.team-body {
+  position: relative;
+  padding: 72px 20px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.team-hero {
+  text-align: center;
+  padding: 10px 0 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.team-badge {
+  width: 78px;
+  height: 78px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 34px;
+}
+.team-hero h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.team-count { font-size: 14px; font-weight: 500; color: rgba(255, 255, 255, 0.6); margin-top: -10px; }
+
+.team-section { display: flex; flex-direction: column; gap: 12px; }
+.team-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.team-section-head h2 { margin: 0; font-size: 17px; font-weight: 700; }
+.team-section-head .caption { font-size: 13px; font-weight: 500; color: rgba(255, 255, 255, 0.55); min-width: 0; }
+.team-empty { margin: 0; font-size: 15px; color: rgba(255, 255, 255, 0.55); }
+
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.stat {
+  min-height: 92px;
+  border-radius: 20px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.stat-emphasised { background: rgba(255, 255, 255, 0.14); }
+.stat-icon { color: rgba(255, 255, 255, 0.6); display: block; height: 15px; }
+.stat-emphasised .stat-icon { color: rgba(255, 255, 255, 0.9); }
+.stat-value { font-size: 16px; font-weight: 700; }
+.stat-emphasised .stat-value { font-size: 19px; }
+.stat-title { font-size: 12px; color: rgba(255, 255, 255, 0.55); margin-top: -8px; }
+
+/* EventActionTile: the app's square-ish secondary action. */
+.tile {
+  min-height: 88px;
+  border-radius: var(--card-radius);
+  background: var(--glass);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  padding: 0 8px;
+  width: 100%;
+}
+
+.info-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 0 12px;
+  border-radius: var(--card-radius);
+  background: var(--glass);
+}
+.info-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--lime);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.info-row .label { font-size: 15px; font-weight: 500; color: rgba(255, 255, 255, 0.75); }
+.info-row .value { font-size: 15px; font-weight: 700; margin-inline-start: auto; }
+
+.crown { color: var(--lime); font-size: 15px; }
+
+
+/* ── Motion ───────────────────────────────────────────────────────────────
+   Nothing appears; everything arrives. Entrances rise a few points and fade
+   on the smooth curve, surfaces leave the way they came, and a screen change
+   is a view transition rather than a repaint. */
+
+/* Screen transitions. `data-nav` on the root says which way we are going, so
+   a push enters from the leading edge (the left, in Arabic) and a pop
+   reverses it — the same relationship the phone's navigation stack has. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.42s;
+  animation-timing-function: var(--smooth);
+}
+:root[data-nav='forward']::view-transition-old(root) {
+  animation-name: screen-out-forward;
+}
+:root[data-nav='forward']::view-transition-new(root) {
+  animation-name: screen-in-forward;
+}
+:root[data-nav='back']::view-transition-old(root) {
+  animation-name: screen-out-back;
+}
+:root[data-nav='back']::view-transition-new(root) {
+  animation-name: screen-in-back;
+}
+
+@keyframes screen-in-forward {
+  from { transform: translateX(-26%); opacity: 0.4; }
+}
+@keyframes screen-out-forward {
+  to { transform: translateX(10%); opacity: 0.5; }
+}
+@keyframes screen-in-back {
+  from { transform: translateX(14%); opacity: 0.5; }
+}
+@keyframes screen-out-back {
+  to { transform: translateX(-24%); opacity: 0.4; }
+}
+
+/* The poster card and the event's artwork share a name, so the card grows
+   into the page instead of being replaced by it — the app's zoom transition. */
+::view-transition-group(event-art) {
+  animation-duration: 0.5s;
+  animation-timing-function: var(--spring);
+}
+::view-transition-old(event-art),
+::view-transition-new(event-art) {
+  /* The two are different shapes; cross-fading them while the group morphs is
+     what keeps the corners from tearing. */
+  animation-duration: 0.34s;
+  animation-timing-function: var(--smooth);
+}
+
+/* Entrances. `--i` staggers a list without any of it being scripted. */
+@keyframes enter-rise {
+  from { opacity: 0; transform: translateY(10px); }
+}
+@keyframes enter-fade {
+  from { opacity: 0; }
+}
+@keyframes enter-pop {
+  from { opacity: 0; transform: scale(0.94); }
+}
+
+.enter {
+  animation: enter-rise var(--enter-dur) var(--smooth) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+.enter-fade {
+  animation: enter-fade var(--enter-dur) var(--smooth) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+.enter-pop {
+  animation: enter-pop var(--spring-dur) var(--spring) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+
+/* Presses. SpringCardPressStyle: 0.975 and a little dimmer, on its own spring. */
+.poster,
+.action,
+.row-card,
+.sheet-card,
+.pay-method,
+.team-row,
+.account-row,
+.glass-pill,
+.glass-circle,
+.chip,
+.tile,
+.poster-action,
+.status-row,
+.link-row {
+  transition:
+    transform var(--press-dur) var(--press),
+    opacity var(--press-dur) var(--press),
+    background-color var(--smooth-dur) var(--smooth),
+    border-color var(--smooth-dur) var(--smooth),
+    color var(--smooth-dur) var(--smooth);
+}
+.poster:active,
+.action:not(:disabled):active,
+.row-card:active,
+.sheet-card:active,
+.pay-method:active,
+.team-row:active,
+.account-row:active,
+.glass-pill:active,
+.glass-circle:active,
+.chip:active,
+.tile:active,
+.poster-action:not(:disabled):active,
+.status-row:active,
+.link-row:active {
+  transform: scale(0.975);
+  opacity: 0.88;
+}
+
+/* Surfaces leaving. The scrim fades, the sheet drops, the drawer slides back
+   under the page it pushed aside. */
+.sheet.is-closing {
+  animation: sheet-out 0.24s var(--smooth) both;
+}
+.sheet-scrim.is-closing,
+.drawer-scrim.is-closing {
+  animation: scrim-out 0.24s var(--smooth) both;
+}
+.drawer.is-closing {
+  animation: drawer-out 0.28s var(--smooth) both;
+}
+@keyframes sheet-out { to { transform: translateY(100%); } }
+@keyframes scrim-out { to { opacity: 0; } }
+@keyframes drawer-out { to { transform: translateX(24%); opacity: 0; } }
+
+/* The toast leaves the way it came in. */
+.toast span.is-closing { animation: toast-out 0.24s var(--smooth) both; }
+@keyframes toast-out { to { transform: translateY(-14px); opacity: 0; } }
+
+/* Anything that changes in place rather than arriving: a number going up, a
+   status swapping, an error appearing. */
+.change {
+  animation: change-in var(--smooth-dur) var(--smooth) both;
+}
+@keyframes change-in {
+  from { opacity: 0; transform: translateY(4px); }
+}
+
+/* The artwork behind Home cross-fades when the card in front changes, over
+   the half second the app gives it: the incoming picture fades in on top of
+   the one it replaces. */
+.home-backdrop img.is-front {
+  animation: enter-fade 0.5s ease-in-out both;
+}
+
+/* A picture fades up as it decodes instead of snapping into a card that is
+   already on screen. */
+.fade-img { opacity: 0; transition: opacity 0.4s var(--smooth); }
+.fade-img.is-loaded { opacity: 1; }
+
+/* Skeletons hand over rather than cut. */
+.skeleton { animation: shimmer 1.3s ease-in-out infinite, enter-fade 0.3s var(--smooth) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) { animation: none !important; }
+}

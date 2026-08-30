@@ -1,0 +1,4 @@
+# Netlify: every in-app path is served by the single-page shell, so
+# /event/<id> and /join/<code> — the links the iOS app shares — open the web
+# member view on any device that is not an iPhone.
+/*  /index.html  200
