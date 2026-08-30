@@ -589,6 +589,8 @@ struct EventDetailView: View {
                 seatNumber: seatNumber(of: member),
                 // A player's share and payment state are organizer-only.
                 showsPayment: feed.isCurrentTeamOwner,
+                loadRating: ratingLoader(for: member),
+                submitRating: ratingSubmitter(for: member),
                 registeredByName: registeredByName(for: member),
                 // A free exercise has nothing to chase, a guest or a manually
                 // seated player has no account to notify, and nobody needs to

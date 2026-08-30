@@ -201,6 +201,52 @@ begin
   end if;
 end $$;
 
+-- ============================================================
+-- Section 6: publishing tells the players, once.
+-- ============================================================
+do $$
+declare
+  f record;
+  v_pushes integer;
+begin
+  select * from pg_temp.fixture() into f;
+  perform pg_temp.set_auth('00000000-0000-0000-0000-000000000001');
+  perform public.save_event_lineup(f.e_id, array[f.p_owner], array[f.p_player], '{}'::jsonb);
+
+  select count(*) into v_pushes from public.push_outbox
+  where event_id = f.e_id and type = 'lineup_published';
+  if v_pushes <> 0 then
+    raise exception 'FAIL: saving a draft already announced the lineup';
+  end if;
+
+  perform public.publish_event_lineup(f.e_id);
+
+  select count(*) into v_pushes from public.push_outbox
+  where event_id = f.e_id and type = 'lineup_published';
+  if v_pushes <> 1 then
+    raise exception 'FAIL: publishing queued % notifications, expected one per seated player except the organizer', v_pushes;
+  end if;
+
+  -- The organizer does not hear about his own publish.
+  if exists (
+    select 1 from public.push_outbox
+    where event_id = f.e_id and type = 'lineup_published'
+      and user_id = '00000000-0000-0000-0000-000000000001'
+  ) then
+    raise exception 'FAIL: the organizer was notified of his own lineup';
+  end if;
+
+  -- A correction runs through publish again and must stay quiet.
+  perform public.save_event_lineup(f.e_id, array[f.p_player], array[f.p_owner], '{}'::jsonb);
+  perform public.publish_event_lineup(f.e_id);
+
+  select count(*) into v_pushes from public.push_outbox
+  where event_id = f.e_id and type = 'lineup_published';
+  if v_pushes <> 1 then
+    raise exception 'FAIL: correcting a published lineup announced it again (% total)', v_pushes;
+  end if;
+end $$;
+
 select 'event_lineups: all sections passed' as result;
 
 rollback;

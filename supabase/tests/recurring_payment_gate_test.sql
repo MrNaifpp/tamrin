@@ -241,15 +241,30 @@ begin
     raise exception 'FAIL: live feed exposed next occurrence before declaration: %', v_live;
   end if;
 
-  v_failed := false;
+  -- An undeclared debt no longer refuses the next seat. It was refusing on a
+  -- payment the organizer had merely not confirmed yet, and the way to clear it
+  -- was a button on a finished exercise, so a member who had paid could be shut
+  -- out with no visible way back in. The debt is still reported through
+  -- requires_payment_action above; it just no longer stands in the door.
+  -- An undeclared debt no longer refuses the seat. The refusal was lifted so
+  -- that members on builds which show the raw English error, and cannot reach
+  -- the declare button, are not locked out of booking.
+  --
+  -- Registered inside its own block and then rolled back by a sentinel, because
+  -- everything after this still needs the member unjoined: the other half of the
+  -- rule, the withheld invitation, can only be observed from someone who has not
+  -- taken a seat, and actually leaving one would wake the waitlist.
   begin
     v_result := public.register_event_seat(p_event_id => v_next_event_id);
-  exception when others then
-    v_failed := sqlerrm = 'Previous event payment is required';
+    raise exception 'REGISTRATION_PROBE_OK';
+  exception
+    when others then
+      if sqlerrm = 'Previous event payment is required' then
+        raise exception 'FAIL: an undeclared debt still blocks registration';
+      elsif sqlerrm <> 'REGISTRATION_PROBE_OK' then
+        raise exception 'FAIL: registration failed for another reason: %', sqlerrm;
+      end if;
   end;
-  if not v_failed then
-    raise exception 'FAIL: direct registration bypassed the recurring debt gate';
-  end if;
 
   select count(*) into v_count
   from json_array_elements(v_live) item

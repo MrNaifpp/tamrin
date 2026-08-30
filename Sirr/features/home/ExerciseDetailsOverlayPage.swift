@@ -17,6 +17,13 @@ struct ExerciseDetailsOverlayPage: View {
     @State private var memberInDetails: FeedTeamMember?
     @State private var showsTemplateEditor = false
 
+    /// False until the group's members and payment destinations have been
+    /// asked for. Home's launch request does not carry either, so before this
+    /// turns true the two sections below have nothing to show — and saying
+    /// «تعذر تحميل» then is a lie: nothing has been attempted yet.
+    @State private var hasLoadedGroupDetails = false
+    @State private var showsDeleteConfirm = false
+
     /// The editor refreshes HomeStore before it dismisses. Reading the event
     /// back by id keeps this still-present details page in sync instead of
     /// continuing to render the immutable navigation snapshot it opened with.
@@ -141,6 +148,20 @@ struct ExerciseDetailsOverlayPage: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             topBar.padding(.top, screenTopInset)
         }
+        .task {
+            await feed.loadGroupDetails(teamID)
+            hasLoadedGroupDetails = true
+        }
+        .alert("حذف «\(team?.name ?? "التمرين")»؟", isPresented: $showsDeleteConfirm) {
+            Button("حذف التمرين", role: .destructive) {
+                feed.deleteTeam(teamID)
+                onClose()
+            }
+            Button("تراجع", role: .cancel) {}
+        } message: {
+            Text("بيُحذف التمرين وكل مواعيده وأعضائه وطرق الدفع من عندك. تقدر تنشئ تمرينًا جديدًا أي وقت.")
+        }
+        // Pull still does the full refresh, occurrences and rosters included.
         .refreshable { await feed.loadTeamData(teamID) }
         .sheet(item: $memberInDetails) { member in
             let player = rosterShape(of: member)
@@ -180,22 +201,38 @@ struct ExerciseDetailsOverlayPage: View {
                 .foregroundStyle(.white)
 
             HStack {
-                if canEditTemplate {
-                    Button {
-                        Haptics.impact(.light)
-                        showsTemplateEditor = true
+                // Contextual actions live in an ellipsis menu, the same
+                // pattern the exercise's own page uses. Circular glass to match
+                // the close button opposite it rather than the capsule the lone
+                // edit button used to wear.
+                if isOwner {
+                    Menu {
+                        // A past occurrence is a receipt: there is no future
+                        // template left to change, so only the deletion stays.
+                        if canEditTemplate {
+                            Button("تعديل التمرين", systemImage: "pencil") {
+                                Haptics.impact(.light)
+                                showsTemplateEditor = true
+                            }
+                        }
+
+                        Button("حذف التمرين", systemImage: "trash", role: .destructive) {
+                            showsDeleteConfirm = true
+                        }
                     } label: {
-                        Text("تعديل")
-                            .font(TamrinFont.font(size: 15, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 17)
-                            .frame(height: TamrinControlMetrics.glassIconContent)
+                        Label("خيارات التمرين", systemImage: "ellipsis")
+                            .labelStyle(.iconOnly)
+                            .font(.system(size: 17, weight: .semibold))
+                            .frame(
+                                width: TamrinControlMetrics.glassIconContent,
+                                height: TamrinControlMetrics.glassIconContent
+                            )
                     }
                     .buttonStyle(.glass)
-                    .buttonBorderShape(.capsule)
+                    .buttonBorderShape(.circle)
                     .controlSize(.regular)
-                    .accessibilityLabel("تعديل قالب التمرين")
-                    .accessibilityHint("يفتح الاسم ونوع الرياضة وبقية تفاصيل القالب")
+                    .accessibilityLabel("خيارات التمرين")
+                    .accessibilityHint("تعديل التمرين أو حذفه")
                 }
 
                 Spacer(minLength: 0)
@@ -318,7 +355,9 @@ struct ExerciseDetailsOverlayPage: View {
             caption: members.isEmpty ? nil : members.count.counted(.member),
             showsContainer: false
         ) {
-            if members.isEmpty {
+            if members.isEmpty, !hasLoadedGroupDetails {
+                loadingRow("يجهّز قائمة الأعضاء…")
+            } else if members.isEmpty {
                 Text(memberCount > 0
                      ? "تعذر تحميل قائمة الأعضاء الآن. اسحب لتحديث الصفحة."
                      : "ما انضم أحد إلى التمرين بعد.")
@@ -367,6 +406,21 @@ struct ExerciseDetailsOverlayPage: View {
         }
     }
 
+    /// What a section shows while its data is still on its way. Deliberately
+    /// the same shape as the text it replaces, so the section does not change
+    /// height when the answer arrives.
+    private func loadingRow(_ title: String) -> some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+                .tint(.white.opacity(0.58))
+            Text(title)
+                .font(TamrinFont.subheadline)
+                .foregroundStyle(.white.opacity(0.58))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private var paymentMethodsSection: some View {
         ExerciseDetailsSection(title: "طرق الدفع", showsContainer: false) {
             if playerShare == 0 {
@@ -374,6 +428,9 @@ struct ExerciseDetailsOverlayPage: View {
                     .font(TamrinFont.subheadline)
                     .foregroundStyle(.white.opacity(0.68))
                     .frame(maxWidth: .infinity, alignment: .leading)
+            } else if paymentMethods.isEmpty, !hasLoadedGroupDetails,
+                      !currentOccurrence.paymentMethodIds.isEmpty {
+                loadingRow("يجهّز طريقة الدفع…")
             } else if paymentMethods.isEmpty {
                 Text(currentOccurrence.paymentMethodIds.isEmpty
                      ? "لا توجد طريقة دفع مرتبطة بهذا الموعد."

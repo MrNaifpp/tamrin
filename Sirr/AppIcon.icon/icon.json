@@ -1,48 +1,44 @@
 {
   "fill" : {
-    "automatic-gradient" : "extended-srgb:0.00000,0.53333,1.00000,1.00000"
+    "linear-gradient" : [
+      "srgb:0.27000,0.90000,0.32250,1.00000",
+      "display-p3:0.37302,0.70000,0.31500,1.00000"
+    ]
   },
   "groups" : [
     {
-      "blur-material" : 0.2,
+      "blend-mode" : "normal",
       "layers" : [
         {
-          "glass" : true,
-          "hidden" : false,
-          "image-name" : "Group 1171274777.png",
-          "name" : "Group 1171274777",
+          "image-name" : "Rectangle 11114173896.png",
+          "name" : "Rectangle 11114173896",
           "position" : {
             "scale" : 0.3,
             "translation-in-points" : [
-              65,
-              -15
+              50,
+              10
             ]
           }
-        }
-      ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.5
-      },
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.5
-      }
-    },
-    {
-      "layers" : [
+        },
         {
-          "image-name" : "Frame 2147225715.png",
-          "name" : "Frame 2147225715",
+          "image-name" : "Ellipse 5368.png",
+          "name" : "Ellipse 5368",
           "position" : {
-            "scale" : 0.34,
+            "scale" : 1.1500000000000001,
             "translation-in-points" : [
-              0,
-              0
+              -3,
+              98
             ]
           }
         }
       ],
+      "position" : {
+        "scale" : 1,
+        "translation-in-points" : [
+          10,
+          -20
+        ]
+      },
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0.5

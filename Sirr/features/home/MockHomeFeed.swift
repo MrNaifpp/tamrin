@@ -935,7 +935,7 @@ final class HomeStore {
                 onSelectWorkspace?(fixture.id)
             }
             #endif
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
         }
     }
 
@@ -1185,6 +1185,35 @@ final class HomeStore {
 
     /// Loads one workspace's events, members, synthesized plans, and
     /// participant rosters for the events shown on Home.
+    /// The group's member list and its payment destinations, and nothing else.
+    ///
+    /// Home's launch is one request now, and it carries occurrences and rosters
+    /// rather than a member list per group. The exercise details page is the
+    /// only screen that reads these two, so it asks for them when it opens
+    /// instead of making every launch pay for them. Before this ran, that page
+    /// showed «تعذر تحميل قائمة الأعضاء» on a group whose members had simply
+    /// never been fetched.
+    ///
+    /// loadTeamData still loads the same two as part of a full refresh; this is
+    /// the subset, so opening the page does not re-read every roster behind it.
+    func loadGroupDetails(_ id: UUID) async {
+        guard !isPreview, !isDebugMemberFixtureTeam(id) else { return }
+
+        if currentUserID.map({ ownerByTeam[id] == $0 }) ?? false {
+            if let methods = try? await ManualPaymentService.shared.getMyWorkspaceMethods(workspaceId: id) {
+                paymentMethodsByTeam[id] = methods
+            }
+        } else {
+            // Destination details are intentionally member-gated through the
+            // event RPC; members never receive the organizer's whole catalog.
+            paymentMethodsByTeam[id] = []
+        }
+
+        if let detail = try? await WorkspaceService.shared.getWorkspace(id: id) {
+            membersByTeam[id] = detail.members.map(mapMember)
+        }
+    }
+
     func loadTeamData(_ id: UUID) async {
         guard !isPreview, !isDebugMemberFixtureTeam(id) else { return }
         let isOwner = currentUserID.map { ownerByTeam[id] == $0 } ?? false
@@ -1271,7 +1300,7 @@ final class HomeStore {
             if rosterCache[eventId] == nil {
                 rosterLoadFailedEventIDs.insert(eventId)
             }
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
         }
     }
 
@@ -1301,7 +1330,7 @@ final class HomeStore {
         } catch {
             // Keep the last known event. A transient event refresh must not
             // hide the detail screen or discard the already loaded roster.
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
         }
     }
 
@@ -1322,7 +1351,7 @@ final class HomeStore {
             memberResponseRecordsByEvent[eventId] = try await EventService.shared
                 .getEventMemberResponses(eventId: eventId)
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
         }
     }
 
@@ -1411,7 +1440,7 @@ final class HomeStore {
             do {
                 if isOwner { try await WorkspaceService.shared.deleteWorkspace(id: id) }
                 else { try await WorkspaceService.shared.leaveWorkspace(id: id) }
-            } catch { errorMessage = error.localizedDescription }
+            } catch { errorMessage = ServerErrorMessage.arabic(for: error) }
             // Re-sync from the server either way — confirms the delete, or
             // restores the row if the server refused it.
             await refresh()
@@ -1480,7 +1509,7 @@ final class HomeStore {
             await loadSelectedTeamData()      // pick up the events just created
             return team
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
             if let workspace = createdWorkspace {
                 try? await WorkspaceService.shared.deleteWorkspace(id: workspace.id)
                 paymentMethodsByTeam[workspace.id] = nil
@@ -1496,7 +1525,7 @@ final class HomeStore {
         do {
             try await createEvents(from: [plan], startDate: Date(), in: selectedTeamID)
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
             throw error
         }
         await loadSelectedTeamData()
@@ -1555,7 +1584,7 @@ final class HomeStore {
                 policy: plan.capacityPolicy
             )
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
             await loadSelectedTeamData()
             throw error
         }
@@ -1667,7 +1696,7 @@ final class HomeStore {
                 plansByTeam[teamID, default: []].append(refreshedPlan)
             }
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
             throw error
         }
 
@@ -2194,7 +2223,7 @@ final class HomeStore {
             )
         } catch {
             membersByTeam[teamID] = previous
-            errorMessage = error.localizedDescription
+            errorMessage = ServerErrorMessage.arabic(for: error)
         }
     }
 
@@ -2578,7 +2607,7 @@ final class HomeStore {
                 case nil:
                     break
                 }
-            } catch { errorMessage = error.localizedDescription }
+            } catch { errorMessage = ServerErrorMessage.arabic(for: error) }
             await reloadRoster(occurrence.id)
         }
     }

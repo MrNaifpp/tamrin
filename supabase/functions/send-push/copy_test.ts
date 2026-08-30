@@ -140,3 +140,11 @@ Deno.test("seat_available copy interpolates the event name", () => {
     body: "توفر مقعد في تمرين الخميس. احجزه قبل ما يروح.",
   });
 });
+
+Deno.test("lineup_published copy interpolates the event name", () => {
+  const c = copyFor("lineup_published", "تمرين الخميس");
+  assertEquals(c, {
+    title: "نزلت التشكيلة🔥",
+    body: "ادخل التطبيق وشف فريقك ومركزك",
+  });
+});
