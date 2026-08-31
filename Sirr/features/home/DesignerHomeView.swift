@@ -15,10 +15,6 @@ private enum HomeQuickAddDestination {
 /// that hold them, and having to remember which group Thursday's game lived in
 /// before you could see it was a wall in front of the only thing Home is for.
 struct DesignerHomeView: View {
-    private enum EventActionInFlight {
-        case skipping
-    }
-
     let appState: AppState
     @State private var feed: HomeStore
     @State private var booted = false
@@ -48,9 +44,6 @@ struct DesignerHomeView: View {
     @State private var pendingQuickAddDestination: HomeQuickAddDestination?
     @State private var showJoinTeam = false
     @State private var declineOccurrence: FeedOccurrence?
-    @State private var skipOccurrence: FeedOccurrence?
-    @State private var editingOccurrence: FeedOccurrence?
-    @State private var eventActionsInFlight: [UUID: EventActionInFlight] = [:]
     @State private var actionToast: String?
     @State private var actionError: String?
     @Environment(\.scenePhase) private var scenePhase
@@ -336,7 +329,6 @@ struct DesignerHomeView: View {
                                                 attendees: feed.roster(for: occurrence)
                                                     .filter { $0.status != .waitlisted },
                                                 currentUserID: feed.currentUserID,
-                                                actions: cardActions(for: occurrence),
                                                 art: art(for: occurrence)
                                             ) {
                                                 Haptics.impact(.light)
@@ -541,30 +533,6 @@ struct DesignerHomeView: View {
                         showActionToast("سُجّل اعتذارك عن الموعد")
                     }
                 }
-                .sheet(item: $skipOccurrence) { occurrence in
-                    AdminSkipEventSheet { reasonCode, reasonText in
-                        try await performEventAction(.skipping, for: occurrence.id) {
-                            await feed.skip(
-                                occurrence,
-                                reasonCode: reasonCode,
-                                reasonText: reasonText
-                            )
-                        }
-                        showActionToast("موعد هذا الأسبوع متخطّى، وأُبلغ الأعضاء")
-                    }
-                }
-                .sheet(item: $editingOccurrence) { occurrence in
-                    AddSessionSheet(
-                        feed: feed,
-                        isPresented: Binding(
-                            get: { editingOccurrence != nil },
-                            set: { if !$0 { editingOccurrence = nil } }
-                        ),
-                        editingEventID: occurrence.id,
-                        editingTemplateID: occurrence.isRecurring ? occurrence.templateId : nil,
-                        initialPlan: feed.editDraft(for: occurrence) ?? PlanDraft()
-                    )
-                }
                 .navigationDestination(isPresented: $showPlanDetails) {
                     TeamDetailView(feed: feed)
                 }
@@ -657,181 +625,6 @@ struct DesignerHomeView: View {
                 await feed.loadPastOccurrencesIfNeeded(force: true)
             }
         }
-    }
-
-    private func cardActions(for occurrence: FeedOccurrence) -> [EventPosterCardAction] {
-        if occurrence.isCancelled {
-            return [
-                EventPosterCardAction(
-                    id: "cancelled",
-                    title: occurrence.hasCancellationReason ? "معرفة سبب التخطي" : "الموعد متخطّى",
-                    systemImage: occurrence.hasCancellationReason ? "info.circle.fill" : "forward.end.fill",
-                    kind: occurrence.hasCancellationReason ? .secondary : .status,
-                    isEnabled: occurrence.hasCancellationReason
-                ) {
-                    feed.focusTeam(for: occurrence)
-                    registrationEntryEventID = occurrence.id
-                    selected = occurrence
-                }
-            ]
-        }
-
-        // A finished exercise is otherwise read-only. Its one exception is a
-        // contribution this member still owes, and that exception must not
-        // reopen decline, withdrawal, guest, or registration actions.
-        if occurrence.requiresPaymentAction,
-           occurrence.isPast(relativeTo: .now),
-           !feed.isOwner(of: occurrence) {
-            return [
-                EventPosterCardAction(
-                    id: "pay-overdue",
-                    title: "دفع القطة",
-                    systemImage: "banknote.fill",
-                    kind: .primary
-                ) {
-                    feed.focusTeam(for: occurrence)
-                    registrationEntryEventID = occurrence.id
-                    selected = occurrence
-                }
-            ]
-        }
-
-        if feed.isOwner(of: occurrence) {
-            let actionInFlight = eventActionsInFlight[occurrence.id]
-            let actionsEnabled = actionInFlight == nil
-            return [
-                EventPosterCardAction(
-                    id: "edit",
-                    title: "تعديل",
-                    systemImage: "pencil",
-                    kind: .secondary,
-                    isEnabled: actionsEnabled
-                ) {
-                    feed.focusTeam(for: occurrence)
-                    guard feed.editDraft(for: occurrence) != nil else {
-                        actionError = "تعذر تحميل بيانات هذا الموعد للتعديل. حدّث الصفحة وحاول مرة أخرى."
-                        return
-                    }
-                    editingOccurrence = occurrence
-                },
-                EventPosterCardAction(
-                    id: "skip",
-                    title: "تخطي",
-                    systemImage: "forward.end.fill",
-                    kind: .destructive,
-                    isEnabled: actionsEnabled
-                ) {
-                    feed.focusTeam(for: occurrence)
-                    skipOccurrence = occurrence
-                }
-            ]
-        }
-
-        let state = feed.participationState(for: occurrence)
-        let primary: EventPosterCardAction
-        switch state {
-        case .available, .declined:
-            primary = EventPosterCardAction(
-                id: "register",
-                title: "سجّل حضورك",
-                systemImage: "checkmark.circle.fill",
-                kind: .primary
-            ) {
-                feed.focusTeam(for: occurrence)
-                registrationEntryEventID = occurrence.id
-                selected = occurrence
-            }
-        case .full:
-            primary = EventPosterCardAction(
-                id: "full",
-                title: "اكتمل العدد",
-                systemImage: "person.2.slash",
-                kind: .status,
-                isEnabled: false,
-                action: {}
-            )
-        case .registered:
-            primary = EventPosterCardAction(
-                id: "registered",
-                title: "مسجّل",
-                systemImage: "checkmark.circle.fill",
-                kind: .status,
-                isEnabled: false,
-                action: {}
-            )
-        case .awaitingPayment:
-            // The seat is held; the card's job is to get the share paid.
-            primary = EventPosterCardAction(
-                id: "pay",
-                title: "دفع القطة",
-                systemImage: "banknote.fill",
-                kind: .primary
-            ) {
-                feed.focusTeam(for: occurrence)
-                registrationEntryEventID = occurrence.id
-                selected = occurrence
-            }
-        case .paymentPending:
-            primary = EventPosterCardAction(
-                id: "pending",
-                title: "بانتظار التأكيد",
-                systemImage: "clock.fill",
-                kind: .status,
-                isEnabled: false,
-                action: {}
-            )
-        case .waitlisted:
-            primary = EventPosterCardAction(
-                id: "waitlisted",
-                title: "قائمة الانتظار",
-                systemImage: "hourglass",
-                kind: .status,
-                isEnabled: false,
-                action: {}
-            )
-        case .cancelled:
-            return []
-        case .unavailable:
-            primary = EventPosterCardAction(
-                id: "unavailable",
-                title: "تعذر التحقق",
-                systemImage: "arrow.clockwise",
-                kind: .status,
-                isEnabled: false,
-                action: {}
-            )
-        }
-
-        let alreadyDeclined = state == .declined
-        let decline = EventPosterCardAction(
-            id: "decline",
-            title: alreadyDeclined ? "معتذر" : "اعتذار",
-            systemImage: alreadyDeclined ? "checkmark" : "xmark.circle.fill",
-            kind: alreadyDeclined ? .status : .destructive,
-            isEnabled: !alreadyDeclined
-        ) {
-            feed.focusTeam(for: occurrence)
-            declineOccurrence = occurrence
-        }
-        return [primary, decline]
-    }
-
-    @MainActor
-    private func performEventAction(
-        _ action: EventActionInFlight,
-        for eventID: UUID,
-        operation: @MainActor () async -> HomeStore.RegistrationOutcome
-    ) async throws {
-        guard eventActionsInFlight[eventID] == nil else {
-            throw NSError(
-                domain: "DesignerHomeView.EventAction",
-                code: 2,
-                userInfo: [NSLocalizedDescriptionKey: "يوجد إجراء جارٍ لهذا الموعد. انتظر لحظة وحاول مرة أخرى."]
-            )
-        }
-        eventActionsInFlight[eventID] = action
-        defer { eventActionsInFlight[eventID] = nil }
-        try requireSuccess(await operation())
     }
 
     @MainActor

@@ -23,6 +23,7 @@ struct ExerciseDetailsOverlayPage: View {
     /// «تعذر تحميل» then is a lie: nothing has been attempted yet.
     @State private var hasLoadedGroupDetails = false
     @State private var showsDeleteConfirm = false
+    @State private var showsSkipSheet = false
 
     /// The editor refreshes HomeStore before it dismisses. Reading the event
     /// back by id keeps this still-present details page in sync instead of
@@ -74,6 +75,12 @@ struct ExerciseDetailsOverlayPage: View {
     /// occurrence, where there is still a future template to change.
     private var canEditTemplate: Bool {
         isOwner && !currentOccurrence.isPast()
+    }
+
+    /// A date already called off cannot be called off again, and a date that
+    /// has happened is a receipt rather than a plan.
+    private var canSkipOccurrence: Bool {
+        isOwner && !currentOccurrence.isPast() && !currentOccurrence.isCancelled
     }
 
     private var paymentMethods: [PaymentMethodRecord] {
@@ -163,6 +170,24 @@ struct ExerciseDetailsOverlayPage: View {
         }
         // Pull still does the full refresh, occurrences and rosters included.
         .refreshable { await feed.loadTeamData(teamID) }
+        .sheet(isPresented: $showsSkipSheet) {
+            AdminSkipEventSheet { reasonCode, reasonText in
+                // EventResponseFlow renders whatever this throws, through
+                // ServerErrorMessage, so the failure is reported where the
+                // person is already looking rather than behind a second alert.
+                if case .failure(let message) = await feed.skip(
+                    currentOccurrence,
+                    reasonCode: reasonCode,
+                    reasonText: reasonText
+                ) {
+                    throw NSError(
+                        domain: "ExerciseDetailsOverlayPage.Skip",
+                        code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: message]
+                    )
+                }
+            }
+        }
         .sheet(item: $memberInDetails) { member in
             let player = rosterShape(of: member)
             PlayerDetailsSheet(
@@ -213,6 +238,17 @@ struct ExerciseDetailsOverlayPage: View {
                             Button("تعديل التمرين", systemImage: "pencil") {
                                 Haptics.impact(.light)
                                 showsTemplateEditor = true
+                            }
+                        }
+
+                        // Skipping calls off one date and leaves the exercise
+                        // running, so it sits above the deletion that ends the
+                        // whole thing. A past or already-skipped date has
+                        // nothing left to call off.
+                        if canSkipOccurrence {
+                            Button("تخطي هذا الموعد", systemImage: "forward.end.fill") {
+                                Haptics.impact(.light)
+                                showsSkipSheet = true
                             }
                         }
 
