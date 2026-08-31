@@ -17,8 +17,15 @@ MARKETING_VERSION = 1.6
 // Build numbers are what App Store Connect rejects duplicates on, not the
 // marketing version. Every number below is spent: (2) was uploaded, (3)
 // predates the rating repair, (4) the details-page and lineup-permission
-// fixes, and (5) the exercise actions menu.
-CURRENT_PROJECT_VERSION = 8
+// fixes, (5) the exercise actions menu, and (8) predates the exercise ever
+// becoming visible — every event created by a build before this one is
+// invisible to its own group, because there was no way to publish one.
+//
+// Set back to (1) deliberately, for a sandbox-backed test archive rather than
+// an upload. App Store Connect takes only build numbers above the highest one
+// already uploaded on a version train, so if 1.6 has ever been uploaded this
+// number cannot be, and the number to raise is this one.
+CURRENT_PROJECT_VERSION = 1
 
 // Here rather than in the target so Staging.xcconfig can override it — a
 // staging build on the home screen has to be tellable from a real one.
