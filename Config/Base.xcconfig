@@ -23,10 +23,10 @@ MARKETING_VERSION = 1.7
 // there was no way to publish one.
 //
 // 1.7 is a new train, so its numbering starts again with none of 1.6's numbers
-// in the way. (1) was the first sandbox-backed archive; (2) is the one that
-// carries the day an owed exercise gets to itself, and the shelf back to a
-// plain poster with تخطي moved to the exercise's own menu.
-CURRENT_PROJECT_VERSION = 2
+// in the way. (1) was the first sandbox-backed archive; (2) carried the day an
+// owed exercise gets to itself and the shelf back to a plain poster; (3) stops
+// asking what anyone thought of the split.
+CURRENT_PROJECT_VERSION = 3
 
 // Here rather than in the target so Staging.xcconfig can override it — a
 // staging build on the home screen has to be tellable from a real one.
