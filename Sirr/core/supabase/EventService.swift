@@ -1183,16 +1183,6 @@ final class EventService {
         eventLogger.info("API leaveEvent succeeded (eventId: \(eventId))")
     }
 
-    /// Publishes an organizer-owned event and invites all current workspace
-    /// members. The RPC is idempotent and owns notification deduplication.
-    func publishEvent(eventId: UUID) async throws {
-        let params: [String: String] = ["p_event_id": eventId.uuidString]
-        try await client
-            .rpc("publish_event", params: params)
-            .execute()
-        eventLogger.info("API publishEvent succeeded (eventId: \(eventId))")
-    }
-
     /// Declines an invitation with an optional structured reason. This server
     /// operation also releases any current registration or waitlist entry.
     func declineEvent(

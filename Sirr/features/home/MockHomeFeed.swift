@@ -1889,24 +1889,6 @@ final class HomeStore {
         case closedAtCapacity
     }
 
-    /// Sends this exact exercise to every current member of the workspace.
-    /// The server operation is idempotent, so a double tap never duplicates
-    /// invitations or push notifications.
-    func publish(_ occurrence: FeedOccurrence) async -> RegistrationOutcome {
-        guard isCurrentTeamOwner else { return .failure("هذا الإجراء متاح لمشرف التمرين فقط.") }
-        if isPreview {
-            updateOccurrence(occurrence.id) { $0.publishedAt = .now }
-            return .success
-        }
-        do {
-            try await EventService.shared.publishEvent(eventId: occurrence.id)
-            await loadSelectedTeamData()
-            return .success
-        } catch {
-            return .failure(error.localizedDescription)
-        }
-    }
-
     /// Cancels only the visible occurrence. A recurring template remains live
     /// and can generate the following week's exercise as usual.
     func skip(

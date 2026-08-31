@@ -16,7 +16,6 @@ private enum HomeQuickAddDestination {
 /// before you could see it was a wall in front of the only thing Home is for.
 struct DesignerHomeView: View {
     private enum EventActionInFlight {
-        case publishing
         case skipping
     }
 
@@ -48,7 +47,6 @@ struct DesignerHomeView: View {
     @State private var showQuickAdd = false
     @State private var pendingQuickAddDestination: HomeQuickAddDestination?
     @State private var showJoinTeam = false
-    @State private var publishConfirmation: FeedOccurrence?
     @State private var declineOccurrence: FeedOccurrence?
     @State private var skipOccurrence: FeedOccurrence?
     @State private var editingOccurrence: FeedOccurrence?
@@ -543,17 +541,6 @@ struct DesignerHomeView: View {
                         showActionToast("سُجّل اعتذارك عن الموعد")
                     }
                 }
-                .sheet(item: $publishConfirmation) { occurrence in
-                    AdminPublishEventSheet(
-                        eventTitle: occurrence.title,
-                        dayText: occurrence.startAt.arabicDay
-                    ) {
-                        try await performEventAction(.publishing, for: occurrence.id) {
-                            await feed.publish(occurrence)
-                        }
-                        showActionToast("نُشر الموعد ووصل الأعضاء إشعار")
-                    }
-                }
                 .sheet(item: $skipOccurrence) { occurrence in
                     AdminSkipEventSheet { reasonCode, reasonText in
                         try await performEventAction(.skipping, for: occurrence.id) {
@@ -711,20 +698,8 @@ struct DesignerHomeView: View {
 
         if feed.isOwner(of: occurrence) {
             let actionInFlight = eventActionsInFlight[occurrence.id]
-            let isPublishing = actionInFlight == .publishing
             let actionsEnabled = actionInFlight == nil
             return [
-                EventPosterCardAction(
-                    id: "send",
-                    title: occurrence.isPublished ? "منشور" : "نشر الموعد",
-                    systemImage: occurrence.isPublished ? "checkmark.circle.fill" : "paperplane.fill",
-                    kind: occurrence.isPublished ? .status : .primary,
-                    isEnabled: !occurrence.isPublished && actionsEnabled,
-                    isLoading: isPublishing
-                ) {
-                    feed.focusTeam(for: occurrence)
-                    publishConfirmation = occurrence
-                },
                 EventPosterCardAction(
                     id: "edit",
                     title: "تعديل",
