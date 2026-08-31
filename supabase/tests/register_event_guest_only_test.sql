@@ -45,7 +45,7 @@ declare
   v_capacity_event_id uuid;
   v_waitlist_event_id uuid;
   v_pending_self_event_id uuid;
-  v_draft_event_id uuid;
+  v_guard_event_id uuid;
   v_locked_event_id uuid;
   v_cancelled_event_id uuid;
   v_result json;
@@ -81,26 +81,17 @@ begin
   v_event := public.create_event(
     p_creator_id => '45000000-0000-0000-0000-000000000001',
     p_workspace_id => v_workspace_id,
-    p_name => 'مسودة ضيوف فقط',
+    p_name => 'تمرين حراسة الضيوف',
     p_start_date => now() + interval '1 day',
     p_max_participants => 6
   );
-  v_draft_event_id := (v_event->>'id')::uuid;
-
-  perform pg_temp.set_auth('45000000-0000-0000-0000-000000000002');
-  v_result := public.register_event_guest_only(
-    p_event_id => v_draft_event_id,
-    p_guest_names => array['ضيف مسودة']
-  );
-  if v_result->>'status' <> 'not_published' then
-    raise exception 'FAIL: draft guest-only request %', v_result;
-  end if;
+  v_guard_event_id := (v_event->>'id')::uuid;
 
   perform set_config('request.jwt.claims', '{"role":"anon"}', true);
   v_failed := false;
   begin
     v_result := public.register_event_guest_only(
-      p_event_id => v_draft_event_id,
+      p_event_id => v_guard_event_id,
       p_guest_names => array['ضيف مجهول']
     );
   exception when others then
@@ -114,7 +105,7 @@ begin
   v_failed := false;
   begin
     v_result := public.register_event_guest_only(
-      p_event_id => v_draft_event_id,
+      p_event_id => v_guard_event_id,
       p_guest_names => array['ضيف غريب']
     );
   exception when others then
@@ -135,7 +126,6 @@ begin
     p_max_participants => 12
   );
   v_free_event_id := (v_event->>'id')::uuid;
-  v_result := public.publish_event(v_free_event_id);
 
   perform pg_temp.set_auth('45000000-0000-0000-0000-000000000002');
   v_result := public.register_event_guest_only(
@@ -318,7 +308,6 @@ begin
     p_max_participants => 5
   );
   v_waitlist_event_id := (v_event->>'id')::uuid;
-  v_result := public.publish_event(v_waitlist_event_id);
   perform pg_temp.set_auth('45000000-0000-0000-0000-000000000003');
   v_result := public.join_waitlist(
     v_waitlist_event_id,
@@ -344,7 +333,6 @@ begin
     p_payment_method_ids => array[v_method_one_id]
   );
   v_pending_self_event_id := (v_event->>'id')::uuid;
-  v_result := public.publish_event(v_pending_self_event_id);
   perform pg_temp.set_auth('45000000-0000-0000-0000-000000000003');
   v_result := public.submit_payment_v2(
     p_event_id => v_pending_self_event_id,
@@ -377,7 +365,6 @@ begin
     p_payment_method_ids => array[v_method_one_id]
   );
   v_paid_event_id := (v_event->>'id')::uuid;
-  v_result := public.publish_event(v_paid_event_id);
 
   -- A method this event does not offer is no longer a reason to refuse: a
   -- standalone guest seat picks no method either. The price still is, which
@@ -585,7 +572,6 @@ begin
     p_payment_method_ids => array[v_method_one_id]
   );
   v_reject_event_id := (v_event->>'id')::uuid;
-  v_result := public.publish_event(v_reject_event_id);
   perform pg_temp.set_auth('45000000-0000-0000-0000-000000000003');
   v_result := public.register_event_guest_only(
     p_event_id => v_reject_event_id,
@@ -644,7 +630,6 @@ begin
     p_max_participants => 2
   );
   v_capacity_event_id := (v_event->>'id')::uuid;
-  v_result := public.publish_event(v_capacity_event_id);
   perform pg_temp.set_auth('45000000-0000-0000-0000-000000000002');
   v_result := public.register_event_guest_only(
     p_event_id => v_capacity_event_id,
@@ -669,7 +654,6 @@ begin
     p_max_participants => 5
   );
   v_locked_event_id := (v_event->>'id')::uuid;
-  v_result := public.publish_event(v_locked_event_id);
   update public.events set registration_locked = true where id = v_locked_event_id;
   perform pg_temp.set_auth('45000000-0000-0000-0000-000000000002');
   v_result := public.register_event_guest_only(
@@ -689,7 +673,6 @@ begin
     p_max_participants => 5
   );
   v_cancelled_event_id := (v_event->>'id')::uuid;
-  v_result := public.publish_event(v_cancelled_event_id);
   v_result := public.cancel_event_occurrence(v_cancelled_event_id);
   perform pg_temp.set_auth('45000000-0000-0000-0000-000000000002');
   v_result := public.register_event_guest_only(

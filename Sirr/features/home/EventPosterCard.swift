@@ -38,9 +38,10 @@ struct EventPosterCardAction: Identifiable {
     }
 }
 
-/// Poster-style event card. Quick actions live in a context menu so the home
-/// shelf stays as visually quiet as the reference; the full controls remain in
-/// the detail screen reached by tapping the poster.
+/// Poster-style event card. The poster itself opens the exercise; the actions
+/// that act on it sit in a glass bar across its foot, as siblings of the
+/// poster button rather than inside it. The full controls remain on the detail
+/// screen the poster opens.
 struct EventPosterCard: View {
     let occurrence: FeedOccurrence
     let registeredCount: Int
@@ -93,18 +94,29 @@ struct EventPosterCard: View {
         art ?? "ExerciseArt\((occurrence.artIndex % 3) + 1)"
     }
     private var posterTint: Color { ArtworkPalette.averageColor(for: artName) }
+    private var hasActions: Bool { !actions.isEmpty }
 
     var body: some View {
-        Button(action: action) {
-            posterContent
+        // The poster opens the exercise and the bar acts on it, so they are
+        // siblings rather than nested: a button inside a button never sees the
+        // tap, which is how the actions came to be computed and never reachable.
+        ZStack(alignment: .bottom) {
+            Button(action: action) {
+                posterContent
+            }
+            // A spring press style starts shrinking as soon as a finger touches
+            // the poster, then springs back when the gesture becomes a scroll.
+            // Keeping the card plain lets ScrollView own the pan without a
+            // competing scale.
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(occurrence.title)، \(occurrence.startAt.arabicDay)، الساعة \(occurrence.startAt.arabicTime)")
+            .accessibilityValue("\(registeredCount) من \(occurrence.capacity) مسجلين")
+            .accessibilityHint("يفتح تفاصيل الموعد")
+
+            if hasActions {
+                actionBar
+            }
         }
-        // A spring press style starts shrinking as soon as a finger touches the
-        // poster, then springs back when the gesture becomes a scroll. Keeping
-        // the card plain lets ScrollView own the pan without a competing scale.
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(occurrence.title)، \(occurrence.startAt.arabicDay)، الساعة \(occurrence.startAt.arabicTime)")
-        .accessibilityValue("\(registeredCount) من \(occurrence.capacity) مسجلين")
-        .accessibilityHint("يفتح تفاصيل الموعد")
         .clipShape(.rect(cornerRadius: 36, style: .continuous))
         // The reference uses a wide, barely-there elevation shadow. Cast it
         // from one simple shape behind the opaque poster instead of shadowing
@@ -204,7 +216,7 @@ struct EventPosterCard: View {
             .multilineTextAlignment(.center)
             .padding(.horizontal, 24)
             .padding(.top, 76)
-            .padding(.bottom, 32)
+            .padding(.bottom, hasActions ? 122 : 32)
             .frame(maxWidth: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -217,6 +229,97 @@ struct EventPosterCard: View {
                     .resizable()
                     .aspectRatio(contentMode: .fill)
             }
+    }
+
+    /// Glass over the tinted foot of the poster, so the actions read as part of
+    /// the card rather than a tray bolted under it.
+    private var actionBar: some View {
+        HStack(spacing: 0) {
+            ForEach(actions) { item in
+                EventPosterCardActionCell(item: item)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 7)
+        .background {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .fill(.black.opacity(0.28))
+                }
+        }
+        .colorScheme(.dark)
+        .accessibilityElement(children: .contain)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 16)
+    }
+}
+
+private struct EventPosterCardActionCell: View {
+    let item: EventPosterCardAction
+
+    private var symbolColor: Color {
+        switch item.kind {
+        case .primary:
+            TamrinTheme.lime
+        case .secondary:
+            .white.opacity(0.84)
+        case .destructive:
+            .white.opacity(0.72)
+        case .status:
+            TamrinTheme.lime
+        }
+    }
+
+    private var accessibilityValue: String {
+        if item.isLoading { return "جارٍ التنفيذ" }
+        if item.kind == .status { return "مكتمل" }
+        if !item.isEnabled { return "غير متاح حاليًا" }
+        return ""
+    }
+
+    var body: some View {
+        Button(action: item.action) {
+            VStack(spacing: 5) {
+                Group {
+                    if item.isLoading {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(symbolColor)
+                    } else {
+                        Image(systemName: item.systemImage)
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(symbolColor)
+                    }
+                }
+                .frame(height: 24)
+                .accessibilityHidden(true)
+
+                Text(item.title)
+                    .font(TamrinFont.font(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+            .frame(maxWidth: .infinity, minHeight: 66)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(EventActionPressStyle())
+        .disabled(!item.isEnabled || item.isLoading)
+        .opacity(item.isEnabled || item.kind == .status ? 1 : 0.42)
+        .accessibilityLabel(item.title)
+        .accessibilityValue(accessibilityValue)
+    }
+}
+
+private struct EventActionPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.62 : 1)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.easeOut(duration: 0.14), value: configuration.isPressed)
     }
 }
 

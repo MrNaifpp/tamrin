@@ -66,7 +66,6 @@ begin
     p_price_per_person => 50,
     p_payment_method_ids => array[v_method_id]
   )->>'id')::uuid;
-  perform public.publish_event(v_event_id);
 
   -- A seat taken before any money moves is 'pending' and undeclared.
   perform pg_temp.set_auth(A_ID);
@@ -135,7 +134,6 @@ begin
     p_payment_method_ids => array[v_method_id],
     p_capacity_policy => 'closed'
   )->>'id')::uuid;
-  perform public.publish_event(v_closed_id);
 
   perform pg_temp.set_auth(C_ID);
   v_result := public.register_event_seat(p_event_id => v_closed_id);

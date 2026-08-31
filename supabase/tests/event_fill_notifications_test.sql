@@ -45,7 +45,6 @@ declare
   v_big_event_id uuid;
   v_batch_event_id uuid;
   v_uncapped_event_id uuid;
-  v_draft_event_id uuid;
   v_small_event_id uuid;
   v_owner_event_id uuid;
   v_result json;
@@ -71,7 +70,6 @@ begin
     p_max_participants => 16
   );
   v_big_event_id := (v_event->>'id')::uuid;
-  v_result := public.publish_event(v_big_event_id);
 
   -- 1/16 = 6%: nothing yet.
   set constraints all immediate;
@@ -147,7 +145,6 @@ begin
     p_max_participants => 16
   );
   v_batch_event_id := (v_event->>'id')::uuid;
-  v_result := public.publish_event(v_batch_event_id);
 
   -- Owner holds 1. Member B takes 7 in one statement -> 8/16 = 50%,
   -- straight past 25%.
@@ -196,7 +193,6 @@ begin
     p_start_date => now() + interval '5 days'
   );
   v_uncapped_event_id := (v_event->>'id')::uuid;
-  v_result := public.publish_event(v_uncapped_event_id);
 
   perform pg_temp.set_auth('46000000-0000-0000-0000-000000000002');
   v_result := public.register_event_seat(
@@ -212,40 +208,6 @@ begin
   end if;
 
   -- ---------------------------------------------------------------------
-  -- An unpublished session announces nothing, however full it is. A single
-  -- seat is the whole capacity here, so create_event's own insert of the
-  -- creator would be 100% if publication were not required.
-  --
-  -- It has to be tested this way round: guard_event_registration_insert
-  -- rejects every other insert into a draft session with "Event is not
-  -- published", so the creator's seat is the only one that can reach the
-  -- fill trigger at all.
-  -- ---------------------------------------------------------------------
-  perform pg_temp.set_auth('46000000-0000-0000-0000-000000000001');
-  v_event := public.create_event(
-    p_creator_id => '46000000-0000-0000-0000-000000000001',
-    p_workspace_id => v_workspace_id,
-    p_name => 'تمرين مسودة',
-    p_start_date => now() + interval '6 days',
-    p_max_participants => 1
-  );
-  v_draft_event_id := (v_event->>'id')::uuid;
-
-  set constraints all immediate;
-
-  select count(*) into v_mark from public.push_outbox
-  where event_id = v_draft_event_id;
-  if v_mark <> 0 then
-    raise exception 'FAIL: a draft session announced a milestone';
-  end if;
-
-  select fill_notified_pct into v_mark from public.events
-  where id = v_draft_event_id;
-  if v_mark <> 0 then
-    raise exception 'FAIL: a draft session advanced its mark';
-  end if;
-
-  -- ---------------------------------------------------------------------
   -- Under eight seats a quarter is one player, so only halves announce.
   -- ---------------------------------------------------------------------
   perform pg_temp.set_auth('46000000-0000-0000-0000-000000000001');
@@ -257,7 +219,6 @@ begin
     p_max_participants => 6
   );
   v_small_event_id := (v_event->>'id')::uuid;
-  v_result := public.publish_event(v_small_event_id);
 
   -- Member B joins the owner -> 2/6 = 33%: past a quarter, which under the
   -- halves rule is not a milestone at all.
@@ -309,7 +270,6 @@ begin
     p_max_participants => 8
   );
   v_owner_event_id := (v_event->>'id')::uuid;
-  v_result := public.publish_event(v_owner_event_id);
 
   -- Owner holds 1 and adds 3 by hand -> 4/8 = 50%.
   v_result := public.add_manual_participant(v_owner_event_id, 'يدوي 1');

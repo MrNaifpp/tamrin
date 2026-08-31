@@ -93,7 +93,6 @@ begin
   );
   v_old_event_id := (v_old_event->>'id')::uuid;
   v_template_id := (v_old_event->>'template_id')::uuid;
-  v_result := public.publish_event(v_old_event_id);
 
   perform pg_temp.set_auth(v_member);
   v_result := public.register_event_seat(p_event_id => v_old_event_id);
@@ -132,18 +131,21 @@ begin
      12, 120, 10, v_template_id, v_method_id, array[v_method_id], now())
   returning id into v_next_event_id;
 
+  -- The invitation is no longer withheld over a debt. It is offered to every
+  -- member the moment the occurrence opens, and the debt expires on its own a
+  -- day after the old exercise started.
   perform public.publish_recurring_event_internal(v_next_event_id, v_owner);
   select count(*) into v_count
   from public.event_member_responses
   where event_id = v_next_event_id and user_id = v_member;
-  if v_count <> 0 then
-    raise exception 'FAIL: generator invited a member before the old declaration';
+  if v_count <> 1 then
+    raise exception 'FAIL: an owing member was not invited to the next occurrence';
   end if;
   select count(*) into v_count
   from public.push_outbox
   where event_id = v_next_event_id and user_id = v_member;
-  if v_count <> 0 then
-    raise exception 'FAIL: generator notified a member before the old declaration';
+  if v_count <> 1 then
+    raise exception 'FAIL: an owing member was not notified of the next occurrence';
   end if;
 
   perform 1
@@ -217,7 +219,6 @@ begin
   );
   v_other_event_id := (v_other_event->>'id')::uuid;
   v_other_template_id := (v_other_event->>'template_id')::uuid;
-  v_result := public.publish_event(v_other_event_id);
 
   if v_other_template_id = v_template_id then
     raise exception 'FAIL: other-template fixture reused the gated template';
@@ -234,11 +235,13 @@ begin
     raise exception 'FAIL: live feed did not retain old debt card: %', v_live;
   end if;
 
+  -- Both cards at once: the debt card the member still owes, and the next
+  -- occurrence they are free to take a seat in regardless.
   select count(*) into v_count
   from json_array_elements(v_live) item
   where (item->>'id')::uuid = v_next_event_id;
-  if v_count <> 0 then
-    raise exception 'FAIL: live feed exposed next occurrence before declaration: %', v_live;
+  if v_count <> 1 then
+    raise exception 'FAIL: live feed withheld the next occurrence from an owing member: %', v_live;
   end if;
 
   -- An undeclared debt no longer refuses the next seat. It was refusing on a
@@ -352,12 +355,13 @@ begin
   end if;
 
   -- A rejected transfer after the event ended must reopen the debt, not erase
-  -- the historical participant row or leave the next occurrence unlocked. A
-  -- seat obtained during the declaration window is revoked with it.
+  -- A rejection after the event ended reopens the debt without erasing the
+  -- historical participant row. It no longer takes anything from the member's
+  -- later occurrences, so nothing is revoked and the count stays at zero.
   perform pg_temp.set_auth(v_owner);
   v_result := public.reject_payment(v_old_event_id, v_member, v_owner);
   if v_result->>'status' <> 'rejected'
-     or (v_result->>'revoked_future_seats')::integer <> 1 then
+     or (v_result->>'revoked_future_seats')::integer <> 0 then
     raise exception 'FAIL: organizer could not reject ended declaration: %', v_result;
   end if;
 
@@ -375,16 +379,19 @@ begin
   from public.event_participants
   where event_id = v_next_event_id
     and (user_id = v_member or added_by = v_member);
-  if found then
-    raise exception 'FAIL: rejected old transfer retained a future seat';
+  if not found then
+    raise exception 'FAIL: rejection took away the member''s next seat';
   end if;
+  -- No seat is taken away, so no seat opens up, so nobody on the waiting list
+  -- is told one did. Telling them would be a lie about a place that is still
+  -- occupied.
   select count(*) into v_count
   from public.push_outbox
   where event_id = v_next_event_id
     and user_id = v_waiter
     and type = 'seat_available';
-  if v_count <> 1 then
-    raise exception 'FAIL: future waitlist was not notified of the reopened seat';
+  if v_count <> 0 then
+    raise exception 'FAIL: waiting list was promised a seat that never opened';
   end if;
 
   v_live := public.get_workspace_events(v_workspace_id);
@@ -395,11 +402,14 @@ begin
   if v_count <> 1 then
     raise exception 'FAIL: rejected declaration did not restore the debt card: %', v_live;
   end if;
+  -- A rejection reopens the debt, and the debt card comes back with it. What
+  -- it no longer does is close the next occurrence: nothing is withheld over
+  -- money any more, so the member keeps their place in next week either way.
   select count(*) into v_count
   from json_array_elements(v_live) item
   where (item->>'id')::uuid = v_next_event_id;
-  if v_count <> 0 then
-    raise exception 'FAIL: rejected declaration left the next occurrence open: %', v_live;
+  if v_count <> 1 then
+    raise exception 'FAIL: rejected declaration closed the next occurrence: %', v_live;
   end if;
 
   v_result := public.declare_event_payment(v_old_event_id, v_method_id);
@@ -407,13 +417,17 @@ begin
     raise exception 'FAIL: rejected debt could not be declared again: %', v_result;
   end if;
 
+  -- The member holds an actual seat here, not an invitation. Taking the seat
+  -- cleared the invite through clear_event_member_response_on_registration,
+  -- and the rejection no longer takes the seat back, so there is nothing left
+  -- for a repeated declaration to restore. A seat outranks an invite.
   select count(*) into v_count
   from public.event_member_responses
   where event_id = v_next_event_id
     and user_id = v_member
     and status = 'invited';
-  if v_count <> 1 then
-    raise exception 'FAIL: repeated declaration duplicated/lost delayed invite';
+  if v_count <> 0 then
+    raise exception 'FAIL: a seated member was left holding a stale invite';
   end if;
   select count(*) into v_count
   from public.push_outbox

@@ -65,7 +65,6 @@ enum ServerErrorMessage {
         // Registration and the exercise's own state.
         "Event has ended": "انتهى هذا التمرين.",
         "Event is cancelled": "هذا التمرين ملغى.",
-        "Event is not published": "التمرين ما انفتح للتسجيل بعد.",
         "Registration is closed for this event": "التسجيل مقفل في هذا الموعد.",
         "This event closes at capacity and has no waiting list":
             "اكتمل العدد، وما فيه قائمة انتظار لهذا الموعد.",
@@ -135,7 +134,6 @@ enum ServerErrorMessage {
             "ما لقينا الموعد، أو هو ملغى، أو ما أنت مشرف التمرين.",
         "Only a manually added registration can be removed this way":
             "هذا التسجيل ما ينشال بهذي الطريقة. شيله من قائمة المسجلين.",
-        "Template is not published": "قالب التمرين ما اننشر بعد.",
 
         // Deleting an account while a shared exercise still depends on you.
         "OWNS_SHARED_WORKSPACE":
