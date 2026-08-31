@@ -235,13 +235,16 @@ begin
     raise exception 'FAIL: live feed did not retain old debt card: %', v_live;
   end if;
 
-  -- Both cards at once: the debt card the member still owes, and the next
-  -- occurrence they are free to take a seat in regardless.
+  -- One card, not two. While the old exercise is still owed for it is the only
+  -- one this member sees, so the debt is asked about rather than buried under
+  -- next week. The hold is not permanent — declaring lifts it, and so does the
+  -- waiver 24 hours after the old exercise started, which is asserted in
+  -- linger_unpaid_occurrence_test.
   select count(*) into v_count
   from json_array_elements(v_live) item
   where (item->>'id')::uuid = v_next_event_id;
-  if v_count <> 1 then
-    raise exception 'FAIL: live feed withheld the next occurrence from an owing member: %', v_live;
+  if v_count <> 0 then
+    raise exception 'FAIL: the next occurrence showed while the old one was still owed: %', v_live;
   end if;
 
   -- An undeclared debt no longer refuses the next seat. It was refusing on a
@@ -402,14 +405,16 @@ begin
   if v_count <> 1 then
     raise exception 'FAIL: rejected declaration did not restore the debt card: %', v_live;
   end if;
-  -- A rejection reopens the debt, and the debt card comes back with it. What
-  -- it no longer does is close the next occurrence: nothing is withheld over
-  -- money any more, so the member keeps their place in next week either way.
+  -- A rejection reopens the debt, so the hold comes back with it and the next
+  -- occurrence drops out of view again until the debt clears one way or the
+  -- other. The member's seat in it is untouched — the rejection stopped taking
+  -- that away — so for this window they hold a place in something they cannot
+  -- see, which the waiver ends a day after the old exercise started.
   select count(*) into v_count
   from json_array_elements(v_live) item
   where (item->>'id')::uuid = v_next_event_id;
-  if v_count <> 1 then
-    raise exception 'FAIL: rejected declaration closed the next occurrence: %', v_live;
+  if v_count <> 0 then
+    raise exception 'FAIL: a reopened debt did not restore the hold: %', v_live;
   end if;
 
   v_result := public.declare_event_payment(v_old_event_id, v_method_id);
