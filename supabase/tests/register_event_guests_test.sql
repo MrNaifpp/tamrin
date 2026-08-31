@@ -42,7 +42,6 @@ declare
   v_capacity_event_id uuid;
   v_locked_event_id uuid;
   v_cancelled_event_id uuid;
-  v_draft_event_id uuid;
   v_result json;
   v_destination json;
   v_count int;
@@ -71,25 +70,6 @@ begin
   );
   v_method_two_id := (v_method_two->>'id')::uuid;
 
-  -- A draft owner is already present in the roster but still cannot add a
-  -- guest before publication.
-  v_event := public.create_event(
-    p_creator_id => '44000000-0000-0000-0000-000000000001',
-    p_workspace_id => v_workspace_id,
-    p_name => 'تمرين مسودة',
-    p_start_date => now() + interval '1 day',
-    p_max_participants => 6
-  );
-  v_draft_event_id := (v_event->>'id')::uuid;
-
-  v_result := public.register_event_guests(
-    p_event_id => v_draft_event_id,
-    p_guest_names => array['ضيف المسودة']
-  );
-  if v_result->>'status' <> 'not_published' then
-    raise exception 'FAIL: draft guest registration returned %', v_result;
-  end if;
-
   -- Free event: only the new guests count toward the batch, and their seats
   -- are immediately confirmed without mutating the member's original row.
   v_event := public.create_event(
@@ -100,7 +80,6 @@ begin
     p_max_participants => 8
   );
   v_free_event_id := (v_event->>'id')::uuid;
-  v_result := public.publish_event(v_free_event_id);
 
   perform set_config('request.jwt.claims', '{"role":"anon"}', true);
   v_failed := false;
@@ -272,7 +251,6 @@ begin
     p_max_participants => 3
   );
   v_capacity_event_id := (v_event->>'id')::uuid;
-  v_result := public.publish_event(v_capacity_event_id);
   perform pg_temp.set_auth('44000000-0000-0000-0000-000000000002');
   v_result := public.submit_payment_v2(p_event_id => v_capacity_event_id);
   v_result := public.register_event_guests(
@@ -300,7 +278,6 @@ begin
     p_max_participants => 5
   );
   v_locked_event_id := (v_event->>'id')::uuid;
-  v_result := public.publish_event(v_locked_event_id);
   perform pg_temp.set_auth('44000000-0000-0000-0000-000000000002');
   v_result := public.submit_payment_v2(p_event_id => v_locked_event_id);
   perform pg_temp.set_auth('44000000-0000-0000-0000-000000000001');
@@ -323,7 +300,6 @@ begin
     p_max_participants => 5
   );
   v_cancelled_event_id := (v_event->>'id')::uuid;
-  v_result := public.publish_event(v_cancelled_event_id);
   perform pg_temp.set_auth('44000000-0000-0000-0000-000000000002');
   v_result := public.submit_payment_v2(p_event_id => v_cancelled_event_id);
   perform pg_temp.set_auth('44000000-0000-0000-0000-000000000001');
@@ -351,7 +327,6 @@ begin
     p_payment_method_ids => array[v_method_one_id]
   );
   v_paid_event_id := (v_event->>'id')::uuid;
-  v_result := public.publish_event(v_paid_event_id);
 
   perform pg_temp.set_auth('44000000-0000-0000-0000-000000000002');
   v_result := public.submit_payment_v2(

@@ -93,7 +93,6 @@ begin
   );
   v_old_event_id := (v_old_event->>'id')::uuid;
   v_template_id := (v_old_event->>'template_id')::uuid;
-  v_result := public.publish_event(v_old_event_id);
 
   perform pg_temp.set_auth(v_member);
   v_result := public.register_event_seat(p_event_id => v_old_event_id);
@@ -220,7 +219,6 @@ begin
   );
   v_other_event_id := (v_other_event->>'id')::uuid;
   v_other_template_id := (v_other_event->>'template_id')::uuid;
-  v_result := public.publish_event(v_other_event_id);
 
   if v_other_template_id = v_template_id then
     raise exception 'FAIL: other-template fixture reused the gated template';

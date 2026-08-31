@@ -112,49 +112,18 @@ begin
   where id = v_event_id and workspace_id = v_workspace_id;
   if not found then raise exception 'FAIL: failed workspace move changed the event'; end if;
 
-  -- Newly composed events are creator-visible drafts until explicit publish.
+  -- A newly composed exercise is live. There is no draft state left to be in,
+  -- so the group sees it and is invited to it the moment it is made.
   perform 1 from public.events
-  where id = v_event_id and published_at is null;
-  if not found then raise exception 'FAIL: create_event did not create a draft'; end if;
+  where id = v_event_id and published_at is not null;
+  if not found then raise exception 'FAIL: create_event left the exercise unpublished'; end if;
 
   select json_array_length(public.get_workspace_events(v_workspace_id)) into v_count;
-  if v_count <> 1 then raise exception 'FAIL: creator cannot see own draft'; end if;
+  if v_count <> 1 then raise exception 'FAIL: creator cannot see own exercise'; end if;
   perform pg_temp.set_auth('20000000-0000-0000-0000-000000000002');
   select json_array_length(public.get_workspace_events(v_workspace_id)) into v_count;
-  if v_count <> 0 then raise exception 'FAIL: member saw an unpublished draft'; end if;
-
-  v_failed := false;
-  begin
-    v_result := public.get_event_participants(v_event_id);
-  exception when others then
-    v_failed := true;
-  end;
-  if not v_failed then raise exception 'FAIL: member read draft participants'; end if;
-
-  v_failed := false;
-  begin
-    v_result := public.get_event_payment_destination(v_event_id);
-  exception when others then
-    v_failed := true;
-  end;
-  if not v_failed then raise exception 'FAIL: member read draft payment destination'; end if;
-
-  perform set_config('request.jwt.claims', '{"role":"anon"}', true);
-  v_failed := false;
-  begin
-    v_result := public.get_event_by_id(v_event_id);
-  exception when others then
-    v_failed := true;
-  end;
-  if not v_failed then raise exception 'FAIL: anonymous user read a draft'; end if;
+  if v_count <> 1 then raise exception 'FAIL: a member cannot see a new exercise'; end if;
   perform pg_temp.set_auth('20000000-0000-0000-0000-000000000001');
-
-  v_result := public.publish_event(v_event_id);
-  if v_result->>'status' <> 'published'
-     or (v_result->>'new_invite_count')::int <> 2
-     or (v_result->>'notification_count')::int <> 2 then
-    raise exception 'FAIL: first publish result %', v_result;
-  end if;
 
   perform set_config('request.jwt.claims', '{"role":"anon"}', true);
   v_result := public.get_event_by_id(v_event_id);
@@ -208,12 +177,6 @@ begin
   where event_id = v_event_id and type = 'event_invited';
   if v_count <> 2 then raise exception 'FAIL: expected 2 invite pushes, got %', v_count; end if;
 
-  v_result := public.publish_event(v_event_id);
-  if (v_result->>'new_invite_count')::int <> 0
-     or (v_result->>'notification_count')::int <> 0 then
-    raise exception 'FAIL: repeated publish was not idempotent: %', v_result;
-  end if;
-
   -- Atomic edit: a series edit rebuilds the active template in the same
   -- transaction and preserves draft/published state; occurrence-only leaves
   -- the current template untouched.
@@ -250,14 +213,12 @@ begin
   join public.event_templates old_t on old_t.id = v_old_template_id
   where e.id = v_atomic_event_id
     and e.name = 'تمرين ذري معدل'
-    and e.published_at is null
+    and e.published_at is not null
     and new_t.id = v_new_template_id
-    and new_t.published_at is null
+    and new_t.published_at is not null
     and new_t.creator_id = '20000000-0000-0000-0000-000000000001'
     and old_t.ended_at is not null;
-  if not found then raise exception 'FAIL: atomic draft series rebuild'; end if;
-
-  v_result := public.publish_event(v_atomic_event_id);
+  if not found then raise exception 'FAIL: atomic series rebuild'; end if;
   v_old_template_id := v_new_template_id;
   v_result := public.update_event_with_scope(
     p_event_id => v_atomic_event_id,
@@ -359,17 +320,18 @@ begin
   );
   v_opened_event_id := (v_opened_event->>'id')::uuid;
 
-  update public.events set published_at = now() where id = v_opened_event_id;
+  -- Creation now invites and notifies the group by itself, so the invitation
+  -- this case is about has already been sent. Clear it, to leave the
+  -- event_opened row below as the only reason to skip the member — which is
+  -- the thing being tested.
+  delete from public.push_outbox where event_id = v_opened_event_id;
+  delete from public.event_member_responses where event_id = v_opened_event_id;
 
   insert into public.push_outbox (user_id, type, event_id)
   values ('20000000-0000-0000-0000-000000000002', 'event_opened', v_opened_event_id);
 
-  v_result := public.publish_event(v_opened_event_id);
-  if (v_result->>'new_invite_count')::int <> 1
-     or (v_result->>'invited_count')::int <> 2
-     or (v_result->>'notification_count')::int <> 1 then
-    raise exception 'FAIL: event_opened dedupe result %', v_result;
-  end if;
+  perform public.publish_recurring_event_internal(
+    v_opened_event_id, '20000000-0000-0000-0000-000000000001');
   select count(*) into v_count from public.push_outbox
   where event_id = v_opened_event_id
     and user_id = '20000000-0000-0000-0000-000000000002'
@@ -383,25 +345,10 @@ begin
   values
     ('20000000-0000-0000-0000-000000000002', v_workspace_id,
      'تمرين منشئه عضو قديم', now() + interval '2 days',
-     now() + interval '2 days 1 hour', null)
+     now() + interval '2 days 1 hour', now())
   returning id into v_legacy_event_id;
   insert into public.event_participants (event_id, user_id)
   values (v_legacy_event_id, '20000000-0000-0000-0000-000000000002');
-
-  perform pg_temp.set_auth('20000000-0000-0000-0000-000000000002');
-  v_failed := false;
-  begin
-    perform public.publish_event(v_legacy_event_id);
-  exception when others then
-    v_failed := sqlerrm = 'Only the workspace owner can publish events';
-  end;
-  if not v_failed then raise exception 'FAIL: legacy member creator published event'; end if;
-
-  perform pg_temp.set_auth('20000000-0000-0000-0000-000000000001');
-  v_result := public.publish_event(v_legacy_event_id);
-  if (v_result->>'new_invite_count')::int <> 1 then
-    raise exception 'FAIL: owner did not publish legacy event %', v_result;
-  end if;
 
   perform pg_temp.set_auth('20000000-0000-0000-0000-000000000002');
   v_failed := false;
@@ -522,9 +469,9 @@ begin
   from public.events e
   join public.event_templates t on t.id = e.template_id
   where e.id = v_recurring_event_id
-    and e.published_at is null
-    and t.published_at is null;
-  if not found then raise exception 'FAIL: recurring event was not an unsent draft'; end if;
+    and e.published_at is not null
+    and t.published_at is not null;
+  if not found then raise exception 'FAIL: a weekly exercise was not live on creation'; end if;
 
   v_result := public.cancel_event_occurrence(
     v_recurring_event_id,
@@ -541,11 +488,11 @@ begin
     and t.published_at is not null
     and t.ended_at is null;
   if not found then
-    raise exception 'FAIL: cancelling a recurring draft did not keep future weeks active';
+    raise exception 'FAIL: cancelling one week did not keep the series active';
   end if;
   select count(*) into v_count from public.push_outbox
   where event_id = v_recurring_event_id and type = 'event_cancelled';
-  if v_count <> 2 then raise exception 'FAIL: recurring draft cancellation pushes %', v_count; end if;
+  if v_count <> 2 then raise exception 'FAIL: weekly cancellation pushes %', v_count; end if;
 
   -- Cancelled events stay in the upcoming feed and never receive reminders.
   perform pg_temp.set_auth('20000000-0000-0000-0000-000000000003');

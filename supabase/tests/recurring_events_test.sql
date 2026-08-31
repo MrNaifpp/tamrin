@@ -267,7 +267,6 @@ begin
 
   -- Sending the first occurrence activates the weekly template, but the next
   -- occurrence must remain absent until next_release_at is reached.
-  r := public.publish_event((ev->>'id')::uuid);
   select next_occurrence_at into v_next from public.event_templates where id = t_id;
 
   perform public.generate_recurring_events();
@@ -599,7 +598,6 @@ begin
   );
   e_id := (ev->>'id')::uuid;
   t_id := (ev->>'template_id')::uuid;
-  r := public.publish_event(e_id);
 
   select next_occurrence_at into draft_start
   from public.event_templates where id = t_id;

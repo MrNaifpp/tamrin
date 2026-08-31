@@ -89,7 +89,6 @@ begin
   end;
   if not v_failed then raise exception 'FAIL: an invalid capacity policy was accepted'; end if;
 
-  perform public.publish_event(v_event_id);
 
   -- ========================================================================
   -- Fill the event. The creator already holds one of the three seats.
@@ -216,7 +215,6 @@ begin
     p_max_participants => 1,
     p_capacity_policy => 'closed'
   )->>'id')::uuid;
-  perform public.publish_event(v_closed_id);
 
   perform pg_temp.set_auth(A_ID);
   v_result := public.submit_payment_v2(p_event_id => v_closed_id);
@@ -264,7 +262,6 @@ begin
     p_name => 'تمرين بلا حد',
     p_start_date => now() + interval '2 hours'
   )->>'id')::uuid;
-  perform public.publish_event(v_uncapped_id);
   perform pg_temp.set_auth(B_ID);
   perform public.join_waitlist(v_uncapped_id, B_ID);
   perform pg_temp.set_auth(OWNER_ID);
