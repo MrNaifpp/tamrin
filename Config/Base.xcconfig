@@ -13,18 +13,17 @@
 // superseded. A released version's train is closed to new builds — uploading
 // another build to 1.1 fails with "Invalid Pre-Release Train" — so the first
 // production-backed build is a new version, not a new build number.
-MARKETING_VERSION = 1.6
+MARKETING_VERSION = 1.7
 // Build numbers are what App Store Connect rejects duplicates on, not the
-// marketing version. Every number below is spent: (2) was uploaded, (3)
-// predates the rating repair, (4) the details-page and lineup-permission
-// fixes, (5) the exercise actions menu, and (8) predates the exercise ever
-// becoming visible — every event created by a build before this one is
-// invisible to its own group, because there was no way to publish one.
+// marketing version — and they are only compared within one version train.
+// 1.6 spent (2) through (8): (2) was uploaded, (3) predates the rating repair,
+// (4) the details-page and lineup-permission fixes, (5) the exercise actions
+// menu, and (8) predates the exercise ever becoming visible — every event
+// created by a build before this one is invisible to its own group, because
+// there was no way to publish one.
 //
-// Set back to (1) deliberately, for a sandbox-backed test archive rather than
-// an upload. App Store Connect takes only build numbers above the highest one
-// already uploaded on a version train, so if 1.6 has ever been uploaded this
-// number cannot be, and the number to raise is this one.
+// 1.7 is a new train, so its numbering starts again at (1) with none of 1.6's
+// numbers in the way.
 CURRENT_PROJECT_VERSION = 1
 
 // Here rather than in the target so Staging.xcconfig can override it — a
