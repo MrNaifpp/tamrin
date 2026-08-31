@@ -1,40 +1,20 @@
 #include "Base.xcconfig"
 
-// ===========================================================================
-// TEMPORARILY POINTED AT THE SANDBOX. DO NOT SHIP.
-// ===========================================================================
-// Release is what Archive, TestFlight and the App Store build. It is currently
-// wired to the development project so the always-live-events work can be tested
-// through the production scheme, whose backend has the migrations that
-// production does not.
+// Production. Reached by Archive, TestFlight and the App Store.
 //
-// This is the exact shape of a mistake already made once: 1.1 (2) reached the
-// App Store pointing at the sandbox and had to be superseded, which is why the
-// version train in Base.xcconfig is closed. A build made from this file is for
-// testing only.
-//
-// To restore production, delete the two lines below and uncomment the two
-// under PRODUCTION. Nothing else in this file changes.
-SUPABASE_HOST = kpcdinxusxycenfnitjc.supabase.co
-SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtwY2Rpbnh1c3h5Y2VuZm5pdGpjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk3ODc0MTUsImV4cCI6MjA4NTM2MzQxNX0.yKbHhYVZbvgU8QdCyYNrvG8rC7KtX5cqXPGpedHMJ_g
-
-// The home-screen name is the last line of defence, and it is doing real work
-// here: this build carries production's bundle id and production's icon, so
-// the name is the only thing separating it from the real app on a tester's
-// phone. Revert it together with the two lines above.
-INFOPLIST_KEY_CFBundleDisplayName = تمرين STG
-
-// PRODUCTION — restore these two lines before any App Store submission, and
-// delete the STG display name above with them.
+// This build depends on migrations that must already be applied to
+// hzsxwnmbdkrmipjtfzlp. There is no publish step in the app any more, so on a
+// database where create_event still writes a draft, every exercise anyone
+// creates is invisible to their group with no way to reveal it. The sandbox
+// carries them; production must too before this ships.
 //
 // Host only, never a full URL: `//` starts a comment in xcconfig, so
 // `https://x.supabase.co` would silently truncate to `https:`. SupabaseEnvironment
 // prepends the scheme.
-//
+SUPABASE_HOST = hzsxwnmbdkrmipjtfzlp.supabase.co
+
 // Legacy JWT anon key, not the newer sb_publishable_ format — that one makes
 // auth.uid() return NULL inside RLS (supabase#42235), which would break every
 // policy in the migration set. Anon keys are public by design; they ship in the
 // app binary and RLS is what protects the data.
-//
-// SUPABASE_HOST = hzsxwnmbdkrmipjtfzlp.supabase.co
-// SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6c3h3bm1iZGtybWlwanRmemxwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU2NTcwOTksImV4cCI6MjEwMTIzMzA5OX0.Opjcn6HMOWdw07RPDEXGaytKziAsnvvJSzpzuw8NiPY
+SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6c3h3bm1iZGtybWlwanRmemxwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU2NTcwOTksImV4cCI6MjEwMTIzMzA5OX0.Opjcn6HMOWdw07RPDEXGaytKziAsnvvJSzpzuw8NiPY
