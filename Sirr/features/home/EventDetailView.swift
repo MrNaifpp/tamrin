@@ -68,8 +68,6 @@ struct EventDetailView: View {
     /// Set when a lineup is saved and this person has not said what they think
     /// of the feature yet. The question waits for the lineup page to close —
     /// a sheet raised while a cover is dismissing has nothing to sit on.
-    @State private var pendingFeedback: TamrinFeature?
-    @State private var feedbackInFlight: TamrinFeature?
     /// Live top edge of the content panel, in screen coordinates. The blurred
     /// artwork is revealed from here down, so the frost follows the panel
     /// through every scroll and every added row.
@@ -538,15 +536,6 @@ struct EventDetailView: View {
                 finishLineup(with: plan)
             }
             .navigationTransition(.zoom(sourceID: source, in: lineupZoom))
-        }
-        .onChange(of: lineupCoverPresentation) { _, presented in
-            if presented == nil { presentPendingFeedback() }
-        }
-        .onChange(of: lineupCardPresentation) { _, presented in
-            if presented == nil { presentPendingFeedback() }
-        }
-        .sheet(item: $feedbackInFlight) { feature in
-            FeatureFeedbackSheet(feature: feature)
         }
         .task {
             // The lineup is a request now, so this reads it rather than a
@@ -1271,18 +1260,8 @@ struct EventDetailView: View {
         }
     }
 
-    /// The lineup page closed. A saved split means the feature was used all
-    /// the way through, which is the moment worth asking about it.
     private func finishLineup(with plan: LineupPlan?) {
         lineupPlan = plan
-        guard plan != nil, FeatureFeedbackStore.shouldAsk(about: .lineup) else { return }
-        pendingFeedback = .lineup
-    }
-
-    private func presentPendingFeedback() {
-        guard let pending = pendingFeedback else { return }
-        pendingFeedback = nil
-        feedbackInFlight = pending
     }
 
     /// Opens the page out of the card that was pressed.
