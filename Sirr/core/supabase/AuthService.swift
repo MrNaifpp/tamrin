@@ -175,6 +175,13 @@ final class AuthService {
         return true
     }
 
+    /// Reads identity from the cached/authenticated session without depending
+    /// on the optional public profile row being reachable.
+    func getCurrentUserID() async throws -> UUID {
+        let session = try await client.auth.session
+        return session.user.id
+    }
+
     /// Fetch the current user's row from public.users. Returns nil if not found or no session.
     func getCurrentUserProfile() async throws -> UserRecord? {
         let session = try await client.auth.session

@@ -10,3 +10,4 @@
 // (`com.businessech.tmrin.staging`) and ignores whatever is set here.
 DEVELOPMENT_TEAM =
 PRODUCT_BUNDLE_IDENTIFIER =
+TAMRIN_LIVE_ACTIVITY_BUNDLE_IDENTIFIER =

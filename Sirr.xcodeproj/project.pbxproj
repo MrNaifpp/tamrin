@@ -11,7 +11,34 @@
 		DCA0C1002F8B000100000010 /* SportArt in Resources */ = {isa = PBXBuildFile; fileRef = DCA0C1012F8B000100000011 /* SportArt */; };
 		DCA0C1002F8B000100000012 /* DemoFaces in Resources */ = {isa = PBXBuildFile; fileRef = DCA0C1012F8B000100000013 /* DemoFaces */; };
 		DCA0C1002F8B000100000014 /* FeatureMedia in Resources */ = {isa = PBXBuildFile; fileRef = DCA0C1012F8B000100000015 /* FeatureMedia */; };
+		DCA1B0012F9A000100000001 /* WorkoutActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCA1B0052F9A000100000005 /* WorkoutActivityAttributes.swift */; };
+		DCA1B0022F9A000100000002 /* WorkoutActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCA1B0052F9A000100000005 /* WorkoutActivityAttributes.swift */; };
+		DCA1B0032F9A000100000003 /* TamrinLiveActivityExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = DCA1B0042F9A000100000004 /* TamrinLiveActivityExtension.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		DCA1B0062F9A000100000006 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 5A8B1AA82E8AE2E900BA3398 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DCA1B00E2F9A00010000000E;
+			remoteInfo = TamrinLiveActivityExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		DCA1B0072F9A000100000007 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				DCA1B0032F9A000100000003 /* TamrinLiveActivityExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		5A8B1AB02E8AE2E900BA3398 /* Sirr.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Sirr.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -21,6 +48,11 @@
 		DCA0C1012F8B000100000011 /* SportArt */ = {isa = PBXFileReference; lastKnownFileType = folder; path = SportArt; sourceTree = "<group>"; };
 		DCA0C1012F8B000100000013 /* DemoFaces */ = {isa = PBXFileReference; lastKnownFileType = folder; path = DemoFaces; sourceTree = "<group>"; };
 		DCA0C1012F8B000100000015 /* FeatureMedia */ = {isa = PBXFileReference; lastKnownFileType = folder; path = FeatureMedia; sourceTree = "<group>"; };
+		DCA1B0042F9A000100000004 /* TamrinLiveActivityExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TamrinLiveActivityExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		DCA1B0052F9A000100000005 /* WorkoutActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutActivityAttributes.swift; sourceTree = "<group>"; };
+		DCA1B0142F9A000100000014 /* LiveActivityDebug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = LiveActivityDebug.xcconfig; path = Config/LiveActivityDebug.xcconfig; sourceTree = "<group>"; };
+		DCA1B0152F9A000100000015 /* LiveActivityRelease.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = LiveActivityRelease.xcconfig; path = Config/LiveActivityRelease.xcconfig; sourceTree = "<group>"; };
+		DCA1B0162F9A000100000016 /* LiveActivityStaging.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = LiveActivityStaging.xcconfig; path = Config/LiveActivityStaging.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -31,6 +63,13 @@
 			);
 			target = 5A8B1AAF2E8AE2E900BA3398 /* Sirr */;
 		};
+		DCA1B0082F9A000100000008 /* Exceptions for "TamrinLiveActivity" folder in "TamrinLiveActivityExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = DCA1B00E2F9A00010000000E /* TamrinLiveActivityExtension */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -40,6 +79,14 @@
 				DC6BB99B2F50E6320022444F /* Exceptions for "Sirr" folder in "Sirr" target */,
 			);
 			path = Sirr;
+			sourceTree = "<group>";
+		};
+		DCA1B0092F9A000100000009 /* TamrinLiveActivity */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				DCA1B0082F9A000100000008 /* Exceptions for "TamrinLiveActivity" folder in "TamrinLiveActivityExtension" target */,
+			);
+			path = TamrinLiveActivity;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -53,6 +100,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DCA1B00B2F9A00010000000B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -60,6 +114,8 @@
 			isa = PBXGroup;
 			children = (
 				DCA0C0F12F8B000100000001 /* Config */,
+				DCA1B00A2F9A00010000000A /* LiveActivityShared */,
+				DCA1B0092F9A000100000009 /* TamrinLiveActivity */,
 				DCA0C1012F8B000100000011 /* SportArt */,
 				DCA0C1012F8B000100000013 /* DemoFaces */,
 				DCA0C1012F8B000100000015 /* FeatureMedia */,
@@ -73,6 +129,7 @@
 			isa = PBXGroup;
 			children = (
 				5A8B1AB02E8AE2E900BA3398 /* Sirr.app */,
+				DCA1B0042F9A000100000004 /* TamrinLiveActivityExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -90,8 +147,19 @@
 				DCA0C0F22F8B000100000002 /* Debug.xcconfig */,
 				DCA0C0F32F8B000100000003 /* Release.xcconfig */,
 				DCA0C0F42F8B000100000004 /* Staging.xcconfig */,
+				DCA1B0142F9A000100000014 /* LiveActivityDebug.xcconfig */,
+				DCA1B0152F9A000100000015 /* LiveActivityRelease.xcconfig */,
+				DCA1B0162F9A000100000016 /* LiveActivityStaging.xcconfig */,
 			);
 			name = Config;
+			sourceTree = "<group>";
+		};
+		DCA1B00A2F9A00010000000A /* LiveActivityShared */ = {
+			isa = PBXGroup;
+			children = (
+				DCA1B0052F9A000100000005 /* WorkoutActivityAttributes.swift */,
+			);
+			path = LiveActivityShared;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -104,10 +172,12 @@
 				5A8B1AAC2E8AE2E900BA3398 /* Sources */,
 				5A8B1AAD2E8AE2E900BA3398 /* Frameworks */,
 				5A8B1AAE2E8AE2E900BA3398 /* Resources */,
+				DCA1B0072F9A000100000007 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				DCA1B00F2F9A00010000000F /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				5A8B1AB22E8AE2E900BA3398 /* Sirr */,
@@ -120,6 +190,28 @@
 			productReference = 5A8B1AB02E8AE2E900BA3398 /* Sirr.app */;
 			productType = "com.apple.product-type.application";
 		};
+		DCA1B00E2F9A00010000000E /* TamrinLiveActivityExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DCA1B0132F9A000100000013 /* Build configuration list for PBXNativeTarget "TamrinLiveActivityExtension" */;
+			buildPhases = (
+				DCA1B00D2F9A00010000000D /* Sources */,
+				DCA1B00B2F9A00010000000B /* Frameworks */,
+				DCA1B00C2F9A00010000000C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				DCA1B0092F9A000100000009 /* TamrinLiveActivity */,
+			);
+			name = TamrinLiveActivityExtension;
+			packageProductDependencies = (
+			);
+			productName = TamrinLiveActivityExtension;
+			productReference = DCA1B0042F9A000100000004 /* TamrinLiveActivityExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -131,6 +223,9 @@
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					5A8B1AAF2E8AE2E900BA3398 = {
+						CreatedOnToolsVersion = 26.0.1;
+					};
+					DCA1B00E2F9A00010000000E = {
 						CreatedOnToolsVersion = 26.0.1;
 					};
 				};
@@ -153,6 +248,7 @@
 			projectRoot = "";
 			targets = (
 				5A8B1AAF2E8AE2E900BA3398 /* Sirr */,
+				DCA1B00E2F9A00010000000E /* TamrinLiveActivityExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -168,6 +264,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DCA1B00C2F9A00010000000C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -175,10 +278,27 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DCA1B0012F9A000100000001 /* WorkoutActivityAttributes.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DCA1B00D2F9A00010000000D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DCA1B0022F9A000100000002 /* WorkoutActivityAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		DCA1B00F2F9A00010000000F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DCA1B00E2F9A00010000000E /* TamrinLiveActivityExtension */;
+			targetProxy = DCA1B0062F9A000100000006 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		5A8B1AB92E8AE2EB00BA3398 /* Debug */ = {
@@ -483,6 +603,96 @@
 			};
 			name = Staging;
 		};
+		DCA1B0102F9A000100000010 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = DCA1B0142F9A000100000014 /* LiveActivityDebug.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TamrinLiveActivity/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		DCA1B0112F9A000100000011 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = DCA1B0152F9A000100000015 /* LiveActivityRelease.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TamrinLiveActivity/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		DCA1B0122F9A000100000012 /* Staging */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = DCA1B0162F9A000100000016 /* LiveActivityStaging.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TamrinLiveActivity/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Staging;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -502,6 +712,16 @@
 				5A8B1ABC2E8AE2EB00BA3398 /* Debug */,
 				5A8B1ABD2E8AE2EB00BA3398 /* Release */,
 				DCA0C0F62F8B000100000006 /* Staging */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DCA1B0132F9A000100000013 /* Build configuration list for PBXNativeTarget "TamrinLiveActivityExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DCA1B0102F9A000100000010 /* Debug */,
+				DCA1B0112F9A000100000011 /* Release */,
+				DCA1B0122F9A000100000012 /* Staging */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

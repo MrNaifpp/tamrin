@@ -14,6 +14,9 @@ class AppState: ObservableObject {
     @Published var deepLinkEventId: UUID?
     /// Invite code from a /join/{code} link, pending until the join screen handles it.
     @Published var deepLinkJoinCode: String?
+    /// A directions request from the Live Activity. The containing app opens
+    /// Hudhud because widget extensions cannot call UIApplication themselves.
+    @Published var deepLinkDirections: EventDirectionsDestination?
     /// False until the initial session check completes. Used to avoid flashing
     /// the logged-out deep-link sheet to a user who turns out to be signed in.
     @Published var sessionChecked = false
@@ -45,6 +48,28 @@ class AppState: ObservableObject {
         // Accept both the custom scheme (sirr://event/{id}, sirr://join/{code})
         // and the Universal Link (https://<domain>/event/{id}, /join/{code}).
         // The payload is the path segment that follows "event" / "join".
+        if url.scheme == "sirr", url.host == "directions" {
+            let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems ?? []
+            let values = Dictionary(
+                items.compactMap { item in item.value.map { (item.name, $0) } },
+                uniquingKeysWith: { _, latest in latest }
+            )
+            let latitude = values["lat"].flatMap(Double.init)
+            let longitude = values["lon"].flatMap(Double.init)
+            let name = values["name"] ?? ""
+            guard (latitude != nil && longitude != nil)
+                    || !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return
+            }
+            deepLinkDirections = EventDirectionsDestination(
+                latitude: latitude,
+                longitude: longitude,
+                name: name
+            )
+            return
+        }
+
         let segments = (url.host.map { [$0] } ?? []) + url.pathComponents.filter { $0 != "/" }
         if let idx = segments.firstIndex(of: "event"),
            idx + 1 < segments.count,
