@@ -22,10 +22,24 @@ struct MemberAvatar: View {
         return UIImage(data: imageData)
     }
 
+    /// A photo that ships inside the bundle rather than sitting on a server.
+    /// `AsyncImage` is built around a network fetch and does not reliably load
+    /// a `file:` URL, and there is nothing to await here anyway — the bytes are
+    /// already on disk, so reading them straight through skips a frame of
+    /// placeholder as well.
+    private var bundledImage: UIImage? {
+        guard let imageUrl, let url = URL(string: imageUrl), url.isFileURL else { return nil }
+        return UIImage(contentsOfFile: url.path)
+    }
+
     var body: some View {
         Group {
             if let localImage {
                 Image(uiImage: localImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else if let bundledImage {
+                Image(uiImage: bundledImage)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
             } else if let imageUrl, let url = URL(string: imageUrl) {
@@ -73,6 +87,9 @@ struct TamrinRowCard<Leading: View, Accessory: View>: View {
 
     let title: String
     var subtitle: String?
+    /// Off when the row is part of a larger card that paints the glass itself,
+    /// so the two do not stack two surfaces with a seam between them.
+    var drawsCard: Bool = true
     @ViewBuilder var leading: Leading
     @ViewBuilder var accessory: Accessory
 
@@ -99,8 +116,9 @@ struct TamrinRowCard<Leading: View, Accessory: View>: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, Self.verticalPadding)
+        .modifier(OptionalGlassCard(isOn: drawsCard))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .tamrinGlassCard()
+
     }
 }
 
@@ -120,10 +138,11 @@ struct MemberRowCard<Accessory: View>: View {
     var avatarImageUrl: String?
     var avatarTint: Color = .white.opacity(0.28)
     var avatarForeground: Color = .white
+    var drawsCard: Bool = true
     @ViewBuilder var accessory: Accessory
 
     var body: some View {
-        TamrinRowCard(title: name, subtitle: subtitle) {
+        TamrinRowCard(title: name, subtitle: subtitle, drawsCard: drawsCard) {
             MemberAvatar(
                 name: name,
                 size: Self.avatarSize,
@@ -179,4 +198,19 @@ extension MemberRowCard where Accessory == EmptyView {
     }
     .environment(\.layoutDirection, .rightToLeft)
     .colorScheme(.dark)
+}
+
+
+/// Applies the app's glass card only when asked, so one row can stand alone and
+/// another can be a slice of a bigger card.
+private struct OptionalGlassCard: ViewModifier {
+    let isOn: Bool
+
+    func body(content: Content) -> some View {
+        if isOn {
+            content.tamrinGlassCard()
+        } else {
+            content
+        }
+    }
 }

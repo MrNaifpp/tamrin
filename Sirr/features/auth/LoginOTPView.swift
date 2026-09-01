@@ -122,8 +122,11 @@ private struct OTPInputView: View {
         Binding(
             get: { otpCode },
             set: { newValue in
-                let filtered = newValue.filter { $0.isNumber }
-                otpCode = String(filtered.prefix(digitCount))
+                // `isNumber` would happily keep ٠٧٧٠٦٨ — six characters that
+                // look like a code, show as Arabic-Indic in the slots, and are
+                // rejected by the server as an invalid token. Fold to ASCII
+                // instead of filtering, so the code shown is the code sent.
+                otpCode = String(newValue.asciiDigits.prefix(digitCount))
             }
         )
     }

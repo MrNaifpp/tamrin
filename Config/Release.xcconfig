@@ -2,6 +2,12 @@
 
 // Production. Reached by Archive, TestFlight and the App Store.
 //
+// This build depends on migrations that must already be applied to
+// hzsxwnmbdkrmipjtfzlp. There is no publish step in the app any more, so on a
+// database where create_event still writes a draft, every exercise anyone
+// creates is invisible to their group with no way to reveal it. The sandbox
+// carries them; production must too before this ships.
+//
 // Host only, never a full URL: `//` starts a comment in xcconfig, so
 // `https://x.supabase.co` would silently truncate to `https:`. SupabaseEnvironment
 // prepends the scheme.

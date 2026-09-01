@@ -44,9 +44,21 @@ struct EventRecord: Codable {
     let cancelledAt: Date?
     let cancellationReasonCode: String?
     let cancellationReasonText: String?
+    /// Set when the organizer has explicitly asked the registered players to
+    /// pay their share. Members use it to keep the payment destination
+    /// reachable after dismissing the reminder or payment sheet.
+    let paymentReminderSentAt: Date?
     /// Current authenticated member's private response, computed by the list
     /// RPC. Organizers do not receive other members' reasons here.
     let myResponseStatus: String?
+    /// A finished occurrence that remains actionable solely because the current
+    /// member still owes its contribution. Older servers omit this computed
+    /// field, so decoding deliberately falls back to false.
+    let requiresPaymentAction: Bool
+    /// What happens once the seats run out. Nil only on a server that predates
+    /// the column; callers treat that as `.waitlist`, which is how the client
+    /// behaved back when it hardcoded the value.
+    let capacityPolicy: CapacityPolicy?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -73,7 +85,10 @@ struct EventRecord: Codable {
         case cancelledAt = "cancelled_at"
         case cancellationReasonCode = "cancellation_reason_code"
         case cancellationReasonText = "cancellation_reason_text"
+        case paymentReminderSentAt = "payment_reminder_sent_at"
         case myResponseStatus = "my_response_status"
+        case requiresPaymentAction = "requires_payment_action"
+        case capacityPolicy = "capacity_policy"
     }
 
     init(from decoder: Decoder) throws {
@@ -104,7 +119,10 @@ struct EventRecord: Codable {
         cancelledAt = try container.decodeIfPresent(Date.self, forKey: .cancelledAt)
         cancellationReasonCode = try container.decodeIfPresent(String.self, forKey: .cancellationReasonCode)
         cancellationReasonText = try container.decodeIfPresent(String.self, forKey: .cancellationReasonText)
+        paymentReminderSentAt = try container.decodeIfPresent(Date.self, forKey: .paymentReminderSentAt)
         myResponseStatus = try container.decodeIfPresent(String.self, forKey: .myResponseStatus)
+        requiresPaymentAction = try container.decodeIfPresent(Bool.self, forKey: .requiresPaymentAction) ?? false
+        capacityPolicy = try container.decodeIfPresent(CapacityPolicy.self, forKey: .capacityPolicy)
     }
 }
 
@@ -116,6 +134,20 @@ struct SavedLocation: Identifiable, Hashable {
     var id: String { "\(name)|\(latitude)|\(longitude)" }
 }
 
+/// Authoritative rows returned by the all-or-nothing template editor RPC.
+/// Returning the edited event and selected payment destinations lets Home
+/// update immediately even when its follow-up feed refresh is offline.
+struct ExerciseTemplateUpdateResult: Decodable {
+    let workspace: WorkspaceRecord
+    let event: EventRecord
+    let paymentMethods: [PaymentMethodRecord]
+
+    enum CodingKeys: String, CodingKey {
+        case workspace, event
+        case paymentMethods = "payment_methods"
+    }
+}
+
 
 /// Row from get_event_participants RPC.
 struct ParticipantRecord: Codable, Identifiable {
@@ -124,15 +156,25 @@ struct ParticipantRecord: Codable, Identifiable {
     let joinedAt: String?
     let displayName: String?
     let avatarUrl: String?
+    /// The position on the player's profile, verbatim. Nil for a guest, and on
+    /// a server that predates the player sheet showing it.
+    let playerPosition: String?
     let paymentStatus: PaymentStatus?
     let paidToNumber: String?
     let guestName: String?
     let addedBy: UUID?
     /// Nil on a server that predates manual registration.
     let addedManually: Bool?
+    /// When the payer said they transferred. Nil on a seat that is held but
+    /// not yet paid for, and on a server that predates pay-after-registering.
+    let paymentDeclaredAt: String?
     /// Only the organizer receives this; it is what the payment-reminder
     /// cooldown is measured from. Nil on a server that predates reminders.
     let paymentReminderSentAt: String?
+    /// True when this row is somebody waiting for a seat rather than holding
+    /// one. Waiters carry no payment columns. Nil on a server that predates
+    /// the waiting list being returned at all.
+    let isWaitlisted: Bool?
 
     var id: UUID { participantId }
 
@@ -161,11 +203,21 @@ struct ParticipantRecord: Codable, Identifiable {
 
     var paymentReminderSentAtDate: Date? { Self.timestamp(paymentReminderSentAt) }
 
+    var paymentDeclaredAtDate: Date? { Self.timestamp(paymentDeclaredAt) }
+
+    /// The seat is taken but its share has not been declared yet. A server
+    /// that predates the column reports every pending seat as declared, which
+    /// is what it used to mean.
+    var isAwaitingPayment: Bool { isPending && paymentDeclaredAt == nil }
+
     /// True if the row represents a confirmed seat.
     var isConfirmed: Bool { (paymentStatus ?? .confirmed) == .confirmed }
 
     /// True if the row is awaiting creator confirmation.
     var isPending: Bool { paymentStatus == .pending }
+
+    /// True if the row is a place in the queue rather than a seat.
+    var isWaiting: Bool { isWaitlisted == true }
 
     enum CodingKeys: String, CodingKey {
         case participantId = "participant_id"
@@ -173,12 +225,15 @@ struct ParticipantRecord: Codable, Identifiable {
         case joinedAt = "joined_at"
         case displayName = "display_name"
         case avatarUrl = "avatar_url"
+        case playerPosition = "player_position"
         case paymentStatus = "payment_status"
         case paidToNumber = "paid_to_number"
         case guestName = "guest_name"
         case addedBy = "added_by"
         case addedManually = "added_manually"
+        case paymentDeclaredAt = "payment_declared_at"
         case paymentReminderSentAt = "payment_reminder_sent_at"
+        case isWaitlisted = "is_waitlisted"
     }
 }
 
@@ -246,6 +301,47 @@ enum MemberReminderResult {
 /// A member invitation response returned by `get_event_member_responses`.
 /// The RPC only exposes the full list to the event organizer; regular members
 /// receive their own row server-side.
+/// A roster row as the feed returns it: everything `get_event_participants`
+/// gives, plus the exercise it belongs to. Composed rather than redeclared, so
+/// a column added to ParticipantRecord arrives here too.
+struct FeedParticipantRow: Decodable {
+    let eventId: UUID
+    let participant: ParticipantRecord
+
+    enum CodingKeys: String, CodingKey {
+        case eventId = "event_id"
+    }
+
+    init(from decoder: Decoder) throws {
+        eventId = try decoder.container(keyedBy: CodingKeys.self)
+            .decode(UUID.self, forKey: .eventId)
+        participant = try ParticipantRecord(from: decoder)
+    }
+}
+
+struct FeedResponseRow: Decodable {
+    let eventId: UUID
+    let response: EventMemberResponseRecord
+
+    enum CodingKeys: String, CodingKey {
+        case eventId = "event_id"
+    }
+
+    init(from decoder: Decoder) throws {
+        eventId = try decoder.container(keyedBy: CodingKeys.self)
+            .decode(UUID.self, forKey: .eventId)
+        response = try EventMemberResponseRecord(from: decoder)
+    }
+}
+
+/// Everything Home needs to paint its shelf, in one answer.
+struct MyFeedRecord: Decodable {
+    let workspaces: [WorkspaceRecord]
+    let events: [EventRecord]
+    let participants: [FeedParticipantRow]
+    let responses: [FeedResponseRow]
+}
+
 struct EventMemberResponseRecord: Codable, Identifiable {
     let userId: UUID
     let displayName: String
@@ -308,7 +404,9 @@ final class EventService {
 
     /// Decoder handling Postgres timestamp formats (same strategy the RPC
     /// decoders in this file use inline).
-    private static func makePostgresDecoder() -> JSONDecoder {
+    /// Shared with LineupService, which decodes the same date shapes. One
+    /// decoder rather than two that drift.
+    static func makePostgresDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
@@ -355,6 +453,40 @@ final class EventService {
         return events
     }
 
+    /// Historical events of one workspace, newest first.
+    ///
+    /// This deliberately uses a separate bounded RPC from `getWorkspaceEvents`.
+    /// The live Home feed eagerly prepares rosters for everything returned by
+    /// that endpoint; returning history there would make an ordinary launch do
+    /// work proportional to the lifetime of every workspace.
+    func getWorkspacePastEvents(
+        workspaceId: UUID,
+        before: Date = .now,
+        limit: Int = 60,
+        offset: Int = 0
+    ) async throws -> [EventRecord] {
+        let boundedLimit = min(max(limit, 1), 120)
+        let boundedOffset = max(offset, 0)
+        let params: [String: AnyJSON] = [
+            "p_workspace_id": .string(workspaceId.uuidString),
+            "p_before": .string(ISO8601DateFormatter().string(from: before)),
+            "p_limit": .integer(boundedLimit),
+            "p_offset": .integer(boundedOffset)
+        ]
+        let response = try await client
+            .rpc("get_workspace_past_events", params: params)
+            .execute()
+
+        let events = try Self.makePostgresDecoder().decode(
+            [EventRecord].self,
+            from: response.data
+        )
+        eventLogger.info(
+            "API getWorkspacePastEvents succeeded (workspaceId: \(workspaceId), offset: \(boundedOffset), count: \(events.count))"
+        )
+        return events
+    }
+
     /// Create a new event and add the current user as first participant.
     /// Uses a server-side RPC (SECURITY DEFINER) to bypass RLS for inserts.
     func createEvent(
@@ -372,7 +504,8 @@ final class EventService {
         longitude: Double? = nil,
         recurrence: String = "none",
         paymentMethodId: UUID? = nil,
-        paymentMethodIds: [UUID] = []
+        paymentMethodIds: [UUID] = [],
+        capacityPolicy: CapacityPolicy = .waitlist
     ) async throws -> EventRecord {
         let session: Session
         do {
@@ -402,7 +535,8 @@ final class EventService {
             } ?? .null,
             "p_payment_method_ids": .array(
                 selectedPaymentMethodIds.map { .string($0.uuidString) }
-            )
+            ),
+            "p_capacity_policy": .string(capacityPolicy.rawValue)
         ]
         if let endDate { params["p_end_date"] = .string(iso.string(from: endDate)) }
         if let imageUrl { params["p_image_url"] = .string(imageUrl) }
@@ -556,12 +690,81 @@ final class EventService {
         eventLogger.info("API updateEventWithScope succeeded (id: \(eventId), scope: \(scope))")
     }
 
+    /// Atomically updates the workspace identity (exercise name + sport) and
+    /// the selected occurrence/template details. The RPC returns the refreshed
+    /// workspace row so Home can replace its cached team without a second read.
+    func updateExerciseTemplate(
+        workspaceId: UUID,
+        eventId: UUID,
+        scope: String,
+        workspaceName: String,
+        symbol: String,
+        name: String,
+        location: String,
+        startDate: Date,
+        endDate: Date?,
+        maxParticipants: Int?,
+        totalPrice: Int,
+        latitude: Double?,
+        longitude: Double?,
+        paymentMethods: [PaymentMethodDraft],
+        fallbackPaymentMethodIds: [UUID]
+    ) async throws -> ExerciseTemplateUpdateResult {
+        let iso = ISO8601DateFormatter()
+        let paymentMethodDrafts = paymentMethods.map { draft in
+            AnyJSON.object([
+                "provider": .string(draft.provider.rawValue),
+                "mobile_number": draft.normalizedMobileNumber.map(AnyJSON.string) ?? .null,
+                "iban": draft.normalizedIBAN.map(AnyJSON.string) ?? .null,
+                "account_number": draft.normalizedAccountNumber.map(AnyJSON.string) ?? .null
+            ])
+        }
+        let params: [String: AnyJSON] = [
+            "p_workspace_id": .string(workspaceId.uuidString),
+            "p_event_id": .string(eventId.uuidString),
+            "p_scope": .string(scope),
+            "p_workspace_name": .string(workspaceName),
+            "p_symbol": .string(symbol),
+            "p_name": .string(name),
+            "p_location": .string(location),
+            "p_start_date": .string(iso.string(from: startDate)),
+            "p_end_date": endDate.map { .string(iso.string(from: $0)) } ?? .null,
+            "p_max_participants": maxParticipants.map(AnyJSON.integer) ?? .null,
+            "p_total_price": .integer(totalPrice),
+            "p_latitude": latitude.map(AnyJSON.double) ?? .null,
+            "p_longitude": longitude.map(AnyJSON.double) ?? .null,
+            "p_payment_methods": .array(paymentMethodDrafts),
+            "p_existing_payment_method_ids": .array(
+                fallbackPaymentMethodIds.map { .string($0.uuidString) }
+            )
+        ]
+
+        let response: PostgrestResponse<Void>
+        do {
+            response = try await client
+                .rpc("update_exercise_template", params: params)
+                .execute()
+        } catch {
+            throw Self.translatedPaymentSchemaError(error)
+        }
+
+        let result = try Self.makePostgresDecoder().decode(
+            ExerciseTemplateUpdateResult.self,
+            from: response.data
+        )
+        eventLogger.info(
+            "API updateExerciseTemplate succeeded (event: \(eventId), workspace: \(workspaceId), scope: \(scope))"
+        )
+        return result
+    }
+
     private static func translatedPaymentSchemaError(_ error: Error) -> Error {
         let description = error.localizedDescription.lowercased()
         let postgrestCode = (error as? PostgrestError)?.code
         let isPaymentSchemaError = description.contains("payment_method")
             || description.contains("create_event")
             || description.contains("update_event_with_scope")
+            || description.contains("update_exercise_template")
         let isMissingSchemaEntry = postgrestCode == "PGRST202"
             || postgrestCode == "PGRST203"
             || postgrestCode == "PGRST204"
@@ -677,6 +880,69 @@ final class EventService {
         let records = try JSONDecoder().decode([ParticipantRecord].self, from: response.data)
         eventLogger.info("API getEventParticipants succeeded (eventId: \(eventId), count: \(records.count))")
         return records
+    }
+
+    /// Takes a seat without paying for it. A paid exercise is now joined first
+    /// and settled later, so this is the only call registration makes.
+    func registerEventSeat(
+        eventId: UUID,
+        guestNames: [String],
+        expectedPricePerPerson: Double?
+    ) async throws -> String {
+        var params: [String: AnyJSON] = [
+            "p_event_id": .string(eventId.uuidString),
+            "p_guest_names": .array(guestNames.map { .string($0) })
+        ]
+        if let expectedPricePerPerson {
+            params["p_expected_price_per_person"] = .double(expectedPricePerPerson)
+        }
+
+        let response = try await client
+            .rpc("register_event_seat", params: params)
+            .execute()
+
+        guard
+            let payload = try JSONSerialization.jsonObject(with: response.data) as? [String: Any],
+            let status = payload["status"] as? String
+        else {
+            throw NSError(
+                domain: "EventService",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "تعذر قراءة رد الخادم."]
+            )
+        }
+        eventLogger.info("API registerEventSeat -> \(status)")
+        return status
+    }
+
+    /// «حوّلت المبلغ»: marks the caller's own seat, and the guest seats they
+    /// are responsible for, as declared — awaiting the organizer's word that it
+    /// arrived. Seats already declared are untouched.
+    func declareEventPayment(
+        eventId: UUID,
+        paymentMethodId: UUID
+    ) async throws -> String {
+        let params: [String: String] = [
+            "p_event_id": eventId.uuidString,
+            "p_payment_method_id": paymentMethodId.uuidString
+        ]
+
+        let response = try await client
+            .rpc("declare_event_payment", params: params)
+            .execute()
+
+        guard
+            let payload = try JSONSerialization.jsonObject(with: response.data) as? [String: Any],
+            let status = payload["status"] as? String
+        else {
+            throw NSError(
+                domain: "EventService",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "تعذر قراءة رد الخادم."]
+            )
+        }
+        eventLogger.info("API declareEventPayment -> \(status)")
+        return status
     }
 
     /// Registers a person by name on behalf of the organizer. The seat is real:
@@ -917,16 +1183,6 @@ final class EventService {
         eventLogger.info("API leaveEvent succeeded (eventId: \(eventId))")
     }
 
-    /// Publishes an organizer-owned event and invites all current workspace
-    /// members. The RPC is idempotent and owns notification deduplication.
-    func publishEvent(eventId: UUID) async throws {
-        let params: [String: String] = ["p_event_id": eventId.uuidString]
-        try await client
-            .rpc("publish_event", params: params)
-            .execute()
-        eventLogger.info("API publishEvent succeeded (eventId: \(eventId))")
-    }
-
     /// Declines an invitation with an optional structured reason. This server
     /// operation also releases any current registration or waitlist entry.
     func declineEvent(
@@ -943,6 +1199,27 @@ final class EventService {
             .rpc("decline_event", params: params)
             .execute()
         eventLogger.info("API declineEvent succeeded (eventId: \(eventId))")
+    }
+
+    /// Changes what happens when the session fills. Switching back to
+    /// `.waitlist` can make an already-free seat claimable, so the RPC drains
+    /// the queue in the same transaction and reports how many it seated.
+    @discardableResult
+    func setCapacityPolicy(
+        eventId: UUID,
+        policy: CapacityPolicy
+    ) async throws -> Int {
+        let params: [String: AnyJSON] = [
+            "p_event_id": .string(eventId.uuidString),
+            "p_capacity_policy": .string(policy.rawValue)
+        ]
+        let response: PostgrestResponse<Void> = try await client
+            .rpc("set_event_capacity_policy", params: params)
+            .execute()
+        let promoted = (try? JSONSerialization.jsonObject(with: response.data))
+            .flatMap { ($0 as? [String: Any])?["promoted_count"] as? Int } ?? 0
+        eventLogger.info("API setCapacityPolicy ok (promoted: \(promoted))")
+        return promoted
     }
 
     /// Cancels only this concrete occurrence, preserving its weekly template.
@@ -1062,5 +1339,18 @@ final class EventService {
             .rpc("end_recurrence", params: params)
             .execute()
         eventLogger.info("API endRecurrence succeeded (templateId: \(templateId))")
+    }
+}
+
+extension EventService {
+    /// Home in one request. The shelf spans every workspace, so asking each one
+    /// in turn cost a round trip per group plus a roster per card, in sequence.
+    func getMyFeed() async throws -> MyFeedRecord {
+        let response = try await client.rpc("get_my_feed").execute()
+        let feed = try Self.makePostgresDecoder().decode(MyFeedRecord.self, from: response.data)
+        eventLogger.info(
+            "API getMyFeed succeeded (workspaces: \(feed.workspaces.count), events: \(feed.events.count))"
+        )
+        return feed
     }
 }

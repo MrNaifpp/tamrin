@@ -1,0 +1,29 @@
+# A simulator snapshot has emptied the entitlements on a shared branch twice
+# (a4d1ac1, then 8ae8620 after c3253a4 had undone the first one). Nothing about
+# it fails to build, so it only surfaces when someone taps a shared link and
+# lands in Safari. This is the check that would have caught either one.
+name: "check-signing-capabilities"
+
+on:
+  pull_request:
+    branches:
+      - "staging"
+      - "main"
+  push:
+    branches:
+      - "staging"
+      - "main"
+
+permissions:
+  contents: "read"
+
+jobs:
+  check_signing_capabilities:
+    name: "check signing capabilities"
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: "actions/checkout@v4"
+
+      # A text check, so it needs no Xcode and no signing secrets.
+      - name: "Check entitlements and target-level signing"
+        run: "./scripts/check-signing-capabilities.sh"

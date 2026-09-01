@@ -13,9 +13,28 @@
 // superseded. A released version's train is closed to new builds — uploading
 // another build to 1.1 fails with "Invalid Pre-Release Train" — so the first
 // production-backed build is a new version, not a new build number.
-MARKETING_VERSION = 1.4
-CURRENT_PROJECT_VERSION = 1
+MARKETING_VERSION = 1.7
+// Build numbers are what App Store Connect rejects duplicates on, not the
+// marketing version — and they are only compared within one version train.
+// 1.6 spent (2) through (8): (2) was uploaded, (3) predates the rating repair,
+// (4) the details-page and lineup-permission fixes, (5) the exercise actions
+// menu, and (8) predates the exercise ever becoming visible — every event
+// created by a build before this one is invisible to its own group, because
+// there was no way to publish one.
+//
+// 1.7 is a new train, so its numbering starts again with none of 1.6's numbers
+// in the way. (1) was the first sandbox-backed archive; (2) carried the day an
+// owed exercise gets to itself and the shelf back to a plain poster; (3) stops
+// asking what anyone thought of the split.
+CURRENT_PROJECT_VERSION = 3
 
 // Here rather than in the target so Staging.xcconfig can override it — a
 // staging build on the home screen has to be tellable from a real one.
+//
+// This only worked once the same key was deleted from the target's build
+// settings in project.pbxproj: a target-level value beats a project-level
+// xcconfig, which is why staging silently read تمرين instead of تمرين STG for
+// as long as both existed. Editing the display name in Xcode's General or
+// Build Settings tab writes it back to the target and breaks this again — set
+// it here instead.
 INFOPLIST_KEY_CFBundleDisplayName = تمرين

@@ -47,11 +47,12 @@ final class LocationSearchService {
 }
 
 private enum CreationStep: Int, CaseIterable {
-    case identity, details, invite
+    case sport, identity, details, invite
 
     var title: String {
         switch self {
-        case .identity: "هوية التمرين"
+        case .sport: "نوع التمرين"
+        case .identity: "اسم التمرين"
         case .details: "تفاصيل التمرين"
         case .invite: "دعوة الأعضاء"
         }
@@ -59,9 +60,10 @@ private enum CreationStep: Int, CaseIterable {
 
     var counter: String {
         switch self {
-        case .identity: "1 من 3"
-        case .details: "2 من 3"
-        case .invite: "3 من 3"
+        case .sport: "1 من 4"
+        case .identity: "2 من 4"
+        case .details: "3 من 4"
+        case .invite: "4 من 4"
         }
     }
 }
@@ -87,9 +89,11 @@ private extension PlanDraft {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         (scheduleKind == .oneOff || !weekdays.isEmpty) &&
         !locationName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        totalVenueCost > 0 &&
-        !paymentMethods.isEmpty &&
-        paymentMethods.allSatisfy(\.isValid)
+        totalVenueCost >= 0 &&
+        (totalVenueCost == 0 || (
+            !paymentMethods.isEmpty &&
+            paymentMethods.allSatisfy(\.isValid)
+        ))
     }
 }
 
@@ -100,7 +104,10 @@ struct CreateTeamFlow: View {
     /// The one exercise this flow creates. It carries the name typed on the
     /// identity step, so the composer never asks for it a second time.
     @State private var plan = PlanDraft()
-    @State private var step: CreationStep = .identity
+    @State private var step: CreationStep = .sport
+    /// `TeamDraft` keeps a safe backend default, but a new flow starts with no
+    /// visible choice so the organizer deliberately picks the exercise type.
+    @State private var hasSelectedSport = false
     @State private var goingForward = true
     @State private var createdTeam: FeedTeam?
     @State private var isCreating = false
@@ -121,6 +128,13 @@ struct CreateTeamFlow: View {
                 FlowHeader(step: step, back: goBack)
                 ZStack {
                     switch step {
+                    case .sport:
+                        SportStepPage(
+                            selectedSymbol: hasSelectedSport ? draft.teamSymbol : nil,
+                            select: selectSport,
+                            advance: advanceFromSport
+                        )
+                        .transition(stepTransition)
                     case .identity:
                         IdentityStepPage(draft: $draft, advance: advanceFromIdentity)
                             .transition(stepTransition)
@@ -165,6 +179,18 @@ struct CreateTeamFlow: View {
         withAnimation { step = next }
     }
 
+    private func selectSport(_ sport: Sport) {
+        draft.teamSymbol = sport.symbol
+        draft.avatarData = nil
+        hasSelectedSport = true
+        Haptics.selection()
+    }
+
+    private func advanceFromSport() {
+        guard hasSelectedSport else { return }
+        move(to: .identity)
+    }
+
     /// The name belongs to the exercise itself, so it travels from this step
     /// into the plan rather than being asked for again on the next one.
     private func advanceFromIdentity() {
@@ -197,8 +223,10 @@ struct CreateTeamFlow: View {
 
     private func goBack() {
         switch step {
-        case .identity:
+        case .sport:
             isPresented = false
+        case .identity:
+            move(to: .sport)
         case .details:
             move(to: .identity)
         case .invite:
@@ -223,16 +251,16 @@ private struct FlowHeader: View {
                         Color.clear
                     } else {
                         Button(action: back) {
-                            Image(systemName: step == .identity ? "xmark" : "chevron.right")
+                            Image(systemName: step == .sport ? "xmark" : "chevron.right")
                                 .font(.system(size: TamrinControlMetrics.symbolSize, weight: .semibold))
                                 .frame(width: TamrinControlMetrics.touchTarget, height: TamrinControlMetrics.touchTarget)
                         }
                         .buttonStyle(.plain)
                         .background(TamrinTheme.glass, in: .circle)
-                        .accessibilityLabel(step == .identity ? "إغلاق" : "رجوع")
+                        .accessibilityLabel(step == .sport ? "إغلاق" : "رجوع")
                     }
                 }
-                .frame(width: TamrinControlMetrics.touchTarget, height: TamrinControlMetrics.touchTarget)
+                .frame(width: 58, height: TamrinControlMetrics.touchTarget)
 
                 Spacer()
 
@@ -245,7 +273,9 @@ private struct FlowHeader: View {
                 Text(step.counter)
                     .font(TamrinFont.font(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .frame(width: 42)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .frame(width: 58)
             }
 
             HStack(spacing: 6) {
@@ -263,7 +293,72 @@ private struct FlowHeader: View {
     }
 }
 
-// MARK: - Step 1: Identity
+// MARK: - Step 1: Sport
+
+private struct SportStepPage: View {
+    let selectedSymbol: String?
+    let select: (Sport) -> Void
+    let advance: () -> Void
+
+    private let columns = [
+        GridItem(.flexible(), spacing: 12),
+        GridItem(.flexible(), spacing: 12)
+    ]
+
+    var body: some View {
+        ScrollView {
+            LazyVGrid(columns: columns, spacing: 12) {
+                ForEach(Sport.all) { sport in
+                    sportCard(sport)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 24)
+        }
+        .safeAreaInset(edge: .bottom) {
+            TamrinActionButton(title: "متابعة", action: advance)
+                .disabled(selectedSymbol == nil)
+                .padding(.horizontal, 22)
+                .padding(.bottom, 10)
+        }
+    }
+
+    private func sportCard(_ sport: Sport) -> some View {
+        let isSelected = sport.symbol == selectedSymbol
+
+        return Button {
+            select(sport)
+        } label: {
+            VStack(spacing: 14) {
+                Image(systemName: sport.symbol)
+                    .font(.system(size: 42, weight: .semibold))
+                    .foregroundStyle(isSelected ? Color.white : Color.primary)
+                    .frame(height: 48)
+
+                Text(sport.name)
+                    .font(TamrinFont.font(size: 18, weight: .medium))
+                    .foregroundStyle(isSelected ? Color.white : Color.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.8)
+            }
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity)
+            .frame(height: 150)
+            .background(
+                isSelected ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(TamrinTheme.card),
+                in: .rect(cornerRadius: 26, style: .continuous)
+            )
+            .contentShape(.rect(cornerRadius: 26, style: .continuous))
+        }
+        .buttonStyle(SpringCardPressStyle())
+        .accessibilityLabel(sport.name)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+// MARK: - Step 2: Name
 
 private struct IdentityStepPage: View {
     @Binding var draft: TeamDraft
@@ -271,49 +366,14 @@ private struct IdentityStepPage: View {
     @State private var photoItem: PhotosPickerItem?
     @FocusState private var nameFocused: Bool
 
-    /// Every sport SF Symbols draws a figure for, filtered at runtime against
-    /// what this OS actually ships: `Image(systemName:)` renders nothing for a
-    /// name the system does not know, so a hardcoded list would quietly leave
-    /// holes in the grid on an older iOS.
-    private static let sportSymbols: [String] = [
-        "figure.soccer", "figure.basketball", "figure.american.football",
-        "figure.australian.football", "figure.rugby", "figure.baseball",
-        "figure.softball", "figure.cricket", "figure.volleyball",
-        "figure.handball", "figure.tennis", "figure.badminton",
-        "figure.table.tennis", "figure.racquetball", "figure.squash",
-        "figure.golf", "figure.bowling", "figure.archery",
-        "figure.run", "figure.walk", "figure.hiking", "figure.track.and.field",
-        "figure.outdoor.cycle", "figure.indoor.cycle", "figure.rolling",
-        "figure.pool.swim", "figure.open.water.swim", "figure.water.fitness",
-        "figure.surfing", "figure.sailing", "figure.rowing", "figure.fishing",
-        "figure.strengthtraining.traditional", "figure.strengthtraining.functional",
-        "figure.core.training", "figure.highintensity.intervaltraining",
-        "figure.cross.training", "figure.mixed.cardio", "figure.elliptical",
-        "figure.stair.stepper", "figure.jumprope", "figure.flexibility",
-        "figure.cooldown", "figure.yoga", "figure.pilates", "figure.mind.and.body",
-        "figure.boxing", "figure.kickboxing", "figure.martial.arts",
-        "figure.wrestling", "figure.fencing", "figure.climbing",
-        "figure.skiing.downhill", "figure.skiing.crosscountry",
-        "figure.snowboarding", "figure.curling", "figure.ice.skating",
-        "figure.ice.hockey", "figure.field.hockey", "figure.lacrosse",
-        "figure.disc.sports", "figure.equestrian.sports", "figure.gymnastics",
-        "figure.dance", "figure.socialdance", "figure.play", "figure.step.training"
-    ].filter { UIImage(systemName: $0) != nil }
-
-    private let symbolColumns = Array(
-        repeating: GridItem(.flexible(), spacing: 12),
-        count: 6
-    )
-
     /// The exercise as it will be seen everywhere else, shown once at the size a
     /// choice deserves. The symbol scales with it, so this is the only number
     /// to touch.
     private static let identityDiameter: CGFloat = 112
 
     /// A step lighter than `TamrinTheme.secondary`. That token is tuned to clear
-    /// a sheet background by a visible margin; here the chips sit on `card` —
-    /// plain white in light mode — so they can be softer without disappearing,
-    /// and a wall of sixty icon discs is calmer for it.
+    /// a sheet background by a visible margin; the name field sits on `card` —
+    /// plain white in light mode — so it can be softer without disappearing.
     private static let chipFill = Color(uiColor: UIColor { traits in
         traits.userInterfaceStyle == .dark
             ? UIColor(white: 0.28, alpha: 1)
@@ -324,8 +384,6 @@ private struct IdentityStepPage: View {
         ScrollView {
             VStack(spacing: 16) {
                 identityCard
-                colorRow
-                symbolGrid
                 Spacer(minLength: 24)
             }
             .padding(.horizontal, 20)
@@ -386,78 +444,12 @@ private struct IdentityStepPage: View {
         .background(TamrinTheme.card, in: .rect(cornerRadius: 26, style: .continuous))
     }
 
-    /// One row, no scrolling: these are the colours worth a tap, and an
-    /// exercise's tint is not a decision worth paging through.
-    private var colorRow: some View {
-        HStack(spacing: 0) {
-            ForEach(TeamColor.allCases) { option in
-                Button {
-                    draft.teamColor = option
-                    Haptics.selection()
-                } label: {
-                    Circle()
-                        .fill(option.color)
-                        .frame(width: 34, height: 34)
-                        .overlay {
-                            Circle()
-                                .strokeBorder(Color.primary.opacity(0.45), lineWidth: 2)
-                                .padding(-4)
-                                .opacity(draft.teamColor == option ? 1 : 0)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: TamrinControlMetrics.touchTarget)
-                        .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(option.rawValue)
-                .accessibilityAddTraits(draft.teamColor == option ? .isSelected : [])
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(TamrinTheme.card, in: .rect(cornerRadius: 26, style: .continuous))
-        .animation(.smooth(duration: 0.2), value: draft.teamColor)
-    }
-
-    private var symbolGrid: some View {
-        LazyVGrid(columns: symbolColumns, spacing: 12) {
-            ForEach(Self.sportSymbols, id: \.self) { symbol in
-                Button {
-                    draft.teamSymbol = symbol
-                    draft.avatarData = nil
-                    photoItem = nil
-                    Haptics.selection()
-                } label: {
-                    Image(systemName: symbol)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(
-                            isSymbolSelected(symbol) ? draft.teamColor.symbolColor : Color.primary
-                        )
-                        .frame(width: 44, height: 44)
-                        .background(
-                            isSymbolSelected(symbol)
-                                ? AnyShapeStyle(draft.teamColor.color)
-                                : AnyShapeStyle(Self.chipFill),
-                            in: .circle
-                        )
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(isSymbolSelected(symbol) ? .isSelected : [])
-            }
-        }
-        .padding(16)
-        .background(TamrinTheme.card, in: .rect(cornerRadius: 26, style: .continuous))
-    }
-
-    private func isSymbolSelected(_ symbol: String) -> Bool {
-        draft.avatarData == nil && draft.teamSymbol == symbol
-    }
 }
 
-// MARK: - Step 2: Exercise details
+// MARK: - Step 3: Exercise details
 
 private enum ComposerSheet: String, Identifiable {
-    case schedule, location, capacity, venueCost, payment, publishing
+    case schedule, location, capacity, venueCost, payment
     var id: String { rawValue }
 }
 
@@ -469,9 +461,24 @@ private struct TemplateComposerPage: View {
     var showsNameField = true
     var actionTitle = "احفظ الموعد"
     var isSaving = false
+    /// Present only in the main-template editor. Creation already chose the
+    /// sport on its first step, while a standalone occurrence never owns it.
+    var sportSymbol: Binding<String>?
+    var sportTint: Color = .accentColor
+    var sportSymbolColor: Color = .white
+    var editsExerciseTemplate = false
+    /// A one-off occurrence has no future series. Its editor must not promise
+    /// that the saved copy will be applied to appointments that do not exist.
+    var editsRecurringTemplate = true
+    /// The owner may have selected methods on the event even when loading the
+    /// private method records failed. Until they deliberately open the payment
+    /// editor, those existing IDs remain a valid, lossless save fallback.
+    var hasPersistedPaymentMethods = false
     let save: () -> Void
 
     @State private var activeSheet: ComposerSheet?
+    @State private var showsSportPicker = false
+    @State private var didOpenPaymentEditor = false
     @State private var locationSearch = LocationSearchService()
     @FocusState private var nameFocused: Bool
 
@@ -481,14 +488,20 @@ private struct TemplateComposerPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(showsNameField ? "صمّم الموعد" : "صمّم التمرين")
+                    Text(editsExerciseTemplate
+                         ? "عدّل قالب التمرين"
+                         : (showsNameField ? "صمّم الموعد" : "صمّم التمرين"))
                         .font(TamrinFont.largeTitle)
                         .tracking(-0.8)
                     // With the name already settled, the subtitle says whose
                     // details these are instead of asking for one.
-                    Text(showsNameField
-                         ? "سمّه، وحدد تفاصيله بلمسة على كل بطاقة."
-                         : "حدد تفاصيل «\(plan.name)» بلمسة على كل بطاقة.")
+                    Text(editsExerciseTemplate
+                         ? (editsRecurringTemplate
+                            ? "الاسم والرياضة وكل تفاصيل المواعيد القادمة في مكان واحد."
+                            : "الاسم والرياضة وكل تفاصيل هذا الموعد في مكان واحد.")
+                         : (showsNameField
+                            ? "سمّه، وحدد تفاصيله بلمسة على كل بطاقة."
+                            : "حدد تفاصيل «\(plan.name)» بلمسة على كل بطاقة."))
                         .font(TamrinFont.body)
                         .foregroundStyle(.secondary)
                 }
@@ -496,7 +509,7 @@ private struct TemplateComposerPage: View {
 
                 if showsNameField {
                     VStack(alignment: .leading, spacing: 10) {
-                        TextField("اسم الموعد", text: $plan.name)
+                        TextField(editsExerciseTemplate ? "اسم التمرين" : "اسم الموعد", text: $plan.name)
                             .font(TamrinFont.title2)
                             .focused($nameFocused)
                             .submitLabel(.done)
@@ -504,7 +517,7 @@ private struct TemplateComposerPage: View {
                             .frame(height: 62)
                             .background(TamrinTheme.glass, in: .rect(cornerRadius: 21))
 
-                        if plan.name.isEmpty {
+                        if plan.name.isEmpty && !editsExerciseTemplate {
                             HStack(spacing: 8) {
                                 ForEach(nameSuggestions, id: \.self) { suggestion in
                                     Button {
@@ -527,6 +540,16 @@ private struct TemplateComposerPage: View {
                     .animation(.easeOut(duration: 0.2), value: plan.name.isEmpty)
                 }
 
+                if let sportSymbol {
+                    SportPickerRow(
+                        symbol: sportSymbol.wrappedValue,
+                        tint: sportTint,
+                        symbolColor: sportSymbolColor
+                    ) {
+                        showsSportPicker = true
+                    }
+                }
+
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                     ComposerTile(
                         symbol: "calendar",
@@ -545,37 +568,52 @@ private struct TemplateComposerPage: View {
                         title: "الملعب",
                         value: plan.locationName.isEmpty
                             ? nil
-                            : "\(plan.locationName)\n\(plan.venueKind.title)"
+                            : (editsExerciseTemplate
+                               ? plan.locationName
+                               : "\(plan.locationName)\n\(plan.venueKind.title)")
                     ) { activeSheet = .location }
                     ComposerTile(
                         symbol: "person.2.fill",
                         title: "عدد اللاعبين",
-                        value: "حتى \(plan.capacity.appDigits)\n\(plan.capacityPolicy == .waitlist ? "مع قائمة انتظار" : "يقفل عند الاكتمال")"
+                        value: editsExerciseTemplate
+                            ? "حتى \(plan.capacity.appDigits)"
+                            : "حتى \(plan.capacity.appDigits)\n\(plan.capacityPolicy == .waitlist ? "مع قائمة انتظار" : "يقفل عند الاكتمال")"
                     ) { activeSheet = .capacity }
                     ComposerTile(
                         symbol: "banknote.fill",
                         title: "قيمة الملعب",
                         value: plan.totalVenueCost == 0
-                            ? nil
+                            ? "مجاني"
                             : "\(plan.totalVenueCost.cleanAmount) ر.س\nالقطة \(plan.pricePerPerson.cleanAmount) ر.س"
                     ) { activeSheet = .venueCost }
-                    ComposerTile(
-                        symbol: "creditcard.fill",
-                        title: "وسائل الدفع",
-                        value: plan.paymentMethods.isEmpty
-                            ? nil
-                            : (plan.paymentMethods.count == 1
-                               ? plan.paymentMethods[0].provider.displayName
-                               : "\(plan.paymentMethods.count.appDigits) وسائل دفع")
-                    ) { activeSheet = .payment }
-                    ComposerTile(
-                        symbol: "paperplane.fill",
-                        title: "التجهيز والإرسال",
-                        value: "قبلها بـ\(plan.publishLeadDays.appDigits) يوم\nالساعة \(plan.publishTime.arabicTime)"
-                    ) { activeSheet = .publishing }
                 }
 
-                Text("تقدر تعدّل أي موعد لحاله لاحقًا بدون تغيير القالب.")
+                // Five settings no longer leave a lonely half-width card now
+                // that the obsolete send-time step is gone. Payment is the
+                // final, full-width financial decision beneath the 2×2 grid.
+                ComposerTile(
+                    symbol: "creditcard.fill",
+                    title: "وسائل الدفع",
+                    value: plan.totalVenueCost == 0
+                        ? "غير مطلوب\nالتمرين مجاني"
+                        : (plan.paymentMethods.isEmpty
+                           ? (canUsePersistedPaymentMethods
+                              ? "وسائل الموعد الحالية\nمحفوظة"
+                              : nil)
+                           : (plan.paymentMethods.count == 1
+                              ? plan.paymentMethods[0].provider.displayName
+                              : "\(plan.paymentMethods.count.appDigits) وسائل دفع")),
+                    isEnabled: plan.totalVenueCost > 0
+                ) {
+                    didOpenPaymentEditor = true
+                    activeSheet = .payment
+                }
+
+                Text(editsExerciseTemplate
+                     ? (editsRecurringTemplate
+                        ? "سيظهر الاسم والرياضة والتفاصيل الجديدة في المواعيد القادمة."
+                        : "ستُحفظ التغييرات على هذا الموعد.")
+                     : "تقدر تعدّل أي موعد لحاله لاحقًا بدون تغيير القالب.")
                     .font(TamrinFont.footnote)
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity)
@@ -588,29 +626,68 @@ private struct TemplateComposerPage: View {
         .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .bottom) {
             TamrinActionButton(title: actionTitle, isLoading: isSaving, action: save)
-                .disabled(!plan.isComplete)
+                .disabled(!canSave)
                 .padding(.horizontal, 22)
                 .padding(.bottom, 10)
         }
         .sheet(item: $activeSheet) { item in
             switch item {
             case .schedule:
-                ScheduleSheet(plan: $plan)
+                ScheduleSheet(
+                    plan: $plan,
+                    locksScheduleKind: editsExerciseTemplate,
+                    singleWeekdaySelection: editsExerciseTemplate
+                )
             case .location:
-                LocationSheet(plan: $plan, search: locationSearch)
+                if editsExerciseTemplate {
+                    PersistedLocationSheet(plan: $plan, search: locationSearch)
+                } else {
+                    LocationSheet(plan: $plan, search: locationSearch)
+                }
             case .capacity:
-                CapacitySheet(plan: $plan)
+                CapacitySheet(plan: $plan, showsPolicy: !editsExerciseTemplate)
             case .venueCost:
                 VenueCostSheet(plan: $plan)
             case .payment:
                 PaymentMethodSelectionSheet(selections: $plan.paymentMethods)
-            case .publishing:
-                PublishingReminderSheet(plan: $plan)
+            }
+        }
+        .sheet(isPresented: $showsSportPicker) {
+            if let sportSymbol {
+                SportPickerSheet(
+                    selectedSymbol: sportSymbol.wrappedValue,
+                    tint: sportTint,
+                    symbolColor: sportSymbolColor
+                ) { sport in
+                    sportSymbol.wrappedValue = sport.symbol
+                }
             }
         }
         .onAppear {
             if showsNameField, plan.name.isEmpty { nameFocused = true }
         }
+        .onChange(of: plan.totalVenueCost) { oldValue, newValue in
+            if oldValue > 0, newValue == 0 {
+                didOpenPaymentEditor = true
+            }
+        }
+    }
+
+    private var canUsePersistedPaymentMethods: Bool {
+        editsExerciseTemplate &&
+        hasPersistedPaymentMethods &&
+        plan.totalVenueCost > 0 &&
+        plan.paymentMethods.isEmpty &&
+        !didOpenPaymentEditor
+    }
+
+    private var canSave: Bool {
+        if plan.isComplete { return true }
+        guard canUsePersistedPaymentMethods else { return false }
+        return !plan.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            (plan.scheduleKind == .oneOff || !plan.weekdays.isEmpty) &&
+            !plan.locationName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            plan.totalVenueCost >= 0
     }
 }
 
@@ -618,6 +695,7 @@ private struct ComposerTile: View {
     let symbol: String
     let title: String
     let value: String?
+    var isEnabled = true
     let action: () -> Void
 
     private var isSet: Bool { value != nil }
@@ -654,6 +732,7 @@ private struct ComposerTile: View {
             .contentShape(.rect)
         }
         .buttonStyle(SpringCardPressStyle())
+        .disabled(!isEnabled)
     }
 }
 
@@ -661,6 +740,8 @@ private struct ComposerTile: View {
 
 private struct ScheduleSheet: View {
     @Binding var plan: PlanDraft
+    var locksScheduleKind = false
+    var singleWeekdaySelection = false
     @Environment(\.dismiss) private var dismiss
     private let days = [(7, "س"), (1, "ح"), (2, "ن"), (3, "ث"), (4, "ر"), (5, "خ"), (6, "ج")]
 
@@ -673,11 +754,13 @@ private struct ScheduleSheet: View {
             VStack(spacing: 20) {
                 // A two-way choice is a segmented picker on iOS, not a pair of
                 // hand-filled capsules.
-                Picker("نوع الموعد", selection: $plan.scheduleKind.animation(.smooth(duration: 0.3))) {
-                    Text("متكرر").tag(FeedScheduleKind.recurring)
-                    Text("مرة واحدة").tag(FeedScheduleKind.oneOff)
+                if !locksScheduleKind {
+                    Picker("نوع الموعد", selection: $plan.scheduleKind.animation(.smooth(duration: 0.3))) {
+                        Text("متكرر").tag(FeedScheduleKind.recurring)
+                        Text("مرة واحدة").tag(FeedScheduleKind.oneOff)
+                    }
+                    .pickerStyle(.segmented)
                 }
-                .pickerStyle(.segmented)
 
                 if plan.scheduleKind == .recurring {
                     VStack(spacing: 12) {
@@ -716,7 +799,10 @@ private struct ScheduleSheet: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .animation(.smooth(duration: 0.3), value: plan.scheduleKind)
             .animation(.smooth(duration: 0.25), value: plan.weekdays)
-            .sheetTitle("متى تتمرنون؟", subtitle: "حدد نوع الموعد ووقته")
+            .sheetTitle(
+                "متى تتمرنون؟",
+                subtitle: locksScheduleKind ? "حدد يوم القالب ووقته" : "حدد نوع الموعد ووقته"
+            )
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("تم") { dismiss() }
@@ -735,7 +821,13 @@ private struct ScheduleSheet: View {
     private func weekdayToggle(day: Int, letter: String) -> some View {
         let isOn = plan.weekdays.contains(day)
         return Button {
-            if isOn { plan.weekdays.remove(day) } else { plan.weekdays.insert(day) }
+            if singleWeekdaySelection {
+                plan.weekdays = [day]
+            } else if isOn {
+                plan.weekdays.remove(day)
+            } else {
+                plan.weekdays.insert(day)
+            }
             Haptics.selection()
         } label: {
             Text(letter)
@@ -785,6 +877,7 @@ private struct TimeTile: View {
 
 private struct CapacitySheet: View {
     @Binding var plan: PlanDraft
+    var showsPolicy = true
     @Environment(\.dismiss) private var dismiss
     private let quickPicks = [6, 10, 12, 16, 22]
 
@@ -822,22 +915,25 @@ private struct CapacitySheet: View {
                     }
                 }
 
-                // Two mutually exclusive policies — a segmented picker, with the
-                // explanation below it rather than duplicated into two cards.
-                VStack(spacing: 8) {
-                    Picker("سياسة الاكتمال", selection: $plan.capacityPolicy.animation(.smooth(duration: 0.25))) {
-                        Text("قائمة انتظار").tag(FeedCapacityPolicy.waitlist)
-                        Text("يقفل عند الاكتمال").tag(FeedCapacityPolicy.closed)
-                    }
-                    .pickerStyle(.segmented)
+                if showsPolicy {
+                    // Two mutually exclusive policies — a segmented picker,
+                    // with the explanation below it rather than duplicated
+                    // into two cards.
+                    VStack(spacing: 8) {
+                        Picker("سياسة الاكتمال", selection: $plan.capacityPolicy.animation(.smooth(duration: 0.25))) {
+                            Text("قائمة انتظار").tag(FeedCapacityPolicy.waitlist)
+                            Text("يقفل عند الاكتمال").tag(FeedCapacityPolicy.closed)
+                        }
+                        .pickerStyle(.segmented)
 
-                    Text(plan.capacityPolicy == .waitlist
-                         ? "ينضم من قائمة الانتظار تلقائيًا عند تحرر مكان."
-                         : "يتوقف التسجيل نهائيًا عند اكتمال العدد.")
-                        .font(TamrinFont.footnote)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentTransition(.numericText())
+                        Text(plan.capacityPolicy == .waitlist
+                             ? "ينضم من قائمة الانتظار تلقائيًا عند تحرر مكان."
+                             : "يتوقف التسجيل نهائيًا عند اكتمال العدد.")
+                            .font(TamrinFont.footnote)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentTransition(.numericText())
+                    }
                 }
             }
             .padding(.horizontal, 22)
@@ -901,57 +997,104 @@ private struct CapacityStepButton: View {
     }
 }
 
-private struct PublishingReminderSheet: View {
+/// The template-update RPC persists exactly a venue name and coordinates. This
+/// editor therefore searches the map and writes only those values; it does not
+/// offer venue-kind, directions-text, or pasted-link fields that the save call
+/// would silently discard. The richer creation flow keeps its existing venue
+/// picker below.
+private struct PersistedLocationSheet: View {
     @Binding var plan: PlanDraft
+    @Bindable var search: LocationSearchService
     @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+
+    private var trimmedQuery: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 22) {
-                HStack(spacing: 24) {
-                    CapacityStepButton(symbol: "minus", enabled: plan.publishLeadDays > 1) {
-                        plan.publishLeadDays -= 1
+            content
+                .sheetTitle("الملعب", subtitle: "اختر نتيجة لحفظ الاسم والموقع على الخريطة")
+                .searchable(
+                    text: $query,
+                    placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: "ابحث باسم الملعب أو الحي"
+                )
+                .autocorrectionDisabled()
+                .task(id: trimmedQuery) {
+                    guard trimmedQuery.count > 2 else {
+                        await search.search(trimmedQuery)
+                        return
                     }
-                    VStack(spacing: 1) {
-                        Text(plan.publishLeadDays.appDigits)
-                            .font(TamrinFont.font(size: 66, weight: .bold)).monospacedDigit()
-                            .contentTransition(.numericText())
-                        Text(plan.publishLeadDays == 1 ? "يوم قبله" : "أيام قبله")
-                            .font(TamrinFont.subheadline).foregroundStyle(.secondary)
-                            .contentTransition(.numericText())
-                    }
-                    .frame(minWidth: 126)
-                    CapacityStepButton(symbol: "plus", enabled: plan.publishLeadDays < 14) {
-                        plan.publishLeadDays += 1
+                    try? await Task.sleep(for: .milliseconds(280))
+                    guard !Task.isCancelled else { return }
+                    await search.search(trimmedQuery)
+                }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("إلغاء", role: .cancel) { dismiss() }
                     }
                 }
-                .animation(.bouncy(duration: 0.35), value: plan.publishLeadDays)
-
-                LabeledContent("وقت التذكير") {
-                    DatePicker("وقت التذكير", selection: $plan.publishTime, displayedComponents: .hourAndMinute)
-                        .labelsHidden()
-                }
-                .font(TamrinFont.headline)
-                .padding(.horizontal, 16)
-                .frame(height: 60)
-                .background(TamrinTheme.secondary, in: .rect(cornerRadius: 16, style: .continuous))
-            }
-            .padding(.horizontal, 22)
-            .padding(.top, 16)
-            .padding(.bottom, 18)
-            // Measured before the expanding frame below, so the sheet's
-            // detent follows the content rather than the NavigationStack.
-            .sheetContentHeight()
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .sheetTitle("متى نجهّزه للإرسال؟", subtitle: "بنذكّرك أنت بس، وما يشوفونه إلا بعد الإرسال")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("تم") { dismiss() }.fontWeight(.semibold)
-                }
-            }
         }
         .environment(\.layoutDirection, .rightToLeft)
-        .fittedSheet(includesNavigationBar: true)
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(TamrinTheme.sheet)
+        .onAppear { query = plan.locationName }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if search.results.isEmpty {
+            ContentUnavailableView {
+                Label("ابحث عن الملعب", systemImage: "sportscourt")
+            } description: {
+                Text(trimmedQuery.count > 2 && !search.isSearching
+                     ? "ما لقينا موقعًا بهذا الاسم. جرّب اسمًا أقصر."
+                     : "تظهر نتائج الخريطة وأنت تكتب، ثم نحفظ الاسم والموقع اللذين اخترتهما.")
+            }
+            .frame(maxHeight: .infinity)
+        } else {
+            List {
+                ForEach(search.results) { result in
+                    Button {
+                        plan.locationName = result.title
+                        plan.latitude = result.latitude
+                        plan.longitude = result.longitude
+                        Haptics.impact(.light)
+                        dismiss()
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "mappin.circle.fill")
+                                .font(.title3)
+                                .foregroundStyle(.tint)
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(result.title)
+                                    .font(TamrinFont.headline)
+                                Text(result.subtitle)
+                                    .font(TamrinFont.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+
+                            Spacer(minLength: 6)
+
+                            Image(systemName: "chevron.left")
+                                .font(.caption.bold())
+                                .foregroundStyle(.tertiary)
+                        }
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .transition(.blurReplace)
+            }
+            .listStyle(.plain)
+            .scrollDismissesKeyboard(.immediately)
+            .animation(.smooth(duration: 0.3), value: search.results.map(\.id))
+        }
     }
 }
 
@@ -1166,7 +1309,7 @@ private struct CustomVenueForm: View {
     }
 
     private var mapsCaption: String {
-        isLinkValid ? "إن كان لكم موقع على الخريطة، الصقه هنا." : "الرابط غير صحيح — الصق رابطًا يبدأ بـ https."
+        isLinkValid ? "إن كان لكم موقع على الخريطة، الصقه هنا." : "الرابط غير صحيح. الصق رابطًا يبدأ بـ https."
     }
 
     private func save() {
@@ -1369,6 +1512,21 @@ private struct VenueCostSheet: View {
             }
             .frame(maxWidth: .infinity)
 
+            Button {
+                plan.totalVenueCost = 0
+                // A free event cannot have a selected collection destination.
+                // Clearing stale selections keeps the saved event and the UI
+                // saying the same thing.
+                plan.paymentMethods = []
+                Haptics.impact(.light)
+            } label: {
+                Label("مجاني", systemImage: "gift.fill")
+                    .font(TamrinFont.font(size: 15, weight: .bold))
+                    .frame(maxWidth: .infinity)
+            }
+            .modifier(SelectableCapsuleStyle(isOn: plan.totalVenueCost == 0))
+            .accessibilityAddTraits(plan.totalVenueCost == 0 ? .isSelected : [])
+
             HStack(spacing: 8) {
                 ForEach(quickAmounts, id: \.self) { amount in
                     Button {
@@ -1417,9 +1575,12 @@ private struct VenueCostSheet: View {
             .sheetTitle("كم قيمة الملعب؟", subtitle: "أدخل إجمالي الإيجار ونحسب القطة تلقائيًا")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("اعتماد") { dismiss() }
+                    Button("اعتماد") {
+                        if plan.totalVenueCost == 0 { plan.paymentMethods = [] }
+                        dismiss()
+                    }
                         .fontWeight(.semibold)
-                        .disabled(plan.totalVenueCost <= 0)
+                        .disabled(plan.totalVenueCost < 0)
                 }
             }
         }
@@ -1515,10 +1676,11 @@ private struct InviteStepPage: View {
                     .clipShape(.rect(cornerRadius: 30, style: .continuous))
             } else {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 30, style: .continuous).fill(TamrinTheme.ink)
+                    RoundedRectangle(cornerRadius: 30, style: .continuous)
+                        .fill(team.color.color)
                     Image(systemName: team.symbol)
                         .font(.system(size: 38, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(team.color.symbolColor)
                 }
                 .frame(width: 96, height: 96)
             }
@@ -1771,6 +1933,120 @@ struct AddSessionSheet: View {
                 } else {
                     try await feed.addSession(plan)
                 }
+                Haptics.success()
+                isPresented = false
+            } catch {
+                saving = false
+                failureMessage = error.localizedDescription
+                Haptics.error()
+            }
+        }
+    }
+}
+
+/// Edits the identity and the scheduling template as one product object. The
+/// save is intentionally different from `AddSessionSheet`: there is no
+/// occurrence-vs-series question here because this surface was opened from
+/// «قالب التمرين», and the workspace name/sport must change atomically with
+/// the template that produces its future occurrences.
+struct EditExerciseTemplateSheet: View {
+    @Bindable var feed: HomeStore
+    @Binding var isPresented: Bool
+    let teamID: UUID
+    let eventID: UUID
+    let templateID: UUID?
+    let existingPaymentMethodIDs: [UUID]
+    let teamColor: TeamColor
+
+    @State private var plan: PlanDraft
+    @State private var sportSymbol: String
+    @State private var saving = false
+    @State private var failureMessage: String?
+
+    init(
+        feed: HomeStore,
+        isPresented: Binding<Bool>,
+        teamID: UUID,
+        eventID: UUID,
+        templateID: UUID?,
+        existingPaymentMethodIDs: [UUID],
+        initialSymbol: String,
+        teamColor: TeamColor,
+        initialPlan: PlanDraft
+    ) {
+        self.feed = feed
+        self._isPresented = isPresented
+        self.teamID = teamID
+        self.eventID = eventID
+        self.templateID = templateID
+        self.existingPaymentMethodIDs = existingPaymentMethodIDs
+        self.teamColor = teamColor
+        self._plan = State(initialValue: initialPlan)
+        self._sportSymbol = State(initialValue: initialSymbol)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                TamrinTheme.page.ignoresSafeArea()
+
+                TemplateComposerPage(
+                    plan: $plan,
+                    showsNameField: true,
+                    actionTitle: "حفظ التعديلات",
+                    isSaving: saving,
+                    sportSymbol: $sportSymbol,
+                    sportTint: teamColor.color,
+                    sportSymbolColor: teamColor.symbolColor,
+                    editsExerciseTemplate: true,
+                    editsRecurringTemplate: templateID != nil,
+                    hasPersistedPaymentMethods: !existingPaymentMethodIDs.isEmpty,
+                    save: save
+                )
+            }
+            .allowsHitTesting(!saving)
+            .overlay {
+                if saving {
+                    ProgressView("جاري حفظ القالب…")
+                        .font(TamrinFont.subheadline)
+                        .padding(.horizontal, 22)
+                        .padding(.vertical, 16)
+                        .background(.ultraThinMaterial, in: .capsule)
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("إلغاء") { isPresented = false }
+                        .disabled(saving)
+                }
+            }
+        }
+        .environment(\.layoutDirection, .rightToLeft)
+        .interactiveDismissDisabled(saving)
+        .alert("تعذر حفظ قالب التمرين", isPresented: Binding(
+            get: { failureMessage != nil },
+            set: { if !$0 { failureMessage = nil } }
+        )) {
+            Button("حسنًا", role: .cancel) { failureMessage = nil }
+        } message: {
+            Text(failureMessage ?? "")
+                .font(TamrinFont.body)
+        }
+    }
+
+    private func save() {
+        guard !saving else { return }
+        saving = true
+        Task {
+            do {
+                try await feed.updateExerciseTemplate(
+                    plan: plan,
+                    symbol: sportSymbol,
+                    teamID: teamID,
+                    eventID: eventID,
+                    templateID: templateID
+                )
                 Haptics.success()
                 isPresented = false
             } catch {

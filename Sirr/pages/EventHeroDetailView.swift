@@ -1117,12 +1117,18 @@ struct EnrollmentSheetView: View {
                     case .seatsFull:
                         onSeatsFull?()
                         dismiss()
+                    case .closedAtCapacity:
+                        // No queue to offer on a session that closes at capacity.
+                        paymentError = "اكتمل العدد، وهذا الموعد يقفل التسجيل عند الاكتمال"
+
                     case .alreadyJoined(let status):
                         switch status {
                         case .confirmed: paymentError = "أنت مسجل بالفعل في هذه الفعالية"
                         case .pending: paymentError = "لديك طلب دفع قيد التأكيد"
                         case .rejected: paymentError = "رُفض طلبك سابقًا"
                         }
+                    case .pendingGuestRequest:
+                        paymentError = "لديك طلب ضيوف بانتظار التأكيد. انتظر حسمه قبل تسجيل نفسك."
                     case .creatorMissingNumber:
                         paymentError = "صاحب الفعالية لم يضف رقم STC Pay بعد"
                     case .registrationClosed:

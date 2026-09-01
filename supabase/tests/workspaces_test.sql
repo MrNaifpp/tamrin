@@ -103,9 +103,12 @@ declare
 begin
   -- create_workspace
   perform pg_temp.set_auth('00000000-0000-0000-0000-000000000001');
-  w := public.create_workspace('مساحة الاختبار');
+  w := public.create_workspace('مساحة الاختبار', 'figure.basketball');
   w_id := (w->>'id')::uuid;
   code := w->>'invite_code';
+  if w->>'symbol' <> 'figure.basketball' then
+    raise exception 'FAIL: create_workspace did not persist symbol';
+  end if;
   if not public.is_workspace_member(w_id, '00000000-0000-0000-0000-000000000001') then
     raise exception 'FAIL: create_workspace did not add owner member row';
   end if;
@@ -133,8 +136,17 @@ begin
 
   -- get_my_workspaces
   perform pg_temp.set_auth('00000000-0000-0000-0000-000000000002');
-  select json_array_length(public.get_my_workspaces()) into cnt;
+  r := public.get_my_workspaces();
+  select json_array_length(r) into cnt;
   if cnt < 1 then raise exception 'FAIL: get_my_workspaces empty for member'; end if;
+  if not exists (
+    select 1
+    from json_array_elements(r) item
+    where (item->>'id')::uuid = w_id
+      and item->>'symbol' = 'figure.basketball'
+  ) then
+    raise exception 'FAIL: get_my_workspaces did not return symbol';
+  end if;
 
   -- owner-only ops rejected for plain member
   begin
@@ -229,6 +241,9 @@ begin
   perform pg_temp.set_auth('00000000-0000-0000-0000-000000000001');
   w := public.create_workspace('مساحة الحراسة');
   w_id := (w->>'id')::uuid;
+  if w->>'symbol' <> 'figure.soccer' then
+    raise exception 'FAIL: legacy create_workspace did not use default symbol';
+  end if;
   update public.users set stc_pay_number = '0500000000'
     where user_id = '00000000-0000-0000-0000-000000000001';
 
@@ -295,7 +310,6 @@ begin
   -- New create_event rows are drafts. Publishing makes the event visible and
   -- invites current members before the normal registration/payment path.
   perform pg_temp.set_auth('00000000-0000-0000-0000-000000000001');
-  r := public.publish_event(e_id);
   if r->>'status' <> 'published' then raise exception 'FAIL: publish_event'; end if;
 
   -- member path still works end-to-end (join workspace → pay → confirm)

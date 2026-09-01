@@ -17,6 +17,7 @@ struct ArabicNoun {
     static let member = ArabicNoun(singular: "عضو", dual: "عضوان", plural: "أعضاء")
     static let seat = ArabicNoun(singular: "مقعد", dual: "مقعدين", plural: "مقاعد")
     static let session = ArabicNoun(singular: "موعد", dual: "موعدين", plural: "مواعيد")
+    static let rating = ArabicNoun(singular: "تقييم", dual: "تقييمين", plural: "تقييمات")
 }
 
 extension Int {
@@ -47,5 +48,16 @@ extension Int {
                 ? "\(digits) \(noun.plural)"
                 : "\(digits) \(noun.singular)"
         }
+    }
+}
+
+extension String {
+    /// The first word of a name. Asking «هل وصلتك قطة «مشعل»؟» reads as a
+    /// question between two people; the full legal name does not.
+    var firstNameOnly: String {
+        trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
+            .first
+            .map(String.init) ?? self
     }
 }

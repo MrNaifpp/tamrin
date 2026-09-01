@@ -1,13 +1,17 @@
 import SwiftUI
 import UserNotifications
 
-/// App-level settings, opened from the gear beside the profile capsule in the
-/// side menu. Kept separate from `ProfileSettingsView`, which edits *who you
-/// are*; this sheet is for how the app behaves, plus the two account-ending
-/// actions. Every row here is backed by real behaviour — no placeholder
-/// switches that pretend to do something.
+/// App-level settings, pushed from «حسابي» — the sheet the profile photo opens.
+/// Kept a separate screen from `ProfileSettingsView`, which edits *who you are*;
+/// this one is for how the app behaves, plus the two account-ending actions.
+/// Every row here is backed by real behaviour — no placeholder switches that
+/// pretend to do something.
 struct AppSettingsView: View {
     @Bindable var feed: HomeStore
+    /// True when pushed onto the profile sheet's navigation stack. A pushed
+    /// copy builds no second stack, applies no detent of its own, and drops the
+    /// «الحساب» section — you arrived from it.
+    var isPushed: Bool = false
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
@@ -42,11 +46,29 @@ struct AppSettingsView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        Group {
+            if isPushed {
+                content
+            } else {
+                NavigationStack { content }
+                    .fittedSheet(
+                        allowsExpansion: true,
+                        includesNavigationBar: true,
+                        background: Self.sheetBackground
+                    )
+            }
+        }
+        .environment(\.layoutDirection, .rightToLeft)
+    }
+
+    private var content: some View {
+        Group {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 26) {
-                    section(title: "الحساب") {
-                        accountRow
+                    if !isPushed {
+                        section(title: "الحساب") {
+                            accountRow
+                        }
                     }
 
                     section(title: "التنبيهات") {
@@ -69,19 +91,16 @@ struct AppSettingsView: View {
             .navigationTitle("الإعدادات")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("تم") { dismiss() }
-                        .fontWeight(.semibold)
-                        .disabled(isDeleting)
+                // Pushed, the system back button already returns to حسابي.
+                if !isPushed {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("تم") { dismiss() }
+                            .fontWeight(.semibold)
+                            .disabled(isDeleting)
+                    }
                 }
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
-        .fittedSheet(
-            allowsExpansion: true,
-            includesNavigationBar: true,
-            background: Self.sheetBackground
-        )
         .interactiveDismissDisabled(isDeleting)
         .task { await refreshNotificationStatus() }
         // Coming back from the iOS Settings app is the usual way this changes,

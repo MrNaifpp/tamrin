@@ -21,8 +21,13 @@ enum SubmitPaymentResult {
     case submitted(creatorId: UUID, paidToNumber: String, groupSize: Int)
     /// Event is full. UI should pivot to the waitlist sheet.
     case seatsFull
+    /// Event is full and closes at capacity — no queue is offered.
+    case closedAtCapacity
     /// User already has a row for this event (any status).
     case alreadyJoined(paymentStatus: PaymentStatus)
+    /// A standalone guest payment is still pending for this account. It must
+    /// be resolved before a separate self-registration can be submitted.
+    case pendingGuestRequest
     /// Creator never set their STC Pay number — defensive; the guardrail at
     /// event-creation time should make this unreachable.
     case creatorMissingNumber
@@ -69,11 +74,17 @@ final class STCPayService {
         case "seats_full":
             stcPayLogger.info("submit_payment seats_full (eventId: \(eventId))")
             return .seatsFull
+        case "registration_closed_full":
+            stcPayLogger.info("submit_payment closed at capacity (eventId: \(eventId))")
+            return .closedAtCapacity
         case "already_joined":
             let raw = payload["payment_status"] as? String ?? "confirmed"
             let s = PaymentStatus(rawValue: raw) ?? .confirmed
             stcPayLogger.info("submit_payment already_joined (eventId: \(eventId), status: \(raw))")
             return .alreadyJoined(paymentStatus: s)
+        case "pending_guest_request":
+            stcPayLogger.info("submit_payment pending_guest_request (eventId: \(eventId))")
+            return .pendingGuestRequest
         case "creator_missing_number":
             stcPayLogger.warning("submit_payment creator_missing_number (eventId: \(eventId))")
             return .creatorMissingNumber
