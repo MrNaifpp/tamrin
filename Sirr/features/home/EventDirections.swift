@@ -16,7 +16,7 @@ struct EventDirectionsDestination {
     var query: String? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        return trimmed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+        return trimmed
     }
 }
 
@@ -51,25 +51,68 @@ enum EventDirectionsProvider {
     /// installed — the caller falls through to the App Store instead.
     private func hudhudAppURL(_ destination: EventDirectionsDestination) -> URL? {
         if let coordinate = destination.coordinate {
-            return URL(string: "hudhud://?lat=\(coordinate.latitude)&lon=\(coordinate.longitude)")
+            return customSchemeURL(
+                scheme: "hudhud",
+                queryItems: [
+                    URLQueryItem(name: "lat", value: String(coordinate.latitude)),
+                    URLQueryItem(name: "lon", value: String(coordinate.longitude))
+                ]
+            )
         }
         guard let query = destination.query else { return nil }
-        return URL(string: "hudhud://?q=\(query)")
+        return customSchemeURL(
+            scheme: "hudhud",
+            queryItems: [URLQueryItem(name: "q", value: query)]
+        )
     }
 
     private func googleMapsAppURL(_ destination: EventDirectionsDestination) -> URL? {
+        let destinationValue: String
         if let coordinate = destination.coordinate {
-            return URL(string: "comgooglemaps://?daddr=\(coordinate.latitude),\(coordinate.longitude)&directionsmode=driving")
+            destinationValue = "\(coordinate.latitude),\(coordinate.longitude)"
+        } else if let query = destination.query {
+            destinationValue = query
+        } else {
+            return nil
         }
-        guard let query = destination.query else { return nil }
-        return URL(string: "comgooglemaps://?daddr=\(query)&directionsmode=driving")
+        return customSchemeURL(
+            scheme: "comgooglemaps",
+            queryItems: [
+                URLQueryItem(name: "daddr", value: destinationValue),
+                URLQueryItem(name: "directionsmode", value: "driving")
+            ]
+        )
     }
 
     private func googleMapsWebURL(_ destination: EventDirectionsDestination) -> URL? {
+        let destinationValue: String
         if let coordinate = destination.coordinate {
-            return URL(string: "https://www.google.com/maps/dir/?api=1&destination=\(coordinate.latitude),\(coordinate.longitude)")
+            destinationValue = "\(coordinate.latitude),\(coordinate.longitude)"
+        } else if let query = destination.query {
+            destinationValue = query
+        } else {
+            return nil
         }
-        guard let query = destination.query else { return nil }
-        return URL(string: "https://www.google.com/maps/dir/?api=1&destination=\(query)")
+
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "www.google.com"
+        components.path = "/maps/dir/"
+        components.queryItems = [
+            URLQueryItem(name: "api", value: "1"),
+            URLQueryItem(name: "destination", value: destinationValue)
+        ]
+        return components.url
+    }
+
+    private func customSchemeURL(
+        scheme: String,
+        queryItems: [URLQueryItem]
+    ) -> URL? {
+        var components = URLComponents()
+        components.scheme = scheme
+        components.host = ""
+        components.queryItems = queryItems
+        return components.url
     }
 }

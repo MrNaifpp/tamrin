@@ -19,6 +19,8 @@
 		<string>comgooglemaps</string>
 		<string>hudhud</string>
 	</array>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>SUPABASE_ANON_KEY</key>
 	<string>$(SUPABASE_ANON_KEY)</string>
 	<key>SUPABASE_HOST</key>

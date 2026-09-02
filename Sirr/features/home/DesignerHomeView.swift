@@ -7,6 +7,11 @@ private enum HomeQuickAddDestination {
     case joinTeam
 }
 
+private struct LiveActivitySyncKey: Hashable {
+    let isReady: Bool
+    let event: WorkoutActivityEvent?
+}
+
 /// Home: one stack of every exercise this person is part of — the ones they run
 /// and the ones they only play in — nearest date at the top, each card a screen
 /// tall so the edge of the next one shows beneath it and says the stack goes on.
@@ -72,6 +77,46 @@ struct DesignerHomeView: View {
         return feed.allOccurrences.filter {
             !$0.isPast(relativeTo: now) || $0.requiresPaymentAction
         }
+    }
+
+    /// A group event is not automatically this person's workout. Only a held
+    /// seat earns a lock-screen countdown; invitations, declines, and waiting
+    /// lists stay out of the Live Activity.
+    private var nextLiveActivityEvent: WorkoutActivityEvent? {
+        let now = Date.now
+        let eligible = feed.allOccurrences.filter { occurrence in
+            guard occurrence.startAt > now,
+                  occurrence.isPublished,
+                  !occurrence.isCancelled else { return false }
+            switch feed.participationState(for: occurrence) {
+            case .registered, .awaitingPayment, .paymentPending:
+                return true
+            default:
+                return false
+            }
+        }
+        guard let occurrence = eligible.min(by: { lhs, rhs in
+            if lhs.startAt != rhs.startAt { return lhs.startAt < rhs.startAt }
+            return lhs.id.uuidString < rhs.id.uuidString
+        }) else { return nil }
+
+        return WorkoutActivityEvent(
+            id: occurrence.id,
+            title: occurrence.title,
+            startAt: occurrence.startAt,
+            locationName: occurrence.locationName,
+            latitude: occurrence.latitude,
+            longitude: occurrence.longitude
+        )
+    }
+
+    private var liveActivitySyncKey: LiveActivitySyncKey {
+        LiveActivitySyncKey(
+            isReady: booted
+                && feed.hasAuthoritativeUpcomingSnapshot
+                && feed.currentUserID != nil,
+            event: nextLiveActivityEvent
+        )
     }
 
     private var pastShelf: [FeedOccurrence] {
@@ -188,6 +233,12 @@ struct DesignerHomeView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .task(id: liveActivitySyncKey) {
+            guard liveActivitySyncKey.isReady else { return }
+            await WorkoutLiveActivityManager.shared.synchronize(
+                next: nextLiveActivityEvent
+            )
+        }
         // Presented from out here, not from inside the NavigationStack. Three
         // `fullScreenCover`s stacked on the same view is one more than SwiftUI
         // reliably honours — the third simply never opened.

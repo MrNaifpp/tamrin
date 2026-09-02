@@ -378,6 +378,10 @@ final class HomeStore {
 
     var isLoading = false
     var errorMessage: String?
+    /// Becomes true only after Home has received an authoritative upcoming
+    /// snapshot. Until then, an empty shelf can mean "offline" rather than
+    /// "no workouts", so consumers must not erase persisted system state.
+    private(set) var hasAuthoritativeUpcomingSnapshot = false
     private(set) var isLoadingPastOccurrences = false
     private(set) var isLoadingMorePastOccurrences = false
     /// History failures are intentionally isolated from `errorMessage`: the
@@ -864,6 +868,11 @@ final class HomeStore {
 
     func loadProfile() async {
         guard !isPreview else { return }
+        // The auth session is the source of identity even if the optional
+        // profile row cannot be fetched. Participation matching must never run
+        // with a nil user id and mistake an outage for "not registered".
+        currentUserID = try? await AuthService.shared.getCurrentUserID()
+        guard currentUserID != nil else { return }
         if let profile = (try? await AuthService.shared.getCurrentUserProfile()) ?? nil {
             currentUserID = profile.userId
             profileName = profile.name
@@ -877,11 +886,18 @@ final class HomeStore {
     /// rosters. Used by pull-to-refresh, foreground return, and after mutations.
     func refresh() async {
         guard !isPreview, !isDebugMemberFixtureTeam(selectedTeamID) else { return }
+        if currentUserID == nil {
+            await loadProfile()
+        }
         await loadWorkspaces(preferred: selectedTeamID)
     }
 
     func loadWorkspaces(preferred: UUID?) async {
         guard !isPreview else { return }
+        // Keep a pending system Live Activity untouched while this refresh is
+        // incomplete. Success below flips this back only after metadata and
+        // every participation roster form one coherent snapshot.
+        hasAuthoritativeUpcomingSnapshot = false
         do {
             let records = try await WorkspaceService.shared.getMyWorkspaces()
             // Read before `teams` is replaced. A record can come back with no
@@ -904,6 +920,7 @@ final class HomeStore {
                 // than on whichever real workspace happens to sort first.
                 selectedTeamID = HomeDebugMemberFixture.teamID
                 onSelectWorkspace?(HomeDebugMemberFixture.teamID)
+                hasAuthoritativeUpcomingSnapshot = true
                 return
             }
             #endif
@@ -915,7 +932,11 @@ final class HomeStore {
             } else {
                 onSelectWorkspace?(nil)
             }
-            if !teams.isEmpty { await loadAllTeamsData() }
+            if teams.isEmpty {
+                hasAuthoritativeUpcomingSnapshot = true
+            } else {
+                await loadAllTeamsData()
+            }
         } catch {
             #if DEBUG
             // The local member journey remains testable when the development
@@ -955,7 +976,15 @@ final class HomeStore {
         guard let feed = try? await EventService.shared.getMyFeed() else {
             // One failed request must not leave Home blank when the per
             // workspace path can still answer.
-            for team in teams { await loadTeamData(team.id) }
+            var loadedEveryTeam = true
+            for team in teams {
+                if !(await loadTeamDataSnapshot(team.id)) {
+                    loadedEveryTeam = false
+                }
+            }
+            if loadedEveryTeam {
+                hasAuthoritativeUpcomingSnapshot = true
+            }
             return
         }
 
@@ -991,6 +1020,7 @@ final class HomeStore {
         for (eventId, responses) in responsesByEvent {
             memberResponseRecordsByEvent[eventId] = responses
         }
+        hasAuthoritativeUpcomingSnapshot = true
     }
 
     /// Lazily loads one bounded history page for each workspace currently on
@@ -1215,7 +1245,13 @@ final class HomeStore {
     }
 
     func loadTeamData(_ id: UUID) async {
-        guard !isPreview, !isDebugMemberFixtureTeam(id) else { return }
+        _ = await loadTeamDataSnapshot(id)
+    }
+
+    /// Returns whether event metadata and every participation roster needed by
+    /// the Live Activity candidate were loaded successfully.
+    private func loadTeamDataSnapshot(_ id: UUID) async -> Bool {
+        guard !isPreview, !isDebugMemberFixtureTeam(id) else { return true }
         let isOwner = currentUserID.map { ownerByTeam[id] == $0 } ?? false
 
         if isOwner {
@@ -1232,7 +1268,7 @@ final class HomeStore {
         // read fails; replacing it with an empty array makes a saved exercise
         // and all its plans appear deleted during a transient outage.
         guard let events = try? await EventService.shared.getWorkspaceEvents(workspaceId: id) else {
-            return
+            return false
         }
         for event in events { eventRecordsByID[event.id] = event }
         occurrencesByTeam[id] = events.map(mapOccurrence)
@@ -1252,6 +1288,7 @@ final class HomeStore {
         // Home is an unbounded horizontal shelf, so every card needs an
         // authoritative roster and participation state before it is shown.
         let visible = events
+        var loadedEveryRoster = true
         await withTaskGroup(of: (UUID, [ParticipantRecord]?).self) { group in
             for ev in visible {
                 group.addTask {
@@ -1265,8 +1302,11 @@ final class HomeStore {
             for await (eventId, parts) in group {
                 if let parts {
                     applyParticipants(parts, to: eventId)
-                } else if rosterCache[eventId] == nil {
-                    rosterLoadFailedEventIDs.insert(eventId)
+                } else {
+                    loadedEveryRoster = false
+                    if rosterCache[eventId] == nil {
+                        rosterLoadFailedEventIDs.insert(eventId)
+                    }
                 }
             }
         }
@@ -1287,6 +1327,7 @@ final class HomeStore {
                 }
             }
         }
+        return loadedEveryRoster
     }
 
     func reloadRoster(_ eventId: UUID) async {
