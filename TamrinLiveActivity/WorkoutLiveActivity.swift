@@ -8,72 +8,76 @@ struct WorkoutLiveActivity: Widget {
             WorkoutLockScreenView(context: context)
                 .activityBackgroundTint(WorkoutLiveActivityStyle.background)
                 .activitySystemActionForegroundColor(.white)
+                .environment(\.locale, WorkoutLiveActivityStyle.locale)
                 .widgetURL(context.attributes.eventURL)
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    WorkoutMark(size: 32)
+                    Text(context.attributes.title)
+                        .font(TamrinLiveActivityFont.medium(14))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .frame(maxWidth: 148, alignment: .leading)
+                        .environment(\.layoutDirection, .rightToLeft)
                 }
 
                 DynamicIslandExpandedRegion(.trailing) {
-                    CountdownText(
-                        startDate: context.state.startDate,
-                        size: 17,
-                        isStale: context.isStale
-                    )
+                    Text("يبدأ بعد")
+                        .font(TamrinLiveActivityFont.regular(11))
+                        .foregroundStyle(WorkoutLiveActivityStyle.secondaryText)
                 }
 
                 DynamicIslandExpandedRegion(.bottom) {
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(context.attributes.title)
-                                .font(.headline)
-                                .lineLimit(1)
+                    VStack(spacing: 8) {
+                        CountdownText(
+                            startDate: context.state.startDate,
+                            size: 38,
+                            staleSize: 24,
+                            isStale: context.isStale
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 42, alignment: .center)
 
+                        HStack(spacing: 10) {
                             if !context.attributes.venueName.isEmpty {
                                 Text(context.attributes.venueName)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .font(TamrinLiveActivityFont.regular(12))
+                                    .foregroundStyle(WorkoutLiveActivityStyle.secondaryText)
                                     .lineLimit(1)
                             }
-                        }
 
-                        Spacer(minLength: 8)
+                            Spacer(minLength: 8)
 
-                        if let directionsURL = context.attributes.directionsURL {
-                            Link(destination: directionsURL) {
-                                Label("الموقع", systemImage: "location.fill")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.black)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 7)
-                                    .background(WorkoutLiveActivityStyle.accent, in: .capsule)
+                            if let directionsURL = context.attributes.directionsURL {
+                                WorkoutLocationButton(destination: directionsURL, compact: true)
                             }
-                            .accessibilityLabel("الموقع")
-                            .accessibilityHint("يفتح الاتجاهات إلى الملعب في هدهد")
                         }
                     }
+                    .padding(.top, 3)
                     .environment(\.layoutDirection, .rightToLeft)
                 }
             } compactLeading: {
-                WorkoutMark(size: 20)
+                Text("تمرين")
+                    .font(TamrinLiveActivityFont.medium(11))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .environment(\.layoutDirection, .rightToLeft)
+                    .accessibilityLabel("تمرين قادم")
             } compactTrailing: {
-                if context.isStale {
-                    Image(systemName: "checkmark")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(WorkoutLiveActivityStyle.accent)
-                        .accessibilityLabel("حان وقت التمرين")
-                } else {
-                    CountdownText(startDate: context.state.startDate, size: 13, isStale: false)
-                        .frame(maxWidth: 54)
-                }
+                CountdownText(
+                    startDate: context.state.startDate,
+                    size: 15,
+                    staleSize: 13,
+                    isStale: context.isStale,
+                    compactStaleText: true
+                )
+                .frame(width: 62, alignment: .trailing)
             } minimal: {
-                Image(systemName: "figure.run")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(WorkoutLiveActivityStyle.accent)
+                Text("ت")
+                    .font(TamrinLiveActivityFont.bold(15))
+                    .foregroundStyle(.white)
                     .accessibilityLabel("تمرين قادم")
             }
-            .keylineTint(WorkoutLiveActivityStyle.accent)
+            .keylineTint(.white.opacity(0.35))
             .widgetURL(context.attributes.eventURL)
         }
     }
@@ -83,106 +87,111 @@ private struct WorkoutLockScreenView: View {
     let context: ActivityViewContext<WorkoutActivityAttributes>
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 12) {
-                WorkoutMark(size: 38)
-
+        VStack(spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("التمرين القادم")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .font(TamrinLiveActivityFont.medium(12))
+                        .foregroundStyle(WorkoutLiveActivityStyle.secondaryText)
 
                     Text(context.attributes.title)
-                        .font(.headline)
+                        .font(TamrinLiveActivityFont.medium(17))
                         .foregroundStyle(.white)
                         .lineLimit(1)
-                }
 
-                Spacer(minLength: 8)
-
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("يبدأ بعد")
-                        .font(.caption2)
-                        .foregroundStyle(.white.opacity(0.55))
-
-                    CountdownText(
-                        startDate: context.state.startDate,
-                        size: 22,
-                        isStale: context.isStale
-                    )
-                }
-            }
-
-            HStack(spacing: 10) {
-                if !context.attributes.venueName.isEmpty {
-                    Label(context.attributes.venueName, systemImage: "sportscourt.fill")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.7))
-                        .lineLimit(1)
+                    if !context.attributes.venueName.isEmpty {
+                        Text(context.attributes.venueName)
+                            .font(TamrinLiveActivityFont.regular(13))
+                            .foregroundStyle(WorkoutLiveActivityStyle.secondaryText)
+                            .lineLimit(1)
+                    }
                 }
 
                 Spacer(minLength: 8)
 
                 if let directionsURL = context.attributes.directionsURL {
-                    Link(destination: directionsURL) {
-                        Label("الموقع", systemImage: "location.fill")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.black)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 9)
-                            .background(WorkoutLiveActivityStyle.accent, in: .capsule)
-                    }
-                    .accessibilityLabel("الموقع")
-                    .accessibilityHint("يفتح الاتجاهات إلى الملعب في هدهد")
+                    WorkoutLocationButton(destination: directionsURL)
                 }
             }
+
+            VStack(spacing: 0) {
+                Text("يبدأ بعد")
+                    .font(TamrinLiveActivityFont.regular(12))
+                    .foregroundStyle(WorkoutLiveActivityStyle.secondaryText)
+
+                CountdownText(
+                    startDate: context.state.startDate,
+                    size: 46,
+                    staleSize: 28,
+                    isStale: context.isStale
+                )
+                .frame(maxWidth: .infinity, minHeight: 52, alignment: .center)
+            }
         }
-        .padding(16)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
         .environment(\.layoutDirection, .rightToLeft)
+    }
+}
+
+private struct WorkoutLocationButton: View {
+    let destination: URL
+    var compact = false
+
+    var body: some View {
+        Link(destination: destination) {
+            Text("الموقع")
+                .font(compact ? TamrinLiveActivityFont.medium(11) : TamrinLiveActivityFont.medium(13))
+                .foregroundStyle(.white)
+                .padding(.horizontal, compact ? 11 : 14)
+                .frame(height: compact ? 30 : 38)
+                .background(WorkoutLiveActivityStyle.buttonFill, in: .capsule)
+                .overlay {
+                    Capsule()
+                        .strokeBorder(.white.opacity(0.12), lineWidth: 0.5)
+                }
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("الموقع")
+        .accessibilityHint("يفتح الاتجاهات إلى الملعب في هدهد")
     }
 }
 
 private struct CountdownText: View {
     let startDate: Date
     let size: CGFloat
+    let staleSize: CGFloat
     let isStale: Bool
+    var compactStaleText = false
 
     @ViewBuilder
     var body: some View {
         if isStale {
-            Text("حان وقت التمرين")
-                .font(.system(size: min(size, 16), weight: .bold, design: .rounded))
-                .foregroundStyle(WorkoutLiveActivityStyle.accent)
+            Text(compactStaleText ? "الآن" : "حان وقت التمرين")
+                .font(TamrinLiveActivityFont.bold(staleSize))
+                .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         } else {
             Text(startDate, style: .timer)
-                .font(.system(size: size, weight: .bold, design: .rounded))
+                .font(TamrinLiveActivityFont.bold(size))
                 .monospacedDigit()
-                .foregroundStyle(WorkoutLiveActivityStyle.accent)
+                .foregroundStyle(.white)
                 .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .minimumScaleFactor(0.62)
+                .environment(\.locale, WorkoutLiveActivityStyle.locale)
                 .accessibilityLabel("الوقت المتبقي")
         }
     }
 }
 
-private struct WorkoutMark: View {
-    let size: CGFloat
-
-    var body: some View {
-        Image(systemName: "figure.run")
-            .font(.system(size: size * 0.48, weight: .bold))
-            .foregroundStyle(.black)
-            .frame(width: size, height: size)
-            .background(WorkoutLiveActivityStyle.accent, in: .circle)
-            .accessibilityHidden(true)
-    }
-}
-
 private enum WorkoutLiveActivityStyle {
-    static let background = Color(red: 0.055, green: 0.055, blue: 0.065)
-    static let accent = Color(red: 0.78, green: 1.0, blue: 0.18)
+    static let locale = Locale(identifier: "ar_SA@numbers=latn")
+    static let background = Color(white: 0.058)
+    static let secondaryText = Color.white.opacity(0.62)
+    static let buttonFill = Color.white.opacity(0.1)
 }
 
 #Preview("شاشة القفل", as: .content, using: WorkoutActivityAttributes.preview) {

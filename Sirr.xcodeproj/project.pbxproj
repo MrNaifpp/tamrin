@@ -14,6 +14,10 @@
 		DCA1B0012F9A000100000001 /* WorkoutActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCA1B0052F9A000100000005 /* WorkoutActivityAttributes.swift */; };
 		DCA1B0022F9A000100000002 /* WorkoutActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCA1B0052F9A000100000005 /* WorkoutActivityAttributes.swift */; };
 		DCA1B0032F9A000100000003 /* TamrinLiveActivityExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = DCA1B0042F9A000100000004 /* TamrinLiveActivityExtension.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		DCA1B0172F9A000100000017 /* ThmanyahSans-Light.ttf in Resources */ = {isa = PBXBuildFile; fileRef = DCA1B01B2F9A00010000001B /* ThmanyahSans-Light.ttf */; };
+		DCA1B0182F9A000100000018 /* ThmanyahSans-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = DCA1B01C2F9A00010000001C /* ThmanyahSans-Regular.ttf */; };
+		DCA1B0192F9A000100000019 /* ThmanyahSans-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = DCA1B01D2F9A00010000001D /* ThmanyahSans-Medium.ttf */; };
+		DCA1B01A2F9A00010000001A /* ThmanyahSans-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = DCA1B01E2F9A00010000001E /* ThmanyahSans-Bold.ttf */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -53,6 +57,10 @@
 		DCA1B0142F9A000100000014 /* LiveActivityDebug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = LiveActivityDebug.xcconfig; path = Config/LiveActivityDebug.xcconfig; sourceTree = "<group>"; };
 		DCA1B0152F9A000100000015 /* LiveActivityRelease.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = LiveActivityRelease.xcconfig; path = Config/LiveActivityRelease.xcconfig; sourceTree = "<group>"; };
 		DCA1B0162F9A000100000016 /* LiveActivityStaging.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = LiveActivityStaging.xcconfig; path = Config/LiveActivityStaging.xcconfig; sourceTree = "<group>"; };
+		DCA1B01B2F9A00010000001B /* ThmanyahSans-Light.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "ThmanyahSans-Light.ttf"; path = "Sirr/App/ThmanyahSans-Light.ttf"; sourceTree = SOURCE_ROOT; };
+		DCA1B01C2F9A00010000001C /* ThmanyahSans-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "ThmanyahSans-Regular.ttf"; path = "Sirr/App/ThmanyahSans-Regular.ttf"; sourceTree = SOURCE_ROOT; };
+		DCA1B01D2F9A00010000001D /* ThmanyahSans-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "ThmanyahSans-Medium.ttf"; path = "Sirr/App/ThmanyahSans-Medium.ttf"; sourceTree = SOURCE_ROOT; };
+		DCA1B01E2F9A00010000001E /* ThmanyahSans-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "ThmanyahSans-Bold.ttf"; path = "Sirr/App/ThmanyahSans-Bold.ttf"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -114,6 +122,7 @@
 			isa = PBXGroup;
 			children = (
 				DCA0C0F12F8B000100000001 /* Config */,
+				DCA1B01F2F9A00010000001F /* Live Activity Fonts */,
 				DCA1B00A2F9A00010000000A /* LiveActivityShared */,
 				DCA1B0092F9A000100000009 /* TamrinLiveActivity */,
 				DCA0C1012F8B000100000011 /* SportArt */,
@@ -160,6 +169,17 @@
 				DCA1B0052F9A000100000005 /* WorkoutActivityAttributes.swift */,
 			);
 			path = LiveActivityShared;
+			sourceTree = "<group>";
+		};
+		DCA1B01F2F9A00010000001F /* Live Activity Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				DCA1B01B2F9A00010000001B /* ThmanyahSans-Light.ttf */,
+				DCA1B01C2F9A00010000001C /* ThmanyahSans-Regular.ttf */,
+				DCA1B01D2F9A00010000001D /* ThmanyahSans-Medium.ttf */,
+				DCA1B01E2F9A00010000001E /* ThmanyahSans-Bold.ttf */,
+			);
+			name = "Live Activity Fonts";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -268,6 +288,10 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DCA1B0172F9A000100000017 /* ThmanyahSans-Light.ttf in Resources */,
+				DCA1B0182F9A000100000018 /* ThmanyahSans-Regular.ttf in Resources */,
+				DCA1B0192F9A000100000019 /* ThmanyahSans-Medium.ttf in Resources */,
+				DCA1B01A2F9A00010000001A /* ThmanyahSans-Bold.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
