@@ -44,18 +44,44 @@ These are load-bearing. Everything below depends on them.
 | `PaymentRequest` exposes `manual`, `givenID`, `metadata`, `splits`, `allowedNetworks` | SDK `PaymentRequest.swift` |
 | `ApplePayService.authorizePayment(request:token:)` honours `request.manual` | SDK `ApplePayService.swift` |
 
-### Unverified — must be confirmed in test mode before relying on it
+### Confirmed against the account (2026-09-06, `scripts/moyasar-account-check.sh`)
+
+- Test secret key valid; account reachable; 0 payments; Invoices API reachable.
+- The account **can create payable objects in test mode** — a 1.00 SAR invoice was
+  created and returned a `checkout.moyasar.com` URL.
+- `POST /v1/payments` with a `splits[]` array reaches **field-level validation**:
+
+  ```
+  400 validation_error
+  "splits.0.recipient_id": ["Must be a valid recipient (Entity, Platform or
+                             Beneficiary) UUID."]
+  ```
+
+  So the API knows the field and looks the recipient up. This is strong evidence
+  that splits are available, but **not proof of entitlement** — validation runs
+  before entitlement checks, so a fake id fails identically either way.
+  `scripts/moyasar-splits-probe.sh` settles it with a real recipient id.
+
+### Unverified — must be confirmed before relying on it
 
 1. **Webhook authentication mechanism.** Docs describe a `secret_token` field in the
    payload ("the endpoint's secret is assigned by the consumer") but do not state
    whether a signature header also exists. Design assumes shared-secret-in-body and
    compensates by never trusting the body (see below). Revisit if a signature header
    turns out to exist.
-2. **Splits + manual authorization together.** No doc states these compose. Must be
-   confirmed against test mode; fallback in "Risks".
+2. **Splits entitlement on this account**, and **splits + manual authorization
+   together.** No doc states these compose. `scripts/moyasar-splits-probe.sh`
+   answers both in one request: it authorizes 1.00 SAR split to a real recipient
+   with `manual: true`, reads the resulting status, and voids it. Fallback in
+   "Risks".
 3. **Whether Moyasar will onboard individual organizers** (no commercial
    registration) as Beneficiaries. This gates the whole feature going live and is a
    commercial question, not a technical one.
+4. **How a recipient id is obtained at all.** No documented endpoint lists entities
+   or beneficiaries; `recipient_id` only appears in Settlements and Transfers
+   responses, which are empty on a new account. Onboarding a workspace as a
+   recipient may be a dashboard-only or Moyasar-side operation, which would shape
+   how `workspace_moyasar_recipients` rows get created.
 
 ---
 
