@@ -61,9 +61,9 @@ struct LoginView: View {
                     .buttonStyle(.plain)
                     .onChange(of: selectedItem) { newItem in
                         Task {
-                            if let data = try? await newItem?.loadTransferable(type: Data.self) {
-                                selectedImageData = data
-                            }
+                            guard let newItem,
+                                  let data = await newItem.loadAvatarData() else { return }
+                            selectedImageData = data
                         }
                     }
                     .padding(.top, 16)
