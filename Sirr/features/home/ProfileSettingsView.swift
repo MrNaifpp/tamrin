@@ -46,11 +46,10 @@ struct ProfileSettingsView: View {
         .environment(\.layoutDirection, .rightToLeft)
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItem, matching: .images)
         .task(id: photoItem) {
-            if let data = try? await photoItem?.loadTransferable(type: Data.self) {
-                avatarData = data
-                // Picking after removing is a change of mind, not both edits.
-                avatarRemoved = false
-            }
+            guard let photoItem, let data = await photoItem.loadAvatarData() else { return }
+            avatarData = data
+            // Picking after removing is a change of mind, not both edits.
+            avatarRemoved = false
         }
         .onAppear {
             name = feed.profileName
