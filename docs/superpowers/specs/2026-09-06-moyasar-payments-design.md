@@ -85,6 +85,106 @@ These are load-bearing. Everything below depends on them.
 
 ---
 
+## Splits — deep findings (2026-09-06)
+
+A full sweep of `docs.moyasar.com` (including its own `/docs-hierarchy/` page listing
+every documented page), the marketing site, and the platform terms.
+
+### Splits is barely documented, and that is itself the finding
+
+There is **no splits guide anywhere in the documentation hierarchy**. The feature
+appears in exactly two places: the `splits[]` request field on Create Payment, and
+the split fields on settlement lines. There is no page explaining how to obtain a
+`recipient_id`, no worked example, and no request-side example JSON — only response
+examples.
+
+### There is no API to create a recipient
+
+Searched the whole hierarchy: **no entities, recipients, or beneficiaries endpoint
+exists.** `recipient_id` only ever appears in *read* responses:
+
+- `GET /settlements/:id/lines` → `recipient_id`, `recipient_type`, `custom_splits`,
+  `is_custom_split`, `split_reference`, `split_description`
+- `GET /transfers` → `recipient_id`, `recipient_type`
+
+And the Payouts API — the obvious candidate for "stored beneficiary" — does **not**
+work that way: `POST /payouts` takes the destination **inline** (`iban`, `name`,
+`mobile`, `country`, `city`). There is no stored beneficiary object with an id, so a
+payout destination is *not* a splits `recipient_id`.
+
+**Conclusion: creating a splits recipient is not a self-serve API operation.** It is
+a Moyasar-side or dashboard action. This decides how `workspace_moyasar_recipients`
+rows get filled — by an operator pasting an id, not by an onboarding call the app
+makes.
+
+### Two merchant models, and splits belongs to one of them
+
+Moyasar distinguishes **aggregation merchants** from **facilitation merchants**
+("direct bank merchants"). The Transfers API is stated to be *"exclusively available
+for Moyasar aggregation merchants"* and is served from a different host
+(`apimig.moyasar.com`). Splits and transfers belong to the aggregation model — the
+one where Moyasar holds funds and distributes them. Tamrin needs to be an
+**aggregation** merchant, and this is worth naming explicitly when talking to sales.
+
+### The October 2025 note, read precisely
+
+The exact wording, and it sits in the **response** section:
+
+> "This field is returned for entities created after 2025-10, if you need to recieve
+> it, please contact support team." *(sic)*
+
+So it governs whether the field is **returned in responses**, and support can turn it
+on. This is a softer constraint than "splits only work for post-October-2025
+entities" — which is how it first read. It does not by itself say an older account
+cannot *send* splits.
+
+Consistent with a partial rollout, the settlement-line schema notes that its
+`splits` field *"currently returns null and is reserved for future use."*
+
+### Constraints that are NOT specified
+
+Genuinely absent from the docs, so they must be established empirically or by asking:
+
+- Whether split amounts must sum to the payment amount.
+- Whether the platform's own share must appear as an explicit split.
+- Any minimum or maximum number of splits.
+- Whether exactly one split must carry `fee_source: true`.
+
+`fee_source` is defined only as *"determine which split will be used to deduct
+processing fees"*, and `refundable` as *"indicate if the split should be reversed
+when refunding the payment"* (default `true`).
+
+### Who can actually receive money — the decisive product constraint
+
+From the Moyasar FAQ, requirements to hold a merchant account:
+
+> a valid Saudi commercial registration (CR) **or freelance license**, and a Saudi
+> commercial bank account linked to it
+
+The Platform Terms define a merchant as *"a natural or legal person"*, so individuals
+are eligible in principle — but only through a **freelance license** (وثيقة العمل
+الحر) with a bank account linked to it. The platform is obliged to run KYC, and the
+PSP *"has the right to refuse the onboarding of any merchant."*
+
+**This is the real wall.** A typical Tamrin organizer — someone arranging weekly
+football among friends — has no CR and no freelance license. A freelance license is
+free and obtainable online in Saudi Arabia, but requiring one before an organizer can
+collect 60 SAR from five friends is a serious adoption barrier, and it is a product
+decision rather than an engineering one.
+
+Also relevant to expectations: settlement is *"within seven (7) Business Days from
+the date the balance reaches ... one hundred (100) Saudi Riyals or more."* An
+organizer would not receive money the same day, unlike today's instant bank transfer.
+
+### What this changes in the design
+
+Nothing structural — and that is the point of having gated card payment behind a
+verified recipient. The coexistence decision now looks better than it did: manual
+transfer stays the path for the overwhelming majority of workspaces, and card
+payment becomes an option for organizers who run their group as an actual business.
+
+---
+
 ## The security problem, and the shape of the answer
 
 The Moyasar iOS SDK creates the payment **from the device**, with a publishable key,
@@ -446,9 +546,16 @@ entity created after October 2025. Everything here is built and testable without
 them — a workspace with no verified recipient simply gets the manual flow — but no
 card payment can reach a real organizer until Moyasar enables it on the account.
 
-**Individual organizers may not be onboardable.** Sub-merchant onboarding involves
-E-KYC/KYB with documents. Whether Moyasar accepts individuals without a commercial
-registration is unknown and decides whether this feature is viable at all.
+**Organizers need a CR or a freelance license.** Now established from Moyasar's own
+FAQ, not assumed: a merchant account requires a Saudi CR *or* a freelance license,
+plus a Saudi commercial bank account linked to it. Individuals qualify only through
+the freelance-license route. Most Tamrin organizers have neither, so card payment
+will reach a small minority of workspaces until that changes — which is the strongest
+argument for keeping manual transfer as the default rather than a fallback.
+
+**Recipient onboarding is manual.** No API creates a splits recipient. Rows in
+`workspace_moyasar_recipients` will be entered by an operator from an id Moyasar
+provides, so the design must not assume a self-serve onboarding flow inside the app.
 
 **Splits + manual authorization is unconfirmed.** If they turn out not to compose,
 the fallback is server-created invoices: `create-payment` calls `POST /v1/invoices`
