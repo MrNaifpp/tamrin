@@ -197,10 +197,12 @@ else
         info "Ask Moyasar to enable split payments. Per their docs it also"
         info "requires an entity created after October 2025." ;;
       *recipient*|*"invalid"*)
-        ok "Splits appear ENABLED — the API validated the recipient and"
-        ok "rejected the fake id, which means it understood the field."
-        info "Next question for Moyasar: can individual organisers (no CR)"
-        info "be onboarded as Beneficiaries?" ;;
+        ok "The API knows the splits field and looked the recipient up."
+        warn "NOT proof of entitlement: field validation runs before"
+        warn "entitlement checks, so a fake id fails the same way whether or"
+        warn "not the account may use splits."
+        info "Settle it with a real recipient id:"
+        info "  ./scripts/moyasar-splits-probe.sh" ;;
       *)
         warn "Inconclusive — read the response yourself:" ;;
     esac
