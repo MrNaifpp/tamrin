@@ -95,6 +95,22 @@ Recipients — والحقل يظهر في استجابات القراءة فقط
 الرصيد ١٠٠ ريال" الوارد في شروط المنصة؟ نحتاج معرفة ذلك لنضبط توقعات المنظّمين،
 لأن التحويل البنكي اليوم فوري.
 
+**٨. نموذج البائع الأصيل (merchant of record) — هل تسمحون به؟**
+
+كبديل عن splits: هل تسمحون بأن تحصّل تمرين كامل المبلغ على حسابها، ثم تصرف
+حصص المنظّمين عبر Payouts API؟
+
+نسأل لأن شروط التاجر لديكم (المادة الخامسة، ١٤) تمنع "السماح باستخدام خدمة
+التجارة الإلكترونية من قِبل أي طرف ثالث أو بالنيابة عنه"، والمادة (١١) تجعل
+التاجر هو البائع المسؤول عن الخدمة وعن خدمة عملائها. كما تنص شروط المنصة
+(١٦.٢) على أن التسوية تذهب **مباشرة إلى الحساب البنكي للتاجر المستفيد**.
+
+- هل يوجد ترتيب معتمد لديكم يسمح بهذا النموذج، وبأي شروط؟
+- هل يتطلب نشاطًا محددًا في السجل التجاري أو موافقة مسبقة؟
+- من يتحمل الـ chargeback إذا اعترض اللاعب بعد صرف حصة المنظّم؟
+
+نطرح السؤال لنستبعد الخيار أو نعتمده بوضوح، لا لنفترض جوابًا.
+
 شكرًا لتعاونكم.
 
 ---
@@ -185,5 +201,6 @@ Thank you.
 | 5 | Strict summing rules | Only changes the splits builder in `create-payment` |
 | 6 | Splits don't compose with `manual` | Fall back to server-created invoices — see "Risks" in the design |
 | 7 | Slow settlement | Organiser-facing copy must set expectations; no code impact |
+| 8 | Merchant-of-record refused | Closes the "Tamrin collects everything" alternative for good — worth knowing before anyone spends legal fees on it |
 
 Design: [`docs/superpowers/specs/2026-09-06-moyasar-payments-design.md`](superpowers/specs/2026-09-06-moyasar-payments-design.md)
