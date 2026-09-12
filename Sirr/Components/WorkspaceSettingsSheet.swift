@@ -140,8 +140,8 @@ struct WorkspaceSettingsSheet: View {
 
     private var inviteSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if let code = inviteCode,
-               let url = URL(string: "https://guileless-squirrel-b6537a.netlify.app/join/\(code)") {
+            if let code = inviteCode {
+                let url = AppLinks.joinURL(code)
                 ShareLink(item: url) {
                     HStack {
                         Spacer()

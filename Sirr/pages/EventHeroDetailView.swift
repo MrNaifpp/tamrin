@@ -252,7 +252,7 @@ struct EventHeroDetailView: View {
                             .buttonStyle(.plain)
                             .disabled(isTogglingLock)
 
-                            ShareLink(item: "https://guileless-squirrel-b6537a.netlify.app/event/\(event.id.uuidString)") {
+                            ShareLink(item: AppLinks.eventURL(event.id)) {
                                 ActionChip(icon: "square.and.arrow.up.fill", title: "مشاركة", style: .translucent)
                             }
                             .buttonStyle(.plain)
