@@ -34,9 +34,9 @@ otherwise shipped share links would open GoDaddy's 404 page and never launch the
    opening the app during the transition.
 4. Leave `docs/` history and `landing/.well-known/apple-app-site-association` untouched
    (the AASA names the app ID only; no domain inside it).
-5. Do not commit `Sirr.xcodeproj/project.pbxproj` — a new Swift file must be added to the
-   Xcode target manually by Naif, or the file should be placed where the project uses a
-   folder reference / file-system-synchronized group. Check which applies before adding.
+5. `Sirr/` is a `PBXFileSystemSynchronizedRootGroup` in the Xcode project, so a new file
+   under `Sirr/core/` joins the target automatically. `project.pbxproj` is not touched
+   and must not be committed.
 
 ### Landing repo (`~/Documents/tamrin-landing-page`, branch `feat/tamrien-domain`)
 
