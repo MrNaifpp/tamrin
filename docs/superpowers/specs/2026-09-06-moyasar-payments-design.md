@@ -437,7 +437,35 @@ Manual steps, for `PAYMENT_SETUP.md`:
    to its App ID too, or Apple Pay silently no-ops in staging builds.
 
 `supportedNetworks` will be `[.visa, .masterCard, .mada]`; `merchantCapabilities`
-`[.capability3DS, .capabilityCredit, .capabilityDebit]`.
+`[.capability3DS, .capabilityCredit, .capabilityDebit]`; `countryCode = "SA"`,
+`currencyCode = "SAR"`.
+
+### Verified against the Apple Pay docs category (2026-09-19)
+
+- **Native path = PassKit + SDK.** `PKPaymentAuthorizationController` →
+  `didAuthorizePayment` → `ApplePayService.authorizePayment(request:token:)` with
+  `payment.token`. The web-only "request Apple Pay session" endpoint and web domain
+  registration are **not** used by a native app.
+- **The CSR comes from Moyasar**, not from Keychain Access: Dashboard → Settings →
+  Apple Pay - Certificate → Add Certificate → Download CSR. Apple signs it under the
+  Merchant ID (answer **No** to "China Mainland" — Yes selects RSA, which Moyasar
+  does not support). Upload the signed `apple_pay.cer` back; it shows "Activated".
+- **Certificates expire every 25 months.** On renewal, upload the new certificate to
+  Moyasar *before* activating it at Apple, and never revoke the old one until the new
+  one is active. Goes in `PAYMENT_SETUP.md` with a calendar reminder.
+- **Sandbox results are chosen by amount**, not by card: 20,000–30,000 halalas
+  (SAR 200–300) → paid; 110,100–120,000 → insufficient funds; 130,100–140,000 →
+  general decline; other ranges for other codes. A real card in Wallet on a real
+  device is required; the Simulator cannot run Apple Pay. Tamrin's usual 30–80 SAR
+  seat falls outside every documented range, so Apple Pay tests use a 250 SAR
+  workout.
+- **Manual (authorize-only) mode is not mentioned in the Apple Pay docs.** The SDK
+  source does forward `request.manual` onto the Apple Pay source, but the docs'
+  result handling lists only `.paid` / `.failed`. Whether an Apple Pay payment comes
+  back `authorized` under `manual: true` must be confirmed in the sandbox before the
+  capture-gated design is trusted for Apple Pay. If it does not, Apple Pay falls
+  back to verify-then-refund-on-mismatch, with the amount and recipient still
+  checked server-side before the seat is confirmed.
 
 ---
 
