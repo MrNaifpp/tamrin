@@ -2038,6 +2038,10 @@ struct RegistrationFlowSheet: View {
     @State private var step: Step
     @State private var guestNames: [String] = []
     @State private var showGuestSection = false
+    /// Card payment through Moyasar. Offered in the review step only when the
+    /// server says this workspace can take it (see the `.task(id:)` below).
+    @State private var showCardPayment = false
+    @State private var cardAvailable = false
     /// Whether the member has claimed a seat for themselves. Starts off, so
     /// registering is a deliberate tap on your own card rather than something
     /// that already happened when the sheet opened.
@@ -2280,6 +2284,24 @@ struct RegistrationFlowSheet: View {
             background: TamrinTheme.sheet,
             extraHeight: -bottomSafeInset
         )
+        .task(id: occurrence.id) {
+            // Card is only offered when the server says the workspace can take
+            // it. A workspace without a verified Moyasar recipient never sees
+            // the button, and the manual flow is unchanged. Asked only in the
+            // review step, which is the only place the button can appear.
+            guard reviewOnly else { return }
+            if case .ready = try? await MoyasarPaymentService.shared.startPayment(eventId: occurrence.id) {
+                cardAvailable = true
+            }
+        }
+        .sheet(isPresented: $showCardPayment) {
+            CardPaymentSheet(eventId: occurrence.id, eventName: occurrence.title) {
+                Task {
+                    await feed.markCardPaid(for: occurrence)
+                    withAnimation { step = .success }
+                }
+            }
+        }
         .task {
             if reviewOnly, destination == nil {
                 await loadDestination()
@@ -2574,6 +2596,27 @@ struct RegistrationFlowSheet: View {
                     }
                     .padding(.horizontal, 20)
                     .padding(.bottom, 12)
+                }
+
+                if reviewOnly, cardAvailable, destination.status != .free {
+                    Button {
+                        showCardPayment = true
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "creditcard")
+                            Text("ادفع بالبطاقة أو Apple Pay")
+                                .font(TamrinFont.font(size: 15, weight: .bold))
+                            Spacer()
+                        }
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 16)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .background(.white, in: .rect(cornerRadius: 17, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 10)
                 }
 
                 // Review is now the paying step: the seat already exists, and
