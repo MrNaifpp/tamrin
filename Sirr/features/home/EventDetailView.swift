@@ -2038,10 +2038,13 @@ struct RegistrationFlowSheet: View {
     @State private var step: Step
     @State private var guestNames: [String] = []
     @State private var showGuestSection = false
-    /// Card payment through Moyasar. Offered in the review step only when the
-    /// server says this workspace can take it (see the `.task(id:)` below).
+    /// Card payment through Moyasar. The server's quote for this member's
+    /// outstanding seats, fetched when the review step opens; its presence is
+    /// what puts the Apple Pay and card buttons on screen. A workspace the
+    /// server will not quote never sees either, and the manual transfer flow
+    /// below them is untouched.
     @State private var showCardPayment = false
-    @State private var cardAvailable = false
+    @State private var cardQuote: CardPaymentQuote?
     /// Whether the member has claimed a seat for themselves. Starts off, so
     /// registering is a deliberate tap on your own card rather than something
     /// that already happened when the sheet opened.
@@ -2290,8 +2293,8 @@ struct RegistrationFlowSheet: View {
             // the button, and the manual flow is unchanged. Asked only in the
             // review step, which is the only place the button can appear.
             guard reviewOnly else { return }
-            if case .ready = try? await MoyasarPaymentService.shared.startPayment(eventId: occurrence.id) {
-                cardAvailable = true
+            if case .ready(let quote) = try? await MoyasarPaymentService.shared.startPayment(eventId: occurrence.id) {
+                cardQuote = quote
             }
         }
         .sheet(isPresented: $showCardPayment) {
@@ -2598,13 +2601,24 @@ struct RegistrationFlowSheet: View {
                     .padding(.bottom, 12)
                 }
 
-                if reviewOnly, cardAvailable, destination.status != .free {
+                if reviewOnly, let cardQuote, destination.status != .free {
+                    // Apple Pay first, and one tap from here: the sheet it
+                    // opens is Wallet's own, so there is nothing of ours to
+                    // put in front of it.
+                    if ApplePayButton.isAvailable {
+                        ApplePayButton(quote: cardQuote, eventName: occurrence.title) { outcome in
+                            handleApplePay(outcome, quote: cardQuote)
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 10)
+                    }
+
                     Button {
                         showCardPayment = true
                     } label: {
                         HStack(spacing: 10) {
                             Image(systemName: "creditcard")
-                            Text("ادفع بالبطاقة أو Apple Pay")
+                            Text("ادفع بالبطاقة")
                                 .font(TamrinFont.font(size: 15, weight: .bold))
                             Spacer()
                         }
@@ -2842,6 +2856,49 @@ struct RegistrationFlowSheet: View {
         }
         if isGuestRequest { return "أضيف الضيوف إلى قائمة التمرين" }
         return "اسمك مسجل في قائمة التمرين"
+    }
+
+    /// Apple Pay came back. Authorized is not paid: the funds are held, and
+    /// only verify-payment on the server decides whether they are captured and
+    /// the seat confirmed. So this asks, and shows whatever the server says.
+    private func handleApplePay(_ outcome: CardPaymentOutcome, quote: CardPaymentQuote) {
+        switch outcome {
+        case .cancelled:
+            break
+        case .failed(let message):
+            Haptics.error()
+            failureMessage = message
+        case .authorized(let moyasarPaymentId):
+            guard !submitting else { return }
+            submitting = true
+            Task {
+                do {
+                    let verdict = try await MoyasarPaymentService.shared.verifyUntilSettled(
+                        paymentId: quote.paymentId,
+                        moyasarPaymentId: moyasarPaymentId
+                    )
+                    submitting = false
+                    switch verdict {
+                    case .paid:
+                        Haptics.success()
+                        await feed.markCardPaid(for: occurrence)
+                        withAnimation { step = .success }
+                    case .processing:
+                        // The hold is real and the webhook will finish it, so
+                        // this is a delay to report, not a failure to retry.
+                        failureMessage = "تأخر التحقق من الدفع. سيتأكد مقعدك تلقائيًا عند وصول التأكيد."
+                    case .failed(let reason):
+                        Haptics.error()
+                        failureMessage = reason == "amount" || reason == "recipient"
+                            ? "تعذر التحقق من الدفع. لم يُخصم أي مبلغ."
+                            : "لم تنجح عملية الدفع."
+                    }
+                } catch {
+                    submitting = false
+                    failureMessage = ServerErrorMessage.arabic(for: error)
+                }
+            }
+        }
     }
 
     private func declarePayment(using method: PaymentDestinationMethod) {
