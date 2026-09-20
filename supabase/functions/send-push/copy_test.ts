@@ -148,3 +148,11 @@ Deno.test("lineup_published copy interpolates the event name", () => {
     body: "ادخل التطبيق وشف فريقك ومركزك",
   });
 });
+
+Deno.test("payment_paid copy interpolates the event name", () => {
+  const c = copyFor("payment_paid", "تمرين كرة قدم");
+  assertEquals(c, {
+    title: "وصلت قطة بالبطاقة 💳",
+    body: "لاعب دفع قطة تمرين كرة قدم بالبطاقة وتأكد مقعده تلقائيًا.",
+  });
+});

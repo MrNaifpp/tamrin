@@ -102,3 +102,114 @@ $$;
 revoke execute on function public.begin_card_payment(uuid, uuid)
   from public, anon, authenticated;
 grant execute on function public.begin_card_payment(uuid, uuid) to service_role;
+
+-- settle_payment is the single place a card payment becomes paid and its seats
+-- become confirmed. verify-payment and moyasar-webhook both end here, so
+-- idempotency lives in one function. The Edge Function passes the status it
+-- fetched from Moyasar itself; nothing here trusts a webhook body.
+
+create or replace function public.settle_payment(
+  p_payment_id uuid,
+  p_moyasar_payment_id text,
+  p_moyasar_status text,
+  p_payment_method text,
+  p_amount int,
+  p_currency text
+)
+returns json
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_payment public.payments;
+  v_event public.events;
+  v_seats int;
+begin
+  select * into v_payment from public.payments where id = p_payment_id for update;
+  if v_payment.id is null then raise exception 'Payment not found'; end if;
+
+  -- Bind the Moyasar id on first contact; refuse a different one afterwards.
+  if v_payment.moyasar_payment_id is null then
+    update public.payments set moyasar_payment_id = p_moyasar_payment_id
+    where id = p_payment_id;
+    v_payment.moyasar_payment_id := p_moyasar_payment_id;
+  elsif v_payment.moyasar_payment_id <> p_moyasar_payment_id then
+    raise exception 'Moyasar payment id does not match this payment';
+  end if;
+
+  update public.payments
+     set last_moyasar_status = p_moyasar_status,
+         payment_method = coalesce(p_payment_method, payment_method)
+   where id = p_payment_id;
+
+  if p_moyasar_status in ('paid', 'captured') then
+    if v_payment.status = 'paid' then
+      return json_build_object('status', 'already_settled');
+    end if;
+    if p_amount <> v_payment.amount or p_currency <> v_payment.currency then
+      update public.payments
+         set status = 'failed',
+             failure_code = 'amount_mismatch',
+             failure_message = format('expected %s %s, moyasar reports %s %s',
+                                      v_payment.amount, v_payment.currency,
+                                      p_amount, p_currency)
+       where id = p_payment_id;
+      return json_build_object('status', 'amount_mismatch');
+    end if;
+
+    with mine as (
+      update public.event_participants ep
+         set payment_status = 'confirmed',
+             payment_id = p_payment_id,
+             payment_declared_at = coalesce(ep.payment_declared_at, now())
+       where ep.event_id = v_payment.event_id
+         and ep.payment_status = 'pending'
+         and (ep.user_id = v_payment.user_id
+              or (ep.user_id is null and ep.added_by = v_payment.user_id))
+       returning 1
+    )
+    select count(*) into v_seats from mine;
+
+    update public.payments
+       set status = 'paid', paid_at = now()
+     where id = p_payment_id;
+
+    select * into v_event from public.events where id = v_payment.event_id;
+    insert into public.push_outbox (user_id, type, event_id)
+    values (v_event.creator_id, 'payment_paid', v_payment.event_id);
+
+    return json_build_object('status', 'settled', 'seats', v_seats);
+  end if;
+
+  if p_moyasar_status = 'authorized' then
+    update public.payments
+       set status = 'processing', authorized_at = coalesce(authorized_at, now())
+     where id = p_payment_id;
+    return json_build_object('status', 'ignored');
+  end if;
+
+  if p_moyasar_status in ('failed', 'voided') then
+    if v_payment.status = 'paid' then
+      return json_build_object('status', 'already_settled');
+    end if;
+    update public.payments set status = 'failed' where id = p_payment_id;
+    return json_build_object('status', 'failed');
+  end if;
+
+  if p_moyasar_status = 'refunded' then
+    update public.payments set status = 'refunded' where id = p_payment_id;
+    update public.event_participants
+       set payment_status = 'pending'
+     where payment_id = p_payment_id and payment_status = 'confirmed';
+    return json_build_object('status', 'refunded');
+  end if;
+
+  return json_build_object('status', 'ignored');
+end;
+$$;
+
+revoke execute on function public.settle_payment(uuid, text, text, text, int, text)
+  from public, anon, authenticated;
+grant execute on function public.settle_payment(uuid, text, text, text, int, text)
+  to service_role;
