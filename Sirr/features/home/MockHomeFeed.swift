@@ -2451,6 +2451,22 @@ final class HomeStore {
         }
     }
 
+    /// A card payment was verified by the server. The seat is already
+    /// confirmed in the database; this only brings the local roster and the
+    /// shelf up to date, the same way a declared transfer does.
+    func markCardPaid(for occurrence: FeedOccurrence) async {
+        guard !isPreview else {
+            setMyStatus(.registered, on: occurrence)
+            resolvePaymentAction(for: occurrence.id)
+            return
+        }
+        await reloadRoster(occurrence.id)
+        resolvePaymentAction(for: occurrence.id)
+        if let workspaceID = teamID(for: occurrence) {
+            Task { await loadTeamData(workspaceID) }
+        }
+    }
+
     /// Moves my own seat — and my unpaid guests' seats — to a new local state,
     /// for the paths that have no backend behind them.
     private func setMyStatus(_ status: FeedRegStatus, on occurrence: FeedOccurrence) {
