@@ -339,3 +339,14 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # JWT verification so the request reaches the function; the function's own
 # Authorization bearer check is the security gate.
 verify_jwt = false
+
+[functions.create-payment]
+verify_jwt = true
+
+[functions.verify-payment]
+verify_jwt = true
+
+[functions.moyasar-webhook]
+# Moyasar cannot present a Supabase JWT. The function checks the shared
+# secret_token itself and re-fetches every payment from Moyasar before acting.
+verify_jwt = false
