@@ -38,3 +38,12 @@ CURRENT_PROJECT_VERSION = 3
 // Build Settings tab writes it back to the target and breaks this again — set
 // it here instead.
 INFOPLIST_KEY_CFBundleDisplayName = تمرين
+
+// Apple Pay merchant identifier. Registered in Apple Developer on 2026-09-20
+// and enabled on both App IDs (com.businessech.tmrin and .staging); Moyasar's
+// payment processing certificate is activated against it. Read by
+// ApplePayButton through the ApplePayMerchantID placeholder in Sirr/Info.plist,
+// the same way SUPABASE_HOST travels — an empty value hides the button and
+// nothing else changes. The entitlement in Sirr/Sirr.entitlements must list the
+// same id.
+APPLE_PAY_MERCHANT_ID = merchant.com.businessech.tmrin
