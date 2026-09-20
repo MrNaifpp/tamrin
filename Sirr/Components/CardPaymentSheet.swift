@@ -32,8 +32,8 @@ struct CardPaymentSheet: View {
                     if let request, let quote {
                         amountCard(quote)
                         if ApplePayButton.isAvailable {
-                            ApplePayButton(request: request, quote: quote, eventName: eventName) { result in
-                                handle(result, quote: quote)
+                            ApplePayButton(quote: quote, eventName: eventName) { outcome in
+                                handle(outcome, quote: quote)
                             }
                             .padding(.horizontal, 20)
                             .padding(.bottom, 12)
@@ -145,26 +145,7 @@ struct CardPaymentSheet: View {
             switch try await MoyasarPaymentService.shared.startPayment(eventId: eventId) {
             case .ready(let q):
                 quote = q
-                request = try PaymentRequest(
-                    apiKey: q.publishableKey,
-                    amount: q.amount,
-                    currency: q.currency,
-                    description: q.description,
-                    metadata: q.metadata.mapValues { MetadataValue.stringValue($0) },
-                    manual: true,
-                    givenID: q.givenId.uuidString.lowercased(),
-                    allowedNetworks: [.mada, .visa, .mastercard],
-                    payButtonType: .pay,
-                    splits: q.splits.map {
-                        PaymentSplit(
-                            recipientId: $0.recipientId,
-                            amount: $0.amount,
-                            recipientType: $0.recipientType,
-                            feeSource: $0.feeSource,
-                            refundable: $0.refundable
-                        )
-                    }
-                )
+                request = try q.paymentRequest()
             case .alreadyPaid:
                 state = .success
             case .freeEvent, .nothingDue:
@@ -176,6 +157,19 @@ struct CardPaymentSheet: View {
             }
         } catch {
             loadError = ServerErrorMessage.arabic(for: error)
+        }
+    }
+
+    private func handle(_ outcome: CardPaymentOutcome, quote: CardPaymentQuote) {
+        switch outcome {
+        case .authorized(let moyasarPaymentId):
+            state = .processing
+            Task { await verify(moyasarPaymentId: moyasarPaymentId, paymentId: quote.paymentId) }
+        case .failed(let message):
+            Haptics.error()
+            state = .failed(message)
+        case .cancelled:
+            state = .cancelled
         }
     }
 
@@ -201,26 +195,21 @@ struct CardPaymentSheet: View {
 
     private func verify(moyasarPaymentId: String, paymentId: UUID) async {
         do {
-            for attempt in 0..<4 {
-                switch try await MoyasarPaymentService.shared.verify(
-                    paymentId: paymentId, moyasarPaymentId: moyasarPaymentId
-                ) {
-                case .paid:
-                    Haptics.success()
-                    state = .success
-                    onSettled()
-                    return
-                case .processing:
-                    try await Task.sleep(for: .seconds(1 + attempt))
-                case .failed(let reason):
-                    Haptics.error()
-                    state = .failed(reason == "amount" || reason == "recipient"
-                                    ? "تعذر التحقق من الدفع. لم يُخصم أي مبلغ."
-                                    : "لم تنجح عملية الدفع.")
-                    return
-                }
+            switch try await MoyasarPaymentService.shared.verifyUntilSettled(
+                paymentId: paymentId, moyasarPaymentId: moyasarPaymentId
+            ) {
+            case .paid:
+                Haptics.success()
+                state = .success
+                onSettled()
+            case .processing:
+                state = .failed("تأخر التحقق من الدفع. سيتأكد مقعدك تلقائيًا عند وصول التأكيد.")
+            case .failed(let reason):
+                Haptics.error()
+                state = .failed(reason == "amount" || reason == "recipient"
+                                ? "تعذر التحقق من الدفع. لم يُخصم أي مبلغ."
+                                : "لم تنجح عملية الدفع.")
             }
-            state = .failed("تأخر التحقق من الدفع. سيتأكد مقعدك تلقائيًا عند وصول التأكيد.")
         } catch {
             state = .failed(ServerErrorMessage.arabic(for: error))
         }

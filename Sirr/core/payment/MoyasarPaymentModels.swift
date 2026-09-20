@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import MoyasarSdk
 
 struct CardPaymentSplit: Decodable, Equatable {
     let recipientId: String
@@ -84,5 +85,48 @@ enum MoyasarPaymentServiceError: Error, LocalizedError {
         case .http(401, _): "انتهت الجلسة. سجّل الدخول مرة أخرى."
         case .http: ServerErrorMessage.general
         }
+    }
+}
+
+/// What an authorization came back as, in the app's own words. Keeps MoyasarSdk
+/// types out of the screens that only need to know whether to verify, to
+/// apologise, or to do nothing at all.
+enum CardPaymentOutcome {
+    /// Authorized on Moyasar's side. This says nothing about the seat: only
+    /// verify-payment decides that.
+    case authorized(moyasarPaymentId: String)
+    case failed(String)
+    case cancelled
+}
+
+extension CardPaymentQuote {
+    /// The SDK request this quote describes, built in one place so the card
+    /// form and the Apple Pay sheet cannot drift apart. `manual: true` is the
+    /// entire security model and has to be on both.
+    ///
+    /// No splits means no splits field, not an empty one: a workspace with no
+    /// verified recipient settles into Tamrin's own Moyasar account, and
+    /// Moyasar rejects an empty array where it would accept an absent one.
+    func paymentRequest() throws -> PaymentRequest {
+        try PaymentRequest(
+            apiKey: publishableKey,
+            amount: amount,
+            currency: currency,
+            description: description,
+            metadata: metadata.mapValues { MetadataValue.stringValue($0) },
+            manual: true,
+            givenID: givenId.uuidString.lowercased(),
+            allowedNetworks: [.mada, .visa, .mastercard],
+            payButtonType: .pay,
+            splits: splits.isEmpty ? nil : splits.map {
+                PaymentSplit(
+                    recipientId: $0.recipientId,
+                    amount: $0.amount,
+                    recipientType: $0.recipientType,
+                    feeSource: $0.feeSource,
+                    refundable: $0.refundable
+                )
+            }
+        )
     }
 }

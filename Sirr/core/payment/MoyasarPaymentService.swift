@@ -68,6 +68,27 @@ final class MoyasarPaymentService {
         }
     }
 
+    /// Asks the server what really happened, retrying while it says the
+    /// payment is still moving. Capture and the webhook can land a moment
+    /// apart, so a single question is often asked too early. Returns
+    /// `.processing` if it never settles in time; the webhook finishes it.
+    func verifyUntilSettled(
+        paymentId: UUID,
+        moyasarPaymentId: String,
+        attempts: Int = 4
+    ) async throws -> CardPaymentVerification {
+        for attempt in 0..<attempts {
+            let verdict = try await verify(paymentId: paymentId, moyasarPaymentId: moyasarPaymentId)
+            switch verdict {
+            case .paid, .failed:
+                return verdict
+            case .processing:
+                try await Task.sleep(for: .seconds(1 + attempt))
+            }
+        }
+        return .processing
+    }
+
     private func invoke(_ name: String, body: [String: String]) async throws -> Data {
         do {
             return try await client.functions.invoke(

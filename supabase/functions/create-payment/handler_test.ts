@@ -14,6 +14,7 @@ function deps(over: Partial<Parameters<typeof makeHandler>[0]> = {}) {
     getUserId: async (auth: string | null) => (auth === "Bearer good" ? "user-1" : null),
     rpc: async (_name: string, args: unknown) => { calls.push(args); return ready; },
     publishableKey: "pk_test_x",
+    allowWithoutRecipient: false,
     ...over,
   };
 }
@@ -38,7 +39,7 @@ Deno.test("ignores any amount the client sends and uses the caller from the JWT"
   const d = deps();
   const res = await makeHandler(d)(post({ event_id: "e1", amount: 1, user_id: "someone-else" }));
   const body = await res.json();
-  assertEquals(d.calls, [{ p_event_id: "e1", p_user_id: "user-1" }]);
+  assertEquals(d.calls, [{ p_event_id: "e1", p_user_id: "user-1", p_allow_without_recipient: false }]);
   assertEquals(body.amount, 12000);
 });
 
@@ -55,4 +56,21 @@ Deno.test("passes a non-ready status through without a key", async () => {
   const res = await makeHandler(d)(post({ event_id: "e1" }));
   const body = await res.json();
   assertEquals(body, { status: "recipient_not_onboarded" });
+});
+
+Deno.test("the recipient-less opt-in is the server's to set, never the body's", async () => {
+  const d = deps({ allowWithoutRecipient: true });
+  await makeHandler(d)(post({ event_id: "e1", allow_without_recipient: false }));
+  assertEquals(d.calls, [{ p_event_id: "e1", p_user_id: "user-1", p_allow_without_recipient: true }]);
+});
+
+Deno.test("no recipient means no splits array at all", async () => {
+  const d = deps({
+    allowWithoutRecipient: true,
+    rpc: async () => ({ ...ready, recipient_id: null, recipient_type: null }),
+  });
+  const res = await makeHandler(d)(post({ event_id: "e1" }));
+  const body = await res.json();
+  assertEquals(body.splits, []);
+  assertEquals(body.amount, 12000);
 });

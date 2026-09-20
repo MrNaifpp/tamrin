@@ -49,6 +49,26 @@ There is no API for this. Once Moyasar gives you a recipient id for an organizer
 Run it as service_role (SQL editor). The card button appears for that workspace on the
 next app launch. Every other workspace keeps the manual transfer flow.
 
+### Testing before Moyasar issues a recipient id
+
+Splits need a recipient id and Moyasar has not given us one, so without help the whole
+card and Apple Pay flow cannot be exercised at all. The escape hatch is one secret, set
+on the **sandbox only**:
+
+    supabase secrets set --project-ref kpcdinxusxycenfnitjc ALLOW_PAYMENTS_WITHOUT_RECIPIENT=true
+
+With it, `begin_card_payment` prices the seat even when the workspace has no verified
+recipient, `create-payment` sends no splits array, and the payment settles into
+**Tamrin's own Moyasar account** rather than the organizer's. Everything else is
+unchanged: the amount is still computed on the server, still compared with the secret
+key, and still captured or voided by `verify-payment`.
+
+**Never set this on production.** Without a split the organizer receives nothing and
+Tamrin becomes the merchant of record, which is question 8 in
+`docs/moyasar-support-questions.md` and is unanswered. The SQL parameter defaults to
+false and the secret is absent in production, so production behaves exactly as designed.
+Remove the secret the day a real recipient id exists.
+
 ## Apple Pay — done on 2026-09-20, kept here for the next account or renewal
 
 1. Apple Developer → Identifiers → Merchant IDs → `merchant.com.businessech.tmrin`. **Done.**
