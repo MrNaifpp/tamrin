@@ -31,6 +31,17 @@ struct CardPaymentSheet: View {
                 case .idle:
                     if let request, let quote {
                         amountCard(quote)
+                        if ApplePayButton.isAvailable {
+                            ApplePayButton(request: request, quote: quote, eventName: eventName) { result in
+                                handle(result, quote: quote)
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 12)
+                            Text("أو بالبطاقة")
+                                .font(TamrinFont.font(size: 12))
+                                .foregroundStyle(.white.opacity(0.5))
+                                .padding(.bottom, 8)
+                        }
                         CreditCardView(request: request) { result in
                             handle(result, quote: quote)
                         }
