@@ -28,15 +28,18 @@ MARKETING_VERSION = 1.8
 // and the shelf back to a plain poster; (3) stopped asking what anyone thought
 // of the split.
 //
-// 1.8 is a new train again, so it started at (1). (2) is the TestFlight build
-// carrying Moyasar card and Apple Pay payment. That feature exists only on the
-// development project — the migrations, the three Edge Functions, their
-// secrets and the Moyasar webhook are deployed to kpcdinxusxycenfnitjc and
-// nowhere else — so this build's backend is pinned to the sandbox in
-// Sirr/core/supabase/SupabaseEnvironment.swift, on top of the banner already
-// at the top of Config/Release.xcconfig. Both have to come off before any of
-// this reaches the App Store.
-CURRENT_PROJECT_VERSION = 2
+// 1.8 is a new train again, so it started at (1). (2) carried Moyasar card and
+// Apple Pay payment as built; (3) brings Apple Pay up into the payment review
+// step, so دفع القطة offers it directly instead of burying it a screen deeper,
+// and lets a workspace with no verified Moyasar recipient pay at all.
+//
+// That feature exists only on the development project — the migrations, the
+// three Edge Functions, their secrets and the Moyasar webhook are deployed to
+// kpcdinxusxycenfnitjc and nowhere else — so this build's backend is pinned to
+// the sandbox in Sirr/core/supabase/SupabaseEnvironment.swift, on top of the
+// banner at the top of Config/Release.xcconfig. Both have to come off before
+// any of this reaches the App Store.
+CURRENT_PROJECT_VERSION = 3
 
 // Here rather than in the target so Staging.xcconfig can override it — a
 // staging build on the home screen has to be tellable from a real one.
