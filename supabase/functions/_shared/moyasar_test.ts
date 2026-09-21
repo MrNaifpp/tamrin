@@ -2,7 +2,10 @@ import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { basicAuthHeader, makeMoyasarClient } from "./moyasar.ts";
 
 Deno.test("basic auth is the secret key as username with an empty password", () => {
-  assertEquals(basicAuthHeader("sk_test_abc"), "Basic " + btoa("sk_test_abc:"));
+  // Pinned to the exact header `curl -u sk_test_abc:` sends. The old assertion
+  // compared btoa of the same expression the function uses, so it would have
+  // passed no matter how wrong the encoding was.
+  assertEquals(basicAuthHeader("sk_test_abc"), "Basic c2tfdGVzdF9hYmM6");
 });
 
 Deno.test("fetchPayment hits /v1/payments/{id} with basic auth", async () => {
