@@ -69,6 +69,22 @@ HTTP 401
 | خلط بين وضعي الاختبار والإنتاج | المفتاحان العام والسري مأخوذان من الشاشة نفسها في وضع الاختبار، والعملية نفسها أُنشئت في وضع الاختبار وظهرت في لوحة الاختبار |
 | المفتاح السري هو نفسه المفتاح العام بالخطأ | بصمتاهما مختلفتان، فهما قيمتان مختلفتان فعلًا |
 
+### كل النداءات التي نرسلها إلى Moyasar
+
+خمس نقاط نهاية فقط، لا غير:
+
+- `POST /v1/payments` (مصدر `applepay`، بالمفتاح **العام** من التطبيق) — يُرسَل لحظة تأكيد اللاعب للدفع في Apple Pay.
+- `POST /v1/payments` (مصدر `creditcard`، بالمفتاح **العام** من التطبيق) — يُرسَل لحظة إرسال اللاعب لنموذج البطاقة.
+- `GET /v1/payments/{id}` (بالمفتاح **السري** من خادمنا) — يُرسَل مباشرة بعد نجاح أي من النداءين أعلاه، ليتحقق الخادم من المبلغ قبل التحصيل. **هنا يقع الخطأ 401.**
+- `POST /v1/payments/{id}/capture` (بالمفتاح **السري**) — يُرسَل فقط إذا طابق المبلغ والعملة والمستلم ما يقوله سجلنا. **لم نصل إليه قط.**
+- `POST /v1/payments/{id}/void` (بالمفتاح **السري**) — يُرسَل فقط إذا لم تطابق، لتحرير المبلغ المحجوز. **لم نصل إليه قط.**
+
+ونداء سادس بالمفتاح السري أيضًا: `GET /v1/payments/{id}` من مستقبل الـ webhook،
+يُرسَل عند كل إشعار منكم لأننا لا نعتمد على محتوى الإشعار بل نعيد قراءة العملية.
+
+يعني أن المفتاح السري لم يُستخدم فعليًا إلا على `GET /v1/payments/{id}`، ويفشل
+عندها، فلا يمكننا القول إن التحصيل أو الإلغاء معطّلان — لم يُنفَّذا أصلًا.
+
 ### أسئلتنا
 
 ١. هل المفتاح السري لوضع الاختبار على حسابنا **فعّال حاليًا**؟ وهل جرى تدويره
@@ -148,6 +164,23 @@ Failing attempts at (UTC): `<date and time>`
 | The key never reaches our server | We log a fingerprint of the value the server receives at runtime and matched it against the stored one |
 | Test and live modes mixed up | Both keys were taken from the same test-mode screen, and the payment itself was created in test mode and appears in the test dashboard |
 | The secret key is accidentally the publishable key | Their fingerprints differ, so they are genuinely different values |
+
+### Every call we make to Moyasar
+
+Five endpoints, and no others:
+
+- `POST /v1/payments` (`applepay` source, **publishable** key, from the app) — sent the moment the player confirms in the Apple Pay sheet.
+- `POST /v1/payments` (`creditcard` source, **publishable** key, from the app) — sent the moment the player submits the card form.
+- `GET /v1/payments/{id}` (**secret** key, from our server) — sent immediately after either of the above succeeds, so the server can check the amount before taking money. **This is where the 401 occurs.**
+- `POST /v1/payments/{id}/capture` (**secret** key) — sent only if the amount, currency and recipient match our record. **Never reached.**
+- `POST /v1/payments/{id}/void` (**secret** key) — sent only if they do not match, to release the hold. **Never reached.**
+
+A sixth call uses the secret key too: `GET /v1/payments/{id}` from our webhook
+receiver, sent on every notification from you, because we re-read the payment
+rather than trusting the notification body.
+
+So the secret key has only ever been exercised on `GET /v1/payments/{id}`, and it
+fails there. We cannot say capture or void are broken; they have never run.
 
 ### Our questions
 
