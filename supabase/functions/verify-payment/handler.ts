@@ -25,50 +25,80 @@ export function makeHandler(deps: VerifyDeps) {
   return async (req: Request): Promise<Response> => {
     if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-    const userId = await deps.getUserId(req.headers.get("authorization"));
-    if (!userId) return json({ error: "unauthorized" }, 401);
+    // Everything below crosses a boundary that can throw: the auth check, the
+    // database, and three Moyasar calls. An uncaught throw becomes a bare 500,
+    // which the app can only render as "something went wrong" — that is how an
+    // invalid MOYASAR_SECRET_KEY once looked exactly like a declined card, with
+    // the real answer (401 authentication_error) visible nowhere. `at` names the
+    // boundary being crossed, and both the log and the response carry it.
+    let at = "auth";
+    try {
+      const userId = await deps.getUserId(req.headers.get("authorization"));
+      if (!userId) return json({ error: "unauthorized" }, 401);
 
-    const body = await req.json().catch(() => ({}));
-    const paymentId = typeof body?.payment_id === "string" ? body.payment_id : null;
-    const moyasarId = typeof body?.moyasar_payment_id === "string" ? body.moyasar_payment_id : null;
-    if (!paymentId || !moyasarId) return json({ error: "payment_id and moyasar_payment_id required" }, 400);
+      const body = await req.json().catch(() => ({}));
+      const paymentId = typeof body?.payment_id === "string" ? body.payment_id : null;
+      const moyasarId = typeof body?.moyasar_payment_id === "string" ? body.moyasar_payment_id : null;
+      if (!paymentId || !moyasarId) return json({ error: "payment_id and moyasar_payment_id required" }, 400);
 
-    const row = await deps.loadPayment(paymentId);
-    if (!row || row.user_id !== userId) return json({ error: "not found" }, 404);
-    if (row.status === "paid") return json({ status: "paid" });
+      at = "load_payment";
+      const row = await deps.loadPayment(paymentId);
+      if (!row || row.user_id !== userId) return json({ error: "not found" }, 404);
+      if (row.status === "paid") return json({ status: "paid" });
 
-    const remote = await deps.moyasar.fetchPayment(moyasarId);
-    const method = remote.source?.type ?? null;
+      at = "moyasar_fetch";
+      const remote = await deps.moyasar.fetchPayment(moyasarId);
+      const method = remote.source?.type ?? null;
 
-    if (remote.status === "initiated") return json({ status: "processing" });
+      if (remote.status === "initiated") return json({ status: "processing" });
 
-    const check = checkAuthorized(remote, {
-      amount: row.amount, currency: row.currency, recipientId: row.split_recipient_id,
-    });
+      const check = checkAuthorized(remote, {
+        amount: row.amount, currency: row.currency, recipientId: row.split_recipient_id,
+      });
 
-    if (!check.ok) {
-      if (remote.status === "authorized") {
-        const voided = await deps.moyasar.voidPayment(moyasarId);
-        await deps.settle({
-          p_payment_id: row.id, p_moyasar_payment_id: moyasarId, p_moyasar_status: voided.status,
-          p_payment_method: method, p_amount: remote.amount, p_currency: remote.currency,
-        });
-      } else {
-        await deps.settle({
-          p_payment_id: row.id, p_moyasar_payment_id: moyasarId, p_moyasar_status: remote.status,
-          p_payment_method: method, p_amount: remote.amount, p_currency: remote.currency,
-        });
+      if (!check.ok) {
+        if (remote.status === "authorized") {
+          at = "moyasar_void";
+          const voided = await deps.moyasar.voidPayment(moyasarId);
+          at = "settle_void";
+          await deps.settle({
+            p_payment_id: row.id, p_moyasar_payment_id: moyasarId, p_moyasar_status: voided.status,
+            p_payment_method: method, p_amount: remote.amount, p_currency: remote.currency,
+          });
+        } else {
+          at = "settle_reject";
+          await deps.settle({
+            p_payment_id: row.id, p_moyasar_payment_id: moyasarId, p_moyasar_status: remote.status,
+            p_payment_method: method, p_amount: remote.amount, p_currency: remote.currency,
+          });
+        }
+        return json({ status: "failed", reason: check.reason });
       }
-      return json({ status: "failed", reason: check.reason });
+
+      let final = remote;
+      if (remote.status === "authorized") {
+        at = "moyasar_capture";
+        final = await deps.moyasar.capture(moyasarId);
+      }
+
+      at = "settle";
+      const settled = await deps.settle({
+        p_payment_id: row.id, p_moyasar_payment_id: moyasarId, p_moyasar_status: final.status,
+        p_payment_method: method, p_amount: final.amount, p_currency: final.currency,
+      });
+
+      if (settled.status === "settled" || settled.status === "already_settled") return json({ status: "paid" });
+      return json({ status: "failed", reason: settled.status });
+    } catch (error) {
+      // The money may well have moved — this says only that we could not
+      // confirm it. The seat stays unconfirmed and the webhook settles it once
+      // whatever broke here is fixed.
+      console.error(`verify-payment failed at ${at}:`, error);
+      return json({
+        status: "failed",
+        reason: `server_error:${at}`,
+        detail: String(error).slice(0, 500),
+      }, 500);
     }
-
-    const final = remote.status === "authorized" ? await deps.moyasar.capture(moyasarId) : remote;
-    const settled = await deps.settle({
-      p_payment_id: row.id, p_moyasar_payment_id: moyasarId, p_moyasar_status: final.status,
-      p_payment_method: method, p_amount: final.amount, p_currency: final.currency,
-    });
-
-    if (settled.status === "settled" || settled.status === "already_settled") return json({ status: "paid" });
-    return json({ status: "failed", reason: settled.status });
   };
 }
