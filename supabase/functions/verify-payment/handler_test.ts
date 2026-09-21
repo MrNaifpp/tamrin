@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assertEquals, assertStringIncludes } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { makeHandler } from "./handler.ts";
 
 const row = { id: "pay-1", user_id: "user-1", amount: 6000, currency: "SAR", split_recipient_id: "rcp_1", status: "pending" };
@@ -63,4 +63,14 @@ Deno.test("still initiated (3DS not finished) reports processing without capture
   const res = await makeHandler(d)(post({ payment_id: "pay-1", moyasar_payment_id: "moy-1" }));
   assertEquals((await res.json()).status, "processing");
   assertEquals(d.log, ["fetch"]);
+});
+
+Deno.test("a throwing boundary names itself instead of becoming an opaque 500", async () => {
+  const d = deps();
+  d.moyasar.fetchPayment = async () => { throw new Error("Moyasar 401: invalid secret key"); };
+  const res = await makeHandler(d)(post({ payment_id: "pay-1", moyasar_payment_id: "moy-1" }));
+  const body = await res.json();
+  assertEquals(res.status, 500);
+  assertEquals(body.reason, "server_error:moyasar_fetch");
+  assertStringIncludes(body.detail, "invalid secret key");
 });
