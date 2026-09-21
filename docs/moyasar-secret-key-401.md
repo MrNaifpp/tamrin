@@ -1,73 +1,96 @@
-# Moyasar support — test secret key returns 401
+# Moyasar support — the test secret key is refused while the publishable key works
 
-Send only after `./scripts/moyasar-account-check.sh` also reports the key rejected.
-If that script says the key is valid, the fault is in how the secret is stored on
-our side, not Moyasar's.
+**Before sending:** confirm the Edge Function actually receives the key. Its logs
+print, once per cold start:
 
-**Before sending:** fill in the account name / merchant id, the payment id, and the
-time of the failure. **Never** paste the `sk_` key itself. If they ask to identify
-it, give only its first and last four characters.
+    verify-payment: MOYASAR_SECRET_KEY { length: …, sha256: "…" }
+
+If `length` is 0, or that hash does not match the DIGEST column of
+`supabase secrets list`, the fault is ours and there is nothing to ask Moyasar.
+Only send this once the function is proven to hold the right key.
+
+**Fill in** the account name / merchant id, the payment id, and the timestamps.
+**Never** paste the `sk_` key. If they need it identified, give its first and
+last four characters only.
 
 ---
 
 ## Arabic (send this one)
 
-**الموضوع:** المفتاح السري في وضع الاختبار يرجع 401 — حساب `<اسم الحساب / رقم التاجر>`
+**الموضوع:** المفتاح السري لوضع الاختبار يرجع 401 بينما المفتاح العام يعمل — حساب `<اسم الحساب / رقم التاجر>`
 
 السلام عليكم ورحمة الله،
 
-نطوّر تطبيق **تمرين** على iOS، ونستخدم Moyasar في وضع الاختبار. واجهتنا حالة
-نرجو مساعدتكم فيها.
+نطوّر تطبيق **تمرين** على iOS، ونتكامل مع Moyasar في **وضع الاختبار**. لدينا
+حالة واضحة المعالم نرجو مساعدتكم فيها.
 
-**ما ينجح:** الدفع نفسه. أنشأنا عملية Apple Pay من تطبيق iOS باستخدام
-**المفتاح العام** (`pk_test_…`) عبر الـ SDK الرسمي، ونجحت العملية وظهرت في
-لوحة التحكم.
+### الخلاصة
 
-**ما يفشل:** كل طلب من خادمنا يستخدم **المفتاح السري** (`sk_test_…`). الطلب:
+المفتاح **العام** من حسابنا يعمل: أنشأنا عملية Apple Pay من التطبيق ونجحت.
+المفتاح **السري** من **الحساب نفسه وفي الوضع نفسه** يُرفض في كل طلب برسالة
+`authentication_error`. أي أن الحساب سليم والعملية سليمة، والمشكلة محصورة في
+قبول المفتاح السري.
+
+### ما نجح
+
+- التطبيق أنشأ عملية Apple Pay بالمفتاح العام (`pk_test_…`) عبر الـ iOS SDK
+  الرسمي، مع التفويض اليدوي (`manual: true`).
+- العملية **موجودة في لوحة التحكم بحالة `authorized`**، وهو السلوك المتوقع
+  تمامًا من التفويض اليدوي.
+- معرّف العملية: `<payment_id>`
+- وقت الإنشاء (UTC): `<التاريخ والوقت>`
+
+### ما فشل
+
+خادمنا يحاول بعدها قراءة العملية بالمفتاح السري (`sk_test_…`) ليتحقق من المبلغ
+قبل التحصيل. الطلب:
 
 ```
 GET https://api.moyasar.com/v1/payments/{payment_id}
 Authorization: Basic base64("<sk_test_…>:")
 ```
 
-والرد في كل مرة:
+والرد في كل مرة، دون استثناء:
 
 ```
 HTTP 401
 {"type":"authentication_error","message":"Invalid authorization credentials","errors":null}
 ```
 
-المفتاح منسوخ من لوحة التحكم (Settings → API Keys) في وضع الاختبار، ونستخدم
-المصادقة الأساسية (Basic) بالمفتاح كاسم مستخدم وكلمة مرور فارغة، كما في وثائقكم.
+أوقات المحاولات الفاشلة (UTC): `<التاريخ والوقت>`
 
-**تفاصيل للرجوع إليها:**
+### ما استبعدناه، وكيف
 
-- معرّف العملية الناجحة: `<payment_id>`
-- وقت محاولات الخادم الفاشلة (UTC): `<التاريخ والوقت>`
-- أول وآخر أربعة أحرف من المفتاح المستخدم: `<sk_t… …xxxx>`
+| الاحتمال | كيف استُبعد |
+|---|---|
+| المفتاح المخزّن لدينا يختلف عن مفتاح لوحة التحكم | قارنّا بصمة SHA‑256 للقيمة المخزّنة مع بصمة المفتاح المنسوخ من لوحة التحكم: متطابقتان حرفًا بحرف، بلا مسافات أو أسطر زائدة |
+| ترويسة المصادقة مبنية بشكل خاطئ | الترويسة التي نرسلها مطابقة بايتًا ببايت لما يرسله `curl -u "<key>:"`، أي المفتاح اسم مستخدم وكلمة مرور فارغة، كما في وثائقكم |
+| المفتاح لا يصل إلى الخادم أصلًا | سجّلنا بصمة القيمة التي يستلمها الخادم فعليًا وقت التشغيل، وطابقناها مع المخزّن |
+| خلط بين وضعي الاختبار والإنتاج | المفتاحان العام والسري مأخوذان من الشاشة نفسها في وضع الاختبار، والعملية نفسها أُنشئت في وضع الاختبار وظهرت في لوحة الاختبار |
+| المفتاح السري هو نفسه المفتاح العام بالخطأ | بصمتاهما مختلفتان، فهما قيمتان مختلفتان فعلًا |
 
-**أسئلتنا:**
+### أسئلتنا
 
-١. هل المفتاح السري لوضع الاختبار على حسابنا **فعّال**؟ وهل جرى تدويره أو
-إيقافه في وقت سابق دون إشعار؟
+١. هل المفتاح السري لوضع الاختبار على حسابنا **فعّال حاليًا**؟ وهل جرى تدويره
+أو إيقافه؟
 
-٢. هل يتطلب حسابنا تفعيلًا إضافيًا للوصول إلى الـ API من الخادم، منفصلًا عن
-استخدام المفتاح العام من التطبيق؟
+٢. تظهر لديكم محاولات 401 في الأوقات المذكورة أعلاه — **ما السبب المسجّل لها
+عندكم؟** هذا أكثر ما يفيدنا، لأننا استنفدنا ما يمكن فحصه من طرفنا.
 
-٣. هل ما زالت المصادقة الأساسية (المفتاح كاسم مستخدم وكلمة مرور فارغة) هي
-الطريقة الصحيحة، أم تغيّرت؟
+٣. هل يحتاج حسابنا تفعيلًا منفصلًا للوصول إلى الـ API من الخادم، غير استخدام
+المفتاح العام من التطبيق؟
 
-٤. هل تظهر لديكم محاولات الـ 401 في السجلات في الوقت المذكور أعلاه؟ وما السبب
-الذي تسجّلونه لها؟
+٤. هل ما زالت المصادقة الأساسية (المفتاح اسم مستخدم وكلمة مرور فارغة) هي
+الطريقة الصحيحة؟
 
-٥. هل يمكن أن تكون عملية أُنشئت بالمفتاح العام غير قابلة للقراءة بالمفتاح
-السري لأي سبب متعلق بنطاق الصلاحيات؟
+٥. ما الطريقة الصحيحة لإصدار مفتاح سري جديد لوضع الاختبار **دون** تغيير
+المفتاح العام المستخدم حاليًا في التطبيق؟
 
-٦. إن كان المفتاح تالفًا، ما الطريقة الصحيحة لإصدار مفتاح سري جديد لوضع
-الاختبار دون التأثير على المفتاح العام المستخدم حاليًا؟
+### لماذا هذا معطّل لنا
 
-نحتاج المفتاح السري تحديدًا لأن تصميمنا لا يعتمد على ما يقوله الجهاز: التطبيق
-يفوّض العملية فقط، ثم يتحقق خادمنا من المبلغ بالمفتاح السري قبل التحصيل.
+تصميمنا لا يثق بما يقوله الجهاز: التطبيق **يفوّض** فقط، ثم يتحقق خادمنا من
+المبلغ والمستلم **بالمفتاح السري** قبل **التحصيل**. بدون مفتاح سري صالح تبقى
+العمليات معلّقة على حالة `authorized` ولا تُحصَّل، ولا يمكننا إكمال الاختبار.
 
 شكرًا لتعاونكم.
 
@@ -75,56 +98,75 @@ HTTP 401
 
 ## English (attach or send if they prefer)
 
-**Subject:** Test-mode secret key returns 401 — account `<account name / merchant id>`
+**Subject:** Test secret key returns 401 while the publishable key works — account `<account name / merchant id>`
 
 Hello,
 
-We are building an iOS app, **Tamrin**, and are integrating Moyasar in test mode.
+We are building an iOS app, **Tamrin**, integrating Moyasar in **test mode**.
 
-**What works:** the payment itself. We created an Apple Pay payment from the iOS
-app using the **publishable** key (`pk_test_…`) via your official SDK. It
-succeeded and appears in the dashboard.
+### Summary
 
-**What fails:** every server-side request using the **secret** key (`sk_test_…`):
+Our account's **publishable** key works: we created an Apple Pay payment and it
+succeeded. The **secret** key from the **same account in the same mode** is
+rejected on every request with `authentication_error`. The account and the
+payment are both fine; the problem is isolated to the secret key being accepted.
+
+### What works
+
+- The app created an Apple Pay payment with the publishable key (`pk_test_…`)
+  through your official iOS SDK, using manual authorization (`manual: true`).
+- The payment is **visible in the dashboard with status `authorized`**, exactly
+  as manual authorization should behave.
+- Payment id: `<payment_id>`
+- Created at (UTC): `<date and time>`
+
+### What fails
+
+Our server then reads that payment with the secret key (`sk_test_…`) to verify
+the amount before capturing:
 
 ```
 GET https://api.moyasar.com/v1/payments/{payment_id}
 Authorization: Basic base64("<sk_test_…>:")
 ```
 
-returns, every time:
+Every time, without exception:
 
 ```
 HTTP 401
 {"type":"authentication_error","message":"Invalid authorization credentials","errors":null}
 ```
 
-The key was copied from Settings → API Keys in test mode, and we use HTTP Basic
-with the key as the username and an empty password, as your docs specify.
+Failing attempts at (UTC): `<date and time>`
 
-**For your reference:**
+### What we have ruled out, and how
 
-- Successful payment id: `<payment_id>`
-- Time of the failing server calls (UTC): `<date and time>`
-- First and last four characters of the key used: `<sk_t… …xxxx>`
+| Possibility | How it was eliminated |
+|---|---|
+| Our stored key differs from the dashboard key | We compared the SHA-256 of the stored value with the SHA-256 of the key copied from the dashboard. Identical, so no stray whitespace or newline |
+| Our Authorization header is malformed | The header we send is byte-identical to `curl -u "<key>:"`, i.e. key as username and empty password, as your docs specify |
+| The key never reaches our server | We log a fingerprint of the value the server receives at runtime and matched it against the stored one |
+| Test and live modes mixed up | Both keys were taken from the same test-mode screen, and the payment itself was created in test mode and appears in the test dashboard |
+| The secret key is accidentally the publishable key | Their fingerprints differ, so they are genuinely different values |
 
-**Our questions:**
+### Our questions
 
-1. Is the test-mode secret key on our account **active**? Has it been rotated or
-   revoked at any point?
-2. Does our account need any additional enablement for server-side API access,
-   separately from publishable-key use in the app?
-3. Is HTTP Basic (key as username, empty password) still correct, or has it
-   changed?
-4. Do you see these 401s in your logs at the time above, and what reason is
-   recorded?
-5. Could a payment created with the publishable key be unreadable by the secret
-   key for any scope-related reason?
-6. If the key is bad, what is the correct way to issue a new test secret key
-   without disturbing the publishable key we are already using?
+1. Is the test-mode secret key on our account **currently active**? Has it been
+   rotated or revoked?
+2. You should see these 401s at the times above. **What reason is recorded on
+   your side?** This is the most useful thing you can tell us, as we have
+   exhausted what we can check ourselves.
+3. Does our account need separate enablement for server-side API access, beyond
+   publishable-key use from the app?
+4. Is HTTP Basic with the key as username and an empty password still correct?
+5. What is the correct way to issue a new test secret key **without** changing
+   the publishable key the app currently uses?
 
-We depend on the secret key specifically because our design never trusts the
-device: the app only authorizes, and our server verifies the amount with the
-secret key before capturing.
+### Why this blocks us
+
+Our design never trusts the device. The app only **authorizes**; our server then
+verifies the amount and recipient **with the secret key** before **capturing**.
+Without a working secret key, payments sit at `authorized` and are never
+captured, and we cannot complete testing.
 
 Thank you.
