@@ -156,3 +156,10 @@ Deno.test("payment_paid copy interpolates the event name", () => {
     body: "لاعب دفع قطة تمرين كرة قدم بالبطاقة وتأكد مقعده تلقائيًا.",
   });
 });
+Deno.test("refund_issued copy interpolates the event name", () => {
+  const c = copyFor("refund_issued", "تمرين كرة قدم");
+  assertEquals(c, {
+    title: "رجعت لك قطتك 💳",
+    body: "استرجعنا قطة تمرين كرة قدم إلى بطاقتك. تصل خلال أيام قليلة حسب بنكك.",
+  });
+});
