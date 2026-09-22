@@ -534,24 +534,3 @@ $$;
 
 revoke execute on function public.retry_pending_refunds() from public, anon, authenticated;
 grant execute on function public.retry_pending_refunds() to service_role;
-
--- Schedule the sweep here rather than by hand, so production is one `db push`
--- and not a checklist somebody has to remember. Unschedule by name first: this
--- migration is re-applied on every rebuild, and cron.schedule would otherwise
--- refuse a duplicate job name. Same shape as the recurring-events job.
-do $$
-declare
-  v_job record;
-begin
-  for v_job in select jobid from cron.job where jobname = 'retry-pending-refunds'
-  loop
-    perform cron.unschedule(v_job.jobid);
-  end loop;
-
-  perform cron.schedule(
-    'retry-pending-refunds',
-    '*/5 * * * *',
-    $cron$select public.retry_pending_refunds();$cron$
-  );
-end;
-$$;
