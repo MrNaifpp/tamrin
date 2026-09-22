@@ -36,6 +36,9 @@ supabase/migrations/20260922100000_refunds.sql            table, payments column
 supabase/migrations/20260922110000_refund_triggers.sql    request_refund, the three trigger points,
                                                           remove_my_guest, the outbox trigger,
                                                           retry_pending_refunds, settle_payment rework
+supabase/migrations/20260922120000_schedule_refund_sweep.sql  the sweep's pg_cron schedule, in its
+                                                          own version so an already-applied
+                                                          migration does not have to change
 supabase/tests/refunds_test.sql
 supabase/functions/refund-payment/index.ts
 supabase/functions/refund-payment/handler.ts
@@ -1411,27 +1414,6 @@ $$;
 
 revoke execute on function public.retry_pending_refunds() from public, anon, authenticated;
 grant execute on function public.retry_pending_refunds() to service_role;
-
--- Schedule the sweep here rather than by hand, so production is one `db push`
--- and not a checklist somebody has to remember. Unschedule by name first: this
--- migration is re-applied on every rebuild, and cron.schedule would otherwise
--- refuse a duplicate job name. Same shape as the recurring-events job.
-do $$
-declare
-  v_job record;
-begin
-  for v_job in select jobid from cron.job where jobname = 'retry-pending-refunds'
-  loop
-    perform cron.unschedule(v_job.jobid);
-  end loop;
-
-  perform cron.schedule(
-    'retry-pending-refunds',
-    '*/5 * * * *',
-    $cron$select public.retry_pending_refunds();$cron$
-  );
-end;
-$$;
 ```
 
 - [ ] **Step 4: Apply and run the test**
