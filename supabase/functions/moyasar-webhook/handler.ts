@@ -8,6 +8,9 @@ import type { makeMoyasarClient } from "../_shared/moyasar.ts";
 export type SettleArgs = {
   p_payment_id: string; p_moyasar_payment_id: string; p_moyasar_status: string;
   p_payment_method: string | null; p_amount: number; p_currency: string;
+  /// Cumulative, from Moyasar. A partial refund reports status "refunded" too,
+  /// so the figure is what tells settle_payment how much actually went back.
+  p_refunded_total: number;
 };
 
 export type WebhookDeps = {
@@ -54,7 +57,8 @@ export function makeHandler(deps: WebhookDeps) {
     await deps.linkEvent(id, row.id);
     const result = await deps.settle({
       p_payment_id: row.id, p_moyasar_payment_id: remote.id, p_moyasar_status: remote.status,
-      p_payment_method: remote.source?.type ?? null, p_amount: remote.amount, p_currency: remote.currency,
+      p_payment_method: remote.source?.type ?? null, p_amount: remote.amount,
+      p_currency: remote.currency, p_refunded_total: remote.refunded ?? 0,
     });
     return json({ status: result.status });
   };
