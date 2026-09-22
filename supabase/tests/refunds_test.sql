@@ -329,4 +329,141 @@ begin
 end;
 $$;
 
+-- ============================================================
+-- Section 5: withdrawing, removing a guest, and cancelling.
+-- ============================================================
+insert into auth.users (id, email) values
+  ('82000000-0000-0000-0000-000000000002', 'trigger-payer@test.local');
+insert into public.workspace_members (workspace_id, user_id) values
+  ('81000000-0000-0000-0000-0000000000a1', '82000000-0000-0000-0000-000000000002');
+
+-- Future workout, and one that has already kicked off but not finished.
+insert into public.events (id, creator_id, workspace_id, name, start_date, end_date,
+                           total_price, max_participants, published_at)
+values ('82000000-0000-0000-0000-0000000000e1',
+        '81000000-0000-0000-0000-000000000001',
+        '81000000-0000-0000-0000-0000000000a1',
+        'تمرين قادم', now() + interval '2 days', now() + interval '2 days 2 hours',
+        1200, 10, now()),
+       ('82000000-0000-0000-0000-0000000000e2',
+        '81000000-0000-0000-0000-000000000001',
+        '81000000-0000-0000-0000-0000000000a1',
+        'تمرين بدأ', now() - interval '20 minutes', now() + interval '40 minutes',
+        1200, 10, now());
+
+do $$
+declare
+  v json;
+  v_participant uuid;
+  v_refunds int;
+  v_amount int;
+  v_payment uuid;
+begin
+  -- ---------- removing one guest refunds exactly that seat ----------
+  insert into public.payments
+    (id, workspace_id, event_id, user_id, seat_count, amount, status,
+     payment_method, moyasar_payment_id, paid_at)
+  values ('82000000-0000-0000-0000-0000000000f1',
+          '81000000-0000-0000-0000-0000000000a1',
+          '82000000-0000-0000-0000-0000000000e1',
+          '82000000-0000-0000-0000-000000000002', 2, 24000, 'paid',
+          'applepay', 'pay_moy_trigger_1', now());
+  insert into public.event_participants
+    (event_id, user_id, payment_status, payment_id)
+  values ('82000000-0000-0000-0000-0000000000e1',
+          '82000000-0000-0000-0000-000000000002', 'confirmed',
+          '82000000-0000-0000-0000-0000000000f1');
+  insert into public.event_participants
+    (event_id, user_id, added_by, guest_name, payment_status, payment_id)
+  values ('82000000-0000-0000-0000-0000000000e1', null,
+          '82000000-0000-0000-0000-000000000002', 'ضيف الإزالة',
+          'confirmed', '82000000-0000-0000-0000-0000000000f1')
+  returning id into v_participant;
+
+  perform pg_temp.set_auth('82000000-0000-0000-0000-000000000002');
+  v := public.remove_my_guest(v_participant);
+  if v ->> 'status' <> 'removed' then
+    raise exception 'FAIL: expected removed, got %', v;
+  end if;
+  select count(*), max(amount) into v_refunds, v_amount
+  from public.refunds where payment_id = '82000000-0000-0000-0000-0000000000f1';
+  if v_refunds <> 1 or v_amount <> 12000 then
+    raise exception 'FAIL: expected one 12000 refund, got % of %', v_refunds, v_amount;
+  end if;
+
+  -- ---------- a guest that is not mine is refused ----------
+  insert into public.event_participants
+    (event_id, user_id, added_by, guest_name, payment_status)
+  values ('82000000-0000-0000-0000-0000000000e1', null,
+          '81000000-0000-0000-0000-000000000001', 'ضيف المنظّم', 'confirmed')
+  returning id into v_participant;
+  begin
+    v := public.remove_my_guest(v_participant);
+    raise exception 'FAIL: removed a guest the caller did not add';
+  exception
+    when others then
+      if sqlerrm like 'FAIL:%' then raise; end if;
+  end;
+
+  -- ---------- withdrawing before the start refunds the remainder ----------
+  perform pg_temp.set_auth('82000000-0000-0000-0000-000000000002');
+  v := public.decline_event('82000000-0000-0000-0000-0000000000e1', 'busy', null);
+  if v ->> 'status' <> 'declined' then
+    raise exception 'FAIL: expected declined, got %', v;
+  end if;
+  select coalesce(sum(amount), 0) into v_amount
+  from public.refunds where payment_id = '82000000-0000-0000-0000-0000000000f1';
+  if v_amount <> 24000 then
+    raise exception 'FAIL: expected 24000 refunded in total, got %', v_amount;
+  end if;
+
+  -- ---------- withdrawing after the start refunds nothing ----------
+  insert into public.payments
+    (id, workspace_id, event_id, user_id, seat_count, amount, status,
+     payment_method, moyasar_payment_id, paid_at)
+  values ('82000000-0000-0000-0000-0000000000f2',
+          '81000000-0000-0000-0000-0000000000a1',
+          '82000000-0000-0000-0000-0000000000e2',
+          '82000000-0000-0000-0000-000000000002', 1, 12000, 'paid',
+          'applepay', 'pay_moy_trigger_2', now());
+  insert into public.event_participants
+    (event_id, user_id, payment_status, payment_id)
+  values ('82000000-0000-0000-0000-0000000000e2',
+          '82000000-0000-0000-0000-000000000002', 'confirmed',
+          '82000000-0000-0000-0000-0000000000f2');
+
+  perform pg_temp.set_auth('82000000-0000-0000-0000-000000000002');
+  v := public.decline_event('82000000-0000-0000-0000-0000000000e2', 'busy', null);
+  select count(*) into v_refunds
+  from public.refunds where payment_id = '82000000-0000-0000-0000-0000000000f2';
+  if v_refunds <> 0 then
+    raise exception 'FAIL: a started workout refunded % times', v_refunds;
+  end if;
+
+  -- ---------- cancelling refunds every card payer in full ----------
+  insert into public.payments
+    (id, workspace_id, event_id, user_id, seat_count, amount, status,
+     payment_method, moyasar_payment_id, paid_at)
+  values ('82000000-0000-0000-0000-0000000000f3',
+          '81000000-0000-0000-0000-0000000000a1',
+          '82000000-0000-0000-0000-0000000000e2',
+          '81000000-0000-0000-0000-000000000002', 1, 12000, 'paid',
+          'creditcard', 'pay_moy_trigger_3', now());
+
+  perform pg_temp.set_auth('81000000-0000-0000-0000-000000000001');
+  v := public.cancel_event_occurrence('82000000-0000-0000-0000-0000000000e2',
+                                      'weather', null);
+  if v ->> 'status' <> 'cancelled' then
+    raise exception 'FAIL: expected cancelled, got %', v;
+  end if;
+  select count(*), coalesce(sum(amount), 0) into v_refunds, v_amount
+  from public.refunds where event_id = '82000000-0000-0000-0000-0000000000e2';
+  if v_refunds <> 2 or v_amount <> 24000 then
+    raise exception 'FAIL: cancelling produced % refunds worth %', v_refunds, v_amount;
+  end if;
+
+  raise notice 'PASS: refund trigger points';
+end;
+$$;
+
 rollback;

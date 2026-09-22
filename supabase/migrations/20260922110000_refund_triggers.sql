@@ -187,3 +187,265 @@ revoke execute on function public.settle_payment(uuid, text, text, text, int, te
   from public, anon, authenticated;
 grant execute on function public.settle_payment(uuid, text, text, text, int, text, int)
   to service_role;
+
+-- The player-facing half of remove_event_participant, which is organizer-only.
+-- Whoever added a guest may take them out again, and gets that seat's money back
+-- when the workout has not started.
+create or replace function public.remove_my_guest(p_participant_id uuid)
+returns json
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_row public.event_participants;
+  v_event public.events;
+  v_amount int;
+  v_refund uuid;
+begin
+  if v_uid is null then raise exception 'Not authenticated'; end if;
+
+  select * into v_row from public.event_participants where id = p_participant_id;
+  if v_row.id is null then
+    return json_build_object('status', 'not_found', 'refund_id', null);
+  end if;
+  if v_row.user_id is not null then
+    raise exception 'Only a guest can be removed this way';
+  end if;
+  if v_row.added_by is distinct from v_uid then
+    raise exception 'Not authorized: this guest was added by someone else';
+  end if;
+  if v_row.added_manually then
+    raise exception 'A player the organizer added is theirs to remove';
+  end if;
+
+  select * into v_event from public.events where id = v_row.event_id for update;
+  if v_event.id is null then raise exception 'Event not found'; end if;
+  if coalesce(v_event.end_date, v_event.start_date) < now() then
+    raise exception 'Event has ended';
+  end if;
+
+  -- Worked out before the delete: afterwards nothing says what the seat cost.
+  if v_row.payment_id is not null and now() < v_event.start_date then
+    v_amount := round(coalesce(v_row.paid_price_per_person,
+                               v_event.price_per_person) * 100)::int;
+    v_refund := public.request_refund(v_row.payment_id, 1, v_amount, 'guest_removed');
+  end if;
+
+  delete from public.event_participants where id = p_participant_id;
+
+  perform public.drain_waitlist(v_row.event_id);
+
+  return json_build_object('status', 'removed', 'refund_id', v_refund);
+end;
+$$;
+
+grant execute on function public.remove_my_guest(uuid) to authenticated;
+
+-- decline_event, reissued with the money step. Everything else is byte for byte
+-- what it was: the same guards, the same deletes, the same waitlist drain.
+create or replace function public.decline_event(
+  p_event_id uuid,
+  p_reason_code text default null,
+  p_reason_text text default null
+)
+returns json
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_event public.events;
+  v_reason_code text := nullif(lower(trim(p_reason_code)), '');
+  v_reason_text text := nullif(trim(p_reason_text), '');
+  v_removed_participants int := 0;
+  v_removed_waitlist int := 0;
+  v_waiters json;
+  v_pay record;
+begin
+  if v_uid is null then raise exception 'Not authenticated'; end if;
+  if v_reason_code is not null and v_reason_code !~ '^[a-z0-9_-]{1,50}$' then
+    raise exception 'Invalid reason code';
+  end if;
+  if v_reason_text is not null and char_length(v_reason_text) > 500 then
+    raise exception 'Reason text is too long';
+  end if;
+
+  select * into v_event from public.events where id = p_event_id for update;
+  if v_event.id is null then raise exception 'Event not found'; end if;
+  if not public.is_workspace_member(v_event.workspace_id, v_uid) then
+    raise exception 'Not a workspace member';
+  end if;
+  if public.is_workspace_owner(v_event.workspace_id, v_uid) then
+    raise exception 'Workspace owner cannot decline an event they administer';
+  end if;
+  if v_event.published_at is null then raise exception 'Event is not published'; end if;
+  if v_event.cancelled_at is not null then raise exception 'Event is cancelled'; end if;
+  if coalesce(v_event.end_date, v_event.start_date) < now() then
+    raise exception 'Event has ended';
+  end if;
+
+  -- Money first. The delete below destroys the link between a seat and what it
+  -- cost, so the refund is requested while the rows are still here. Only before
+  -- the start; afterwards the seat is freed and nothing goes back.
+  if now() < v_event.start_date then
+    for v_pay in
+      select ep.payment_id as payment_id,
+             count(*)::int as seats,
+             sum(round(coalesce(ep.paid_price_per_person,
+                                v_event.price_per_person) * 100))::int as amount
+      from public.event_participants ep
+      where ep.event_id = p_event_id
+        and (ep.user_id = v_uid or (ep.added_by = v_uid and not ep.guest_only))
+        and ep.payment_id is not null
+      group by ep.payment_id
+    loop
+      perform public.request_refund(v_pay.payment_id, v_pay.seats,
+                                    v_pay.amount, 'withdrew');
+    end loop;
+  end if;
+
+  delete from public.event_participants
+  where event_id = p_event_id
+    and (user_id = v_uid or (added_by = v_uid and not guest_only));
+  get diagnostics v_removed_participants = row_count;
+
+  delete from public.event_waitlist
+  where event_id = p_event_id and user_id = v_uid;
+  get diagnostics v_removed_waitlist = row_count;
+
+  insert into public.event_member_responses
+    (event_id, user_id, status, reason_code, reason_text,
+     responded_at, updated_at)
+  values
+    (p_event_id, v_uid, 'declined', v_reason_code, v_reason_text,
+     now(), now())
+  on conflict (event_id, user_id) do update
+  set status = 'declined',
+      reason_code = excluded.reason_code,
+      reason_text = excluded.reason_text,
+      responded_at = excluded.responded_at,
+      updated_at = excluded.updated_at;
+
+  insert into public.push_outbox (user_id, type, event_id)
+  values (v_event.creator_id, 'member_declined', p_event_id);
+
+  perform public.drain_waitlist(p_event_id);
+
+  select coalesce(json_agg(user_id order by joined_at asc), '[]'::json)
+  into v_waiters
+  from public.event_waitlist
+  where event_id = p_event_id;
+
+  return json_build_object(
+    'status', 'declined',
+    'event_id', p_event_id,
+    'reason_code', v_reason_code,
+    'reason_text', v_reason_text,
+    'removed_participant_rows', v_removed_participants,
+    'removed_waitlist_rows', v_removed_waitlist,
+    'waiter_ids', v_waiters
+  );
+end;
+$$;
+
+-- cancel_event_occurrence, reissued. Cancelling does not delete seats, so the
+-- sweep is simply every paid card payment on the workout. No time window: this
+-- is the organizer's decision, not the player's.
+create or replace function public.cancel_event_occurrence(
+  p_event_id uuid,
+  p_reason_code text default null,
+  p_reason_text text default null
+)
+returns json
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_event public.events;
+  v_reason_code text := nullif(lower(trim(p_reason_code)), '');
+  v_reason_text text := nullif(trim(p_reason_text), '');
+  v_notifications int := 0;
+  v_pay record;
+begin
+  if v_uid is null then raise exception 'Not authenticated'; end if;
+  if v_reason_code is not null and v_reason_code !~ '^[a-z0-9_-]{1,50}$' then
+    raise exception 'Invalid reason code';
+  end if;
+  if v_reason_text is not null and char_length(v_reason_text) > 500 then
+    raise exception 'Reason text is too long';
+  end if;
+
+  select * into v_event from public.events where id = p_event_id for update;
+  if v_event.id is null then raise exception 'Event not found'; end if;
+  if not public.is_workspace_owner(v_event.workspace_id, v_uid) then
+    raise exception 'Only the workspace owner can cancel events';
+  end if;
+  if coalesce(v_event.end_date, v_event.start_date) < now() then
+    raise exception 'Event has ended';
+  end if;
+
+  if v_event.cancelled_at is not null then
+    return json_build_object(
+      'status', 'already_cancelled',
+      'event_id', v_event.id,
+      'cancelled_at', v_event.cancelled_at,
+      'reason_code', v_event.cancellation_reason_code,
+      'reason_text', v_event.cancellation_reason_text,
+      'notification_count', 0
+    );
+  end if;
+
+  update public.events
+  set published_at = coalesce(published_at, now()),
+      cancelled_at = now(),
+      cancelled_by = v_uid,
+      cancellation_reason_code = v_reason_code,
+      cancellation_reason_text = v_reason_text,
+      registration_locked = true
+  where id = p_event_id
+  returning * into v_event;
+
+  if v_event.template_id is not null then
+    update public.event_templates
+    set published_at = coalesce(published_at, v_event.published_at)
+    where id = v_event.template_id
+      and ended_at is null;
+  end if;
+
+  -- Nobody is playing, so nobody is paying.
+  for v_pay in
+    select id, seat_count - refunded_seats as seats, amount - refunded_amount as amount
+    from public.payments
+    where event_id = p_event_id
+      and status = 'paid'
+      and amount > refunded_amount
+  loop
+    perform public.request_refund(v_pay.id, v_pay.seats, v_pay.amount,
+                                  'event_cancelled');
+  end loop;
+
+  with notified as (
+    insert into public.push_outbox (user_id, type, event_id)
+    select wm.user_id, 'event_cancelled', v_event.id
+    from public.workspace_members wm
+    where wm.workspace_id = v_event.workspace_id
+      and wm.user_id <> v_uid
+    returning user_id
+  )
+  select count(*) into v_notifications from notified;
+
+  return json_build_object(
+    'status', 'cancelled',
+    'event_id', v_event.id,
+    'cancelled_at', v_event.cancelled_at,
+    'reason_code', v_event.cancellation_reason_code,
+    'reason_text', v_event.cancellation_reason_text,
+    'notification_count', v_notifications
+  );
+end;
+$$;
