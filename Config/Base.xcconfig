@@ -13,7 +13,7 @@
 // superseded. A released version's train is closed to new builds — uploading
 // another build to 1.1 fails with "Invalid Pre-Release Train" — so the first
 // production-backed build is a new version, not a new build number.
-MARKETING_VERSION = 1.7
+MARKETING_VERSION = 1.8
 // Build numbers are what App Store Connect rejects duplicates on, not the
 // marketing version — and they are only compared within one version train.
 // 1.6 spent (2) through (8): (2) was uploaded, (3) predates the rating repair,
@@ -22,11 +22,26 @@ MARKETING_VERSION = 1.7
 // created by a build before this one is invisible to its own group, because
 // there was no way to publish one.
 //
-// 1.7 is a new train, so its numbering starts again with none of 1.6's numbers
-// in the way. (1) was the first sandbox-backed archive; (2) carried the day an
-// owed exercise gets to itself and the shelf back to a plain poster; (3) stops
-// asking what anyone thought of the split.
-CURRENT_PROJECT_VERSION = 3
+// 1.7 was a new train, so its numbering started again with none of 1.6's
+// numbers in the way. It spent (1) through (3): (1) was the first
+// sandbox-backed archive; (2) carried the day an owed exercise gets to itself
+// and the shelf back to a plain poster; (3) stopped asking what anyone thought
+// of the split.
+//
+// 1.8 is a new train again, so it started at (1). (2) carried Moyasar card and
+// Apple Pay payment as built; (3) brought Apple Pay up into the payment review
+// step and let a workspace with no verified Moyasar recipient pay at all; (4)
+// makes دفع القطة open Apple Pay in one tap with no chooser at all, and adds
+// refunds — withdrawing before the start, removing a guest you paid for, and
+// the organizer cancelling all return the money.
+//
+// That feature exists only on the development project — the migrations, the
+// three Edge Functions, their secrets and the Moyasar webhook are deployed to
+// kpcdinxusxycenfnitjc and nowhere else — so this build's backend is pinned to
+// the sandbox in Sirr/core/supabase/SupabaseEnvironment.swift, on top of the
+// banner at the top of Config/Release.xcconfig. Both have to come off before
+// any of this reaches the App Store.
+CURRENT_PROJECT_VERSION = 4
 
 // Here rather than in the target so Staging.xcconfig can override it — a
 // staging build on the home screen has to be tellable from a real one.
@@ -38,3 +53,12 @@ CURRENT_PROJECT_VERSION = 3
 // Build Settings tab writes it back to the target and breaks this again — set
 // it here instead.
 INFOPLIST_KEY_CFBundleDisplayName = تمرين
+
+// Apple Pay merchant identifier. Registered in Apple Developer on 2026-09-20
+// and enabled on both App IDs (com.businessech.tmrin and .staging); Moyasar's
+// payment processing certificate is activated against it. Read by
+// ApplePayButton through the ApplePayMerchantID placeholder in Sirr/Info.plist,
+// the same way SUPABASE_HOST travels — an empty value hides the button and
+// nothing else changes. The entitlement in Sirr/Sirr.entitlements must list the
+// same id.
+APPLE_PAY_MERCHANT_ID = merchant.com.businessech.tmrin

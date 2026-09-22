@@ -27,6 +27,16 @@ export function copyFor(
         title: "تحديث بخصوص قطتك",
         body: `ما قدر المشرف يأكد قطتك لـ ${eventName}. تواصل معه لمعرفة التفاصيل.`,
       };
+    case "payment_paid":
+      return {
+        title: "وصلت قطة بالبطاقة 💳",
+        body: `لاعب دفع قطة ${eventName} بالبطاقة وتأكد مقعده تلقائيًا.`,
+      };
+    case "refund_issued":
+      return {
+        title: "رجعت لك قطتك 💳",
+        body: `استرجعنا قطة ${eventName} إلى بطاقتك. تصل خلال أيام قليلة حسب بنكك.`,
+      };
     case "registration_reminder":
       return {
         title: "باقي مكانك ⚽",

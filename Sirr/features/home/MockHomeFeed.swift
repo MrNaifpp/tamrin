@@ -2451,6 +2451,50 @@ final class HomeStore {
         }
     }
 
+    /// A card payment was verified by the server. The seat is already
+    /// confirmed in the database; this only brings the local roster and the
+    /// shelf up to date, the same way a declared transfer does.
+    func markCardPaid(for occurrence: FeedOccurrence) async {
+        guard !isPreview else {
+            setMyStatus(.registered, on: occurrence)
+            resolvePaymentAction(for: occurrence.id)
+            return
+        }
+        await reloadRoster(occurrence.id)
+        resolvePaymentAction(for: occurrence.id)
+        if let workspaceID = teamID(for: occurrence) {
+            Task { await loadTeamData(workspaceID) }
+        }
+    }
+
+    /// Removing a guest you added. The server frees the seat and, when the
+    /// workout has not started and the seat was paid by card, returns that
+    /// seat's share. The money is the server's business; this only refreshes
+    /// what the roster shows.
+    func removeMyGuest(
+        _ member: FeedMember,
+        from occurrence: FeedOccurrence
+    ) async -> RegistrationOutcome {
+        guard !isPreview else {
+            rosterCache[occurrence.id]?.removeAll { $0.id == member.id }
+            return .success
+        }
+        do {
+            switch try await EventService.shared.removeMyGuest(participantId: member.id) {
+            case .removed, .notFound:
+                await reloadRoster(occurrence.id)
+                if let workspaceID = teamID(for: occurrence) {
+                    Task { await loadTeamData(workspaceID) }
+                }
+                return .success
+            case .isCreator:
+                return .failure("لا يمكن إزالة هذا المقعد.")
+            }
+        } catch {
+            return .failure(error.localizedDescription)
+        }
+    }
+
     /// Moves my own seat — and my unpaid guests' seats — to a new local state,
     /// for the paths that have no backend behind them.
     private func setMyStatus(_ status: FeedRegStatus, on occurrence: FeedOccurrence) {

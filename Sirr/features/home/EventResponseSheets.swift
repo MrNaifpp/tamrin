@@ -19,6 +19,9 @@ struct EventReasonSelection: Identifiable, Hashable, Sendable {
 /// Lets a member confirm that they cannot attend and optionally explain why.
 /// The caller owns persistence and any roster refresh after `onConfirm` returns.
 struct MemberDeclineSheet: View {
+    /// What happens to money, said before the slide. Declared ahead of
+    /// `onConfirm` so the trailing closure still binds to the closure.
+    var refundNotice: String? = nil
     let onConfirm: @MainActor (_ reasonCode: String?, _ reasonText: String?) async throws -> Void
 
     private static let reasons = [
@@ -33,7 +36,10 @@ struct MemberDeclineSheet: View {
     var body: some View {
         EventResponseFlow(
             title: "الاعتذار عن الموعد",
-            message: "هل أنت متأكد من الاعتذار؟ سيتاح مكانك لبقية أعضاء التمرين، ويمكنك إضافة السبب بشكل اختياري.",
+            message: [
+                "هل أنت متأكد من الاعتذار؟ سيتاح مكانك لبقية أعضاء التمرين، ويمكنك إضافة السبب بشكل اختياري.",
+                refundNotice
+            ].compactMap { $0 }.joined(separator: "\n\n"),
             confirmationTitle: "نعم، أعتذر",
             reasonTitle: "سبب الاعتذار",
             reasonPrompt: "تحب تضيف سبب اعتذارك؟ اختياري، ويساعد المشرف يرتب الموعد.",

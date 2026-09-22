@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		DC216E002F2D282B00EE600A /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = DC216DFF2F2D282B00EE600A /* Supabase */; };
+		DC216E102F2D290000EE6010 /* MoyasarSdk in Frameworks */ = {isa = PBXBuildFile; productRef = DC216E112F2D290000EE6011 /* MoyasarSdk */; };
 		DCA0C1002F8B000100000010 /* SportArt in Resources */ = {isa = PBXBuildFile; fileRef = DCA0C1012F8B000100000011 /* SportArt */; };
 		DCA0C1002F8B000100000012 /* DemoFaces in Resources */ = {isa = PBXBuildFile; fileRef = DCA0C1012F8B000100000013 /* DemoFaces */; };
 		DCA0C1002F8B000100000014 /* FeatureMedia in Resources */ = {isa = PBXBuildFile; fileRef = DCA0C1012F8B000100000015 /* FeatureMedia */; };
@@ -50,6 +51,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				DC216E002F2D282B00EE600A /* Supabase in Frameworks */,
+				DC216E102F2D290000EE6010 /* MoyasarSdk in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -115,6 +117,7 @@
 			name = Sirr;
 			packageProductDependencies = (
 				DC216DFF2F2D282B00EE600A /* Supabase */,
+				DC216E112F2D290000EE6011 /* MoyasarSdk */,
 			);
 			productName = Sirr;
 			productReference = 5A8B1AB02E8AE2E900BA3398 /* Sirr.app */;
@@ -146,6 +149,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				DC216DC92F2D1FB900EE600A /* XCRemoteSwiftPackageReference "supabase-swift" */,
+				DC216E122F2D290000EE6012 /* XCRemoteSwiftPackageReference "moyasar-ios-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 5A8B1AB12E8AE2E900BA3398 /* Products */;
@@ -517,6 +521,14 @@
 				minimumVersion = 2.5.1;
 			};
 		};
+		DC216E122F2D290000EE6012 /* XCRemoteSwiftPackageReference "moyasar-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/moyasar/moyasar-ios-sdk";
+			requirement = {
+				kind = exactVersion;
+				version = 3.2.3;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -524,6 +536,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = DC216DC92F2D1FB900EE600A /* XCRemoteSwiftPackageReference "supabase-swift" */;
 			productName = Supabase;
+		};
+		DC216E112F2D290000EE6011 /* MoyasarSdk */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DC216E122F2D290000EE6012 /* XCRemoteSwiftPackageReference "moyasar-ios-sdk" */;
+			productName = MoyasarSdk;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
