@@ -449,3 +449,84 @@ begin
   );
 end;
 $$;
+
+-- Getting the row to the function. Identical in shape to fire_push_outbox,
+-- including the silent skip when the vault has no entry, so a local stack and
+-- CI stay green without secrets.
+create or replace function public.post_refund(p_refund_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_url    text;
+  v_secret text;
+begin
+  select decrypted_secret into v_url
+    from vault.decrypted_secrets where name = 'refund_payment_url';
+  select decrypted_secret into v_secret
+    from vault.decrypted_secrets where name = 'refund_payment_secret';
+
+  if v_url is null or v_url = '' then
+    return;
+  end if;
+
+  perform net.http_post(
+    url     := v_url,
+    headers := jsonb_build_object(
+                 'Content-Type', 'application/json',
+                 'Authorization', 'Bearer ' || coalesce(v_secret, '')),
+    body    := jsonb_build_object('refund_id', p_refund_id)
+  );
+end;
+$$;
+
+create or replace function public.fire_refund_outbox()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public.post_refund(new.id);
+  return new;
+end;
+$$;
+
+create trigger trg_fire_refund_outbox
+  after insert on public.refunds
+  for each row execute function public.fire_refund_outbox();
+
+-- A refund is money we owe. If the HTTP call never lands, nothing else would
+-- ever notice, so anything still waiting after a few minutes is fired again.
+-- The attempt ceiling stops a permanently rejected refund from being retried
+-- forever; it sits there `pending` with its attempts spent, which is a visible
+-- state rather than a silent one.
+create or replace function public.retry_pending_refunds()
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.refunds;
+  v_count int := 0;
+begin
+  for v_row in
+    select * from public.refunds
+    where status in ('pending', 'processing')
+      and attempts < 5
+      and created_at < now() - interval '3 minutes'
+    order by created_at asc
+    limit 50
+  loop
+    perform public.post_refund(v_row.id);
+    v_count := v_count + 1;
+  end loop;
+  return v_count;
+end;
+$$;
+
+revoke execute on function public.retry_pending_refunds() from public, anon, authenticated;
+grant execute on function public.retry_pending_refunds() to service_role;

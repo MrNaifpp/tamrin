@@ -466,4 +466,47 @@ begin
 end;
 $$;
 
+-- ============================================================
+-- Section 6: the row fires itself, and an unconfigured stack stays green.
+-- ============================================================
+do $$
+declare
+  v_id uuid;
+  v_count int;
+begin
+  -- 1. The trigger exists on the table.
+  select count(*) into v_count from pg_trigger
+  where tgrelid = 'public.refunds'::regclass
+    and tgname = 'trg_fire_refund_outbox'
+    and not tgisinternal;
+  if v_count <> 1 then
+    raise exception 'FAIL: the refunds outbox trigger is missing';
+  end if;
+
+  -- 2. With no vault entry the insert still succeeds, exactly as push does.
+  --    A local stack and CI have no secrets, and neither may fail because of it.
+  insert into public.payments
+    (id, workspace_id, event_id, user_id, seat_count, amount, status,
+     payment_method, moyasar_payment_id, paid_at)
+  values ('83000000-0000-0000-0000-0000000000f1',
+          '81000000-0000-0000-0000-0000000000a1',
+          '81000000-0000-0000-0000-0000000000e1',
+          '81000000-0000-0000-0000-000000000002', 1, 12000, 'paid',
+          'applepay', 'pay_moy_fire_1', now());
+  v_id := public.request_refund('83000000-0000-0000-0000-0000000000f1',
+                                1, 12000, 'withdrew');
+  if v_id is null then raise exception 'FAIL: expected a refund row'; end if;
+
+  -- 3. The sweep is service_role's, never a client's.
+  select count(*) into v_count
+  from information_schema.role_routine_grants
+  where routine_name = 'retry_pending_refunds' and grantee = 'authenticated';
+  if v_count <> 0 then
+    raise exception 'FAIL: authenticated can run the refund sweep';
+  end if;
+
+  raise notice 'PASS: refund outbox wiring';
+end;
+$$;
+
 rollback;
