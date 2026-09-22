@@ -208,4 +208,125 @@ begin
 end;
 $$;
 
+-- ============================================================
+-- Section 3: request_refund is the only door, and it will not
+-- open past what the payment actually took.
+-- ============================================================
+insert into public.payments
+  (id, workspace_id, event_id, user_id, seat_count, amount, status,
+   payment_method, moyasar_payment_id, paid_at)
+values ('81000000-0000-0000-0000-0000000000f2',
+        '81000000-0000-0000-0000-0000000000a1',
+        '81000000-0000-0000-0000-0000000000e1',
+        '81000000-0000-0000-0000-000000000002', 2, 24000, 'paid',
+        'creditcard', 'pay_moy_refund_2', now());
+
+insert into public.payments
+  (id, workspace_id, event_id, user_id, seat_count, amount, status)
+values ('81000000-0000-0000-0000-0000000000f3',
+        '81000000-0000-0000-0000-0000000000a1',
+        '81000000-0000-0000-0000-0000000000e1',
+        '81000000-0000-0000-0000-000000000002', 1, 12000, 'pending');
+
+do $$
+declare
+  v_id uuid;
+  v_amount int;
+  v json;
+begin
+  -- 1. An unpaid payment has nothing to give back.
+  v_id := public.request_refund('81000000-0000-0000-0000-0000000000f3',
+                                1, 12000, 'withdrew');
+  if v_id is not null then
+    raise exception 'FAIL: a pending payment produced a refund row';
+  end if;
+
+  -- 2. A normal partial request is written as asked.
+  v_id := public.request_refund('81000000-0000-0000-0000-0000000000f2',
+                                1, 12000, 'guest_removed');
+  if v_id is null then raise exception 'FAIL: expected a refund row'; end if;
+  select amount into v_amount from public.refunds where id = v_id;
+  if v_amount <> 12000 then
+    raise exception 'FAIL: expected 12000, got %', v_amount;
+  end if;
+  v := public.settle_refund(v_id, 'refunded', 12000, null);
+
+  -- 3. Asking for more than remains is clamped to what remains.
+  v_id := public.request_refund('81000000-0000-0000-0000-0000000000f2',
+                                2, 99999, 'withdrew');
+  select amount into v_amount from public.refunds where id = v_id;
+  if v_amount <> 12000 then
+    raise exception 'FAIL: expected the remaining 12000, got %', v_amount;
+  end if;
+  v := public.settle_refund(v_id, 'refunded', 24000, null);
+
+  -- 4. Nothing remains, so nothing is written.
+  v_id := public.request_refund('81000000-0000-0000-0000-0000000000f2',
+                                1, 12000, 'withdrew');
+  if v_id is not null then
+    raise exception 'FAIL: a fully refunded payment produced another row';
+  end if;
+
+  raise notice 'PASS: request_refund guards';
+end;
+$$;
+
+-- ============================================================
+-- Section 4: a webhook saying "refunded" no longer means "all of it".
+-- ============================================================
+insert into public.payments
+  (id, workspace_id, event_id, user_id, seat_count, amount, status,
+   payment_method, moyasar_payment_id, paid_at)
+values ('81000000-0000-0000-0000-0000000000f4',
+        '81000000-0000-0000-0000-0000000000a1',
+        '81000000-0000-0000-0000-0000000000e1',
+        '81000000-0000-0000-0000-000000000002', 2, 24000, 'paid',
+        'creditcard', 'pay_moy_refund_4', now());
+
+insert into public.event_participants (event_id, user_id, added_by, guest_name,
+                                       payment_status, payment_id)
+values ('81000000-0000-0000-0000-0000000000e1', null,
+        '81000000-0000-0000-0000-000000000002', 'ضيف رابع',
+        'confirmed', '81000000-0000-0000-0000-0000000000f4');
+
+do $$
+declare
+  v json;
+  v_amount int;
+  v_status text;
+  v_count int;
+begin
+  -- A refund of half, issued from the Moyasar dashboard, arrives as a webhook.
+  v := public.settle_payment('81000000-0000-0000-0000-0000000000f4',
+                             'pay_moy_refund_4', 'refunded', 'creditcard',
+                             24000, 'SAR', 12000);
+  select refunded_amount, status into v_amount, v_status
+  from public.payments where id = '81000000-0000-0000-0000-0000000000f4';
+  if v_amount <> 12000 then
+    raise exception 'FAIL: expected 12000 absorbed, got %', v_amount;
+  end if;
+  if v_status <> 'paid' then
+    raise exception 'FAIL: half a refund must not mark it refunded, got %', v_status;
+  end if;
+  select count(*) into v_count from public.event_participants
+  where payment_id = '81000000-0000-0000-0000-0000000000f4'
+    and payment_status = 'confirmed';
+  if v_count <> 1 then
+    raise exception 'FAIL: half a refund released the seat, % left', v_count;
+  end if;
+
+  -- The rest follows.
+  v := public.settle_payment('81000000-0000-0000-0000-0000000000f4',
+                             'pay_moy_refund_4', 'refunded', 'creditcard',
+                             24000, 'SAR', 24000);
+  select status into v_status
+  from public.payments where id = '81000000-0000-0000-0000-0000000000f4';
+  if v_status <> 'refunded' then
+    raise exception 'FAIL: expected refunded, got %', v_status;
+  end if;
+
+  raise notice 'PASS: partial refund reconciliation';
+end;
+$$;
+
 rollback;

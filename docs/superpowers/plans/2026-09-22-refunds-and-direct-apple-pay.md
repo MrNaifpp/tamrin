@@ -748,11 +748,18 @@ begin
   end if;
 
   if p_moyasar_status = 'refunded' then
-    -- Absorb anything Moyasar has refunded that we did not issue ourselves,
-    -- which is how a refund made from their dashboard reaches our books.
-    v_total := least(greatest(coalesce(p_refunded_total, 0),
-                              v_payment.refunded_amount),
-                     v_payment.amount);
+    -- A partial refund also arrives as "refunded", so the figure decides rather
+    -- than the word. A caller that gives no figure is saying "I was not told",
+    -- and the only safe reading of an untotalled refund is that all of it went
+    -- back: leaving the seats confirmed would let someone keep a seat they have
+    -- already been repaid for. Anything Moyasar refunded that we did not issue
+    -- ourselves is absorbed here too, which is how a dashboard refund lands.
+    v_total := case
+                 when coalesce(p_refunded_total, 0) > 0
+                   then least(p_refunded_total, v_payment.amount)
+                 else v_payment.amount
+               end;
+    v_total := greatest(v_total, v_payment.refunded_amount);
     if v_total > v_payment.refunded_amount then
       update public.payments
          set refunded_amount = v_total,
