@@ -350,3 +350,8 @@ verify_jwt = true
 # Moyasar cannot present a Supabase JWT. The function checks the shared
 # secret_token itself and re-fetches every payment from Moyasar before acting.
 verify_jwt = false
+
+[functions.refund-payment]
+# Called by the refunds trigger through pg_net, which cannot present a Supabase
+# JWT. The function's own shared-secret check is the gate.
+verify_jwt = false
