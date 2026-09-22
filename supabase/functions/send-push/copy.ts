@@ -32,6 +32,11 @@ export function copyFor(
         title: "وصلت قطة بالبطاقة 💳",
         body: `لاعب دفع قطة ${eventName} بالبطاقة وتأكد مقعده تلقائيًا.`,
       };
+    case "refund_issued":
+      return {
+        title: "رجعت لك قطتك 💳",
+        body: `استرجعنا قطة ${eventName} إلى بطاقتك. تصل خلال أيام قليلة حسب بنكك.`,
+      };
     case "registration_reminder":
       return {
         title: "باقي مكانك ⚽",
