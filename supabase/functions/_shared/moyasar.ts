@@ -6,6 +6,9 @@ export type MoyasarPayment = {
   status: string;
   amount: number;
   currency: string;
+  /// Cumulative, in halalas. The only honest answer to "how much has gone
+  /// back", because a partial refund leaves `status` saying "refunded" too.
+  refunded?: number;
   source?: { type?: string; message?: string };
   metadata?: Record<string, unknown>;
   splits?: Array<{ recipient_id: string; amount: number }> | null;
@@ -28,8 +31,16 @@ export function makeMoyasarClient(
 ) {
   const headers = { Authorization: basicAuthHeader(secretKey), "Content-Type": "application/json" };
 
-  async function call(method: "GET" | "POST", path: string): Promise<MoyasarPayment> {
-    const res = await fetchImpl(`${baseUrl}${path}`, { method, headers });
+  async function call(
+    method: "GET" | "POST",
+    path: string,
+    body?: Record<string, unknown>,
+  ): Promise<MoyasarPayment> {
+    const res = await fetchImpl(`${baseUrl}${path}`, {
+      method,
+      headers,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
     const text = await res.text();
     if (!res.ok) throw new MoyasarError(res.status, text);
     return JSON.parse(text) as MoyasarPayment;
@@ -39,5 +50,9 @@ export function makeMoyasarClient(
     fetchPayment: (id: string) => call("GET", `/payments/${encodeURIComponent(id)}`),
     capture: (id: string) => call("POST", `/payments/${encodeURIComponent(id)}/capture`),
     voidPayment: (id: string) => call("POST", `/payments/${encodeURIComponent(id)}/void`),
+    // No amount means no body, which Moyasar documents as a refund in full.
+    refund: (id: string, amount?: number) =>
+      call("POST", `/payments/${encodeURIComponent(id)}/refund`,
+           amount === undefined ? undefined : { amount }),
   };
 }

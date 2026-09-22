@@ -38,3 +38,33 @@ Deno.test("capture posts to /capture and void posts to /void", async () => {
     "POST https://api.moyasar.com/v1/payments/p1/void",
   ]);
 });
+Deno.test("refund posts the amount in halalas as a JSON body", async () => {
+  let seen: { url: string; method?: string; body?: string } | null = null;
+  const fakeFetch: typeof fetch = async (input, init) => {
+    seen = { url: String(input), method: init?.method, body: init?.body as string };
+    return new Response(
+      JSON.stringify({ id: "p1", status: "refunded", amount: 6000, currency: "SAR", refunded: 2000 }),
+      { status: 200 },
+    );
+  };
+  const c = makeMoyasarClient("sk_test_abc", fakeFetch);
+  const p = await c.refund("p1", 2000);
+  assertEquals(p.refunded, 2000);
+  assertEquals(seen!.url, "https://api.moyasar.com/v1/payments/p1/refund");
+  assertEquals(seen!.method, "POST");
+  assertEquals(seen!.body, JSON.stringify({ amount: 2000 }));
+});
+
+Deno.test("refund with no amount sends no body, which Moyasar reads as all of it", async () => {
+  let seen: { body?: string | null } | null = null;
+  const fakeFetch: typeof fetch = async (_input, init) => {
+    seen = { body: (init?.body ?? null) as string | null };
+    return new Response(
+      JSON.stringify({ id: "p1", status: "refunded", amount: 6000, currency: "SAR", refunded: 6000 }),
+      { status: 200 },
+    );
+  };
+  const c = makeMoyasarClient("sk_test_abc", fakeFetch);
+  await c.refund("p1");
+  assertEquals(seen!.body, null);
+});
