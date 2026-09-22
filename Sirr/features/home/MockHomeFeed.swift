@@ -2467,6 +2467,34 @@ final class HomeStore {
         }
     }
 
+    /// Removing a guest you added. The server frees the seat and, when the
+    /// workout has not started and the seat was paid by card, returns that
+    /// seat's share. The money is the server's business; this only refreshes
+    /// what the roster shows.
+    func removeMyGuest(
+        _ member: FeedMember,
+        from occurrence: FeedOccurrence
+    ) async -> RegistrationOutcome {
+        guard !isPreview else {
+            rosterCache[occurrence.id]?.removeAll { $0.id == member.id }
+            return .success
+        }
+        do {
+            switch try await EventService.shared.removeMyGuest(participantId: member.id) {
+            case .removed, .notFound:
+                await reloadRoster(occurrence.id)
+                if let workspaceID = teamID(for: occurrence) {
+                    Task { await loadTeamData(workspaceID) }
+                }
+                return .success
+            case .isCreator:
+                return .failure("لا يمكن إزالة هذا المقعد.")
+            }
+        } catch {
+            return .failure(error.localizedDescription)
+        }
+    }
+
     /// Moves my own seat — and my unpaid guests' seats — to a new local state,
     /// for the paths that have no backend behind them.
     private func setMyStatus(_ status: FeedRegStatus, on occurrence: FeedOccurrence) {
