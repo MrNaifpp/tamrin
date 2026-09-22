@@ -145,7 +145,10 @@ stack green but means **no refund is ever sent**. If refunds sit `pending` on a
 deployed project, check the vault first.
 
 The sweep `retry_pending_refunds()` re-fires anything still waiting after three
-minutes, up to five attempts. Schedule it every five minutes with pg_cron.
+minutes, up to five attempts. Its pg_cron schedule is created by the migration,
+so there is nothing to schedule by hand. Confirm it with:
+
+    select jobname, schedule from cron.job where jobname = 'retry-pending-refunds';
 
 To see what is stuck:
 

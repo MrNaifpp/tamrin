@@ -1371,6 +1371,10 @@ begin
 end;
 $$;
 
+-- Dropped first so the whole file stays re-appliable: everything else in it is
+-- `create or replace`, and a bare create trigger would abort a second run and
+-- take the cron schedule below down with it.
+drop trigger if exists trg_fire_refund_outbox on public.refunds;
 create trigger trg_fire_refund_outbox
   after insert on public.refunds
   for each row execute function public.fire_refund_outbox();
@@ -1407,6 +1411,27 @@ $$;
 
 revoke execute on function public.retry_pending_refunds() from public, anon, authenticated;
 grant execute on function public.retry_pending_refunds() to service_role;
+
+-- Schedule the sweep here rather than by hand, so production is one `db push`
+-- and not a checklist somebody has to remember. Unschedule by name first: this
+-- migration is re-applied on every rebuild, and cron.schedule would otherwise
+-- refuse a duplicate job name. Same shape as the recurring-events job.
+do $$
+declare
+  v_job record;
+begin
+  for v_job in select jobid from cron.job where jobname = 'retry-pending-refunds'
+  loop
+    perform cron.unschedule(v_job.jobid);
+  end loop;
+
+  perform cron.schedule(
+    'retry-pending-refunds',
+    '*/5 * * * *',
+    $cron$select public.retry_pending_refunds();$cron$
+  );
+end;
+$$;
 ```
 
 - [ ] **Step 4: Apply and run the test**
@@ -2282,19 +2307,7 @@ supabase functions deploy refund-payment moyasar-webhook send-push --project-ref
 `moyasar-webhook` is redeployed because Task 7 changed it, and `send-push`
 because Task 8 changed its copy.
 
-- [ ] **Step 3: Schedule the retry sweep**
-
-In the sandbox SQL editor:
-
-```sql
-select cron.schedule(
-  'retry-pending-refunds',
-  '*/5 * * * *',
-  $$ select public.retry_pending_refunds(); $$
-);
-```
-
-- [ ] **Step 4: Write the runbook section**
+- [ ] **Step 3: Write the runbook section**
 
 Append to `PAYMENT_SETUP.md`:
 
@@ -2337,7 +2350,7 @@ already refunded in full, and a split whose share has already been settled to th
 organizer.
 ```
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add PAYMENT_SETUP.md
