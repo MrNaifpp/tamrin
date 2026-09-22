@@ -118,3 +118,40 @@ Plan:
 
 SQL suites: `supabase/tests/moyasar_payments_schema_test.sql`, `card_payment_rpcs_test.sql`.
 Deno suites: `supabase/functions/_shared/`, `create-payment/`, `verify-payment/`, `moyasar-webhook/`.
+
+## Refunds
+
+Money goes back automatically in three cases: a player withdraws before the
+workout starts, a player removes a guest they paid for, or the organizer cancels.
+Card payments only. A bank transfer never passed through Tamrin, so there is
+nothing for the app to send back.
+
+A refund is a row in `public.refunds` before it is an API call. The amount is
+worked out in the same transaction that frees the seat, because freeing it
+destroys the evidence of what it cost. An `AFTER INSERT` trigger posts the row id
+to the `refund-payment` function, which holds the secret key and calls
+`POST /v1/payments/{id}/refund`.
+
+Two secrets, and they must match:
+
+    supabase secrets set --project-ref <ref> REFUND_PAYMENT_SECRET=<value>
+
+    select vault.create_secret('https://<ref>.supabase.co/functions/v1/refund-payment',
+                               'refund_payment_url');
+    select vault.create_secret('<the same value>', 'refund_payment_secret');
+
+Without the vault entries the trigger silently does nothing, which keeps a local
+stack green but means **no refund is ever sent**. If refunds sit `pending` on a
+deployed project, check the vault first.
+
+The sweep `retry_pending_refunds()` re-fires anything still waiting after three
+minutes, up to five attempts. Schedule it every five minutes with pg_cron.
+
+To see what is stuck:
+
+    select status, count(*), sum(amount) from public.refunds group by status;
+    select * from public.refunds where status = 'failed' order by created_at desc;
+
+A `failed` row carries Moyasar's own message. The commonest causes are a payment
+already refunded in full, and a split whose share has already been settled to the
+organizer.
