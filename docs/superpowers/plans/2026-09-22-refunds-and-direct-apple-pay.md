@@ -1523,14 +1523,33 @@ Then give `call` an optional body and add `refund`:
   };
 ```
 
-- [ ] **Step 4: Run to verify they pass**
+- [ ] **Step 4: Give every fake client the new method**
 
-Same command. Expected: 12 tests `ok`.
+Widening the client's type breaks any stub that pretends to be one. Both existing
+suites build a fake `moyasar`, and neither will type-check until it has a
+`refund`. In `supabase/functions/verify-payment/handler_test.ts`, after the
+`voidPayment` line of the fake:
 
-- [ ] **Step 5: Commit**
+```ts
+      refund: async () => { log.push("refund"); return { ...moyasarPayment, status: "refunded" }; },
+```
+
+and in `supabase/functions/moyasar-webhook/handler_test.ts`, after its
+`capture` / `voidPayment` line:
+
+```ts
+      refund: async () => remote,
+```
+
+- [ ] **Step 5: Run every suite, not just this one**
+
+Run: `export PATH="/Applications/Docker.app/Contents/Resources/bin:$PATH"; docker run --rm -v "$PWD":/app -w /app denoland/deno:alpine test --allow-net --allow-env supabase/functions/`
+Expected: every suite `ok`. Running only `_shared/` here hides the breakage above.
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add supabase/functions/_shared/moyasar.ts supabase/functions/_shared/moyasar_test.ts
+git add supabase/functions/_shared supabase/functions/verify-payment/handler_test.ts supabase/functions/moyasar-webhook/handler_test.ts
 git commit -m "feat(payments): the Moyasar client can refund, in full or in part"
 ```
 

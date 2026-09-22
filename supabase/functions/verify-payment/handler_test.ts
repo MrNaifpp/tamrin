@@ -15,6 +15,7 @@ function deps(moyasarPayment = authorized) {
       fetchPayment: async () => { log.push("fetch"); return moyasarPayment; },
       capture: async () => { log.push("capture"); return { ...moyasarPayment, status: "captured" }; },
       voidPayment: async () => { log.push("void"); return { ...moyasarPayment, status: "voided" }; },
+      refund: async () => { log.push("refund"); return { ...moyasarPayment, status: "refunded" }; },
     },
     settle: async (args: { p_moyasar_status: string }) => {
       log.push(`settle:${args.p_moyasar_status}`);

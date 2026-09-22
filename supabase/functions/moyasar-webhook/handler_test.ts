@@ -19,6 +19,7 @@ function deps() {
         return id === "moy-1" ? remote : { ...remote, id, metadata: { payment_id: "nope" } };
       },
       capture: async () => remote, voidPayment: async () => remote,
+      refund: async () => remote,
     },
     settle: async (a: { p_moyasar_status: string }) => { log.push(`settle:${a.p_moyasar_status}`); return { status: "settled" }; },
     linkEvent: async () => { log.push("link"); },
@@ -69,4 +70,15 @@ Deno.test("unknown payment id is recorded and acknowledged, never creates a row"
   const res = await makeHandler(d)(post(evt("wh-4", { data: { id: "moy-9", metadata: { payment_id: "nope" } } })));
   assertEquals(res.status, 200);
   assertEquals(d.log.includes("settle:paid"), false);
+});
+Deno.test("a refund webhook carries Moyasar's cumulative refunded total", async () => {
+  const d = deps();
+  const settled: Array<Record<string, unknown>> = [];
+  d.moyasar.fetchPayment = async () => ({
+    ...remote, status: "refunded", refunded: 12000,
+  });
+  d.settle = async (a: Record<string, unknown>) => { settled.push(a); return { status: "refunded" }; };
+  await makeHandler(d)(post(evt("wh-refund-1")));
+  assertEquals(settled[0].p_moyasar_status, "refunded");
+  assertEquals(settled[0].p_refunded_total, 12000);
 });
