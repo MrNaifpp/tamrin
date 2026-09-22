@@ -402,7 +402,7 @@ struct EventDetailView: View {
         .environment(\.layoutDirection, .rightToLeft)
         .colorScheme(.dark)
         .sheet(isPresented: $showWithdrawConfirm) {
-            MemberDeclineSheet { reasonCode, reasonText in
+            MemberDeclineSheet(refundNotice: refundNoticeForWithdrawal) { reasonCode, reasonText in
                 let outcome = await feed.decline(
                     occurrence,
                     reasonCode: reasonCode,
@@ -613,7 +613,13 @@ struct EventDetailView: View {
                     && member.userId != feed.currentUserID
                     ? { await feed.remindPayment(member, on: occurrence) }
                     : nil,
+                // The organizer may remove anyone. A member may remove a guest
+                // they added themselves, which is also what returns that seat's
+                // share to their card.
                 onRemove: feed.isCurrentTeamOwner
+                    || (member.isGuest && !member.isManual
+                        && member.addedBy != nil
+                        && member.addedBy == feed.currentUserID)
                     ? { memberAwaitingRemoval = member }
                     : nil
             )
@@ -630,7 +636,7 @@ struct EventDetailView: View {
             }
             Button("تراجع", role: .cancel) { memberAwaitingRemoval = nil }
         } message: {
-            Text("سيُزال \(memberAwaitingRemoval?.name ?? "اللاعب") من قائمة «\(occurrence.title)» ويتحرر مقعده.")
+            Text(removalAlertMessage)
         }
         .alert("تعذر إكمال العملية", isPresented: Binding(
             get: { actionErrorMessage != nil },
@@ -853,6 +859,26 @@ struct EventDetailView: View {
                 }
             }
         }
+    }
+
+    /// The refund rule, stated before the slide rather than discovered after
+    /// it. Which branch applies to a given person is the server's call at the
+    /// moment they withdraw; this only promises what the rule is.
+    /// Removing a guest you paid for returns their share, so the alert says so
+    /// rather than leaving it to be noticed on a bank statement.
+    private var removalAlertMessage: String {
+        let name = memberAwaitingRemoval?.name ?? "اللاعب"
+        let base = "سيُزال \(name) من قائمة «\(occurrence.title)» ويتحرر مقعده."
+        guard !feed.isCurrentTeamOwner, occurrence.price > 0,
+              Date.now < occurrence.startAt else { return base }
+        return base + " وما دفعته عنه بالبطاقة يُسترجع إليها."
+    }
+
+    private var refundNoticeForWithdrawal: String? {
+        guard occurrence.price > 0 else { return nil }
+        return Date.now >= occurrence.startAt
+            ? "بدأ التمرين، فلن يُسترجع المبلغ."
+            : "ما دفعته بالبطاقة يُسترجع إليها. التحويل البنكي يُرتَّب مع المشرف."
     }
 
     private var overduePaymentCTA: some View {
@@ -1851,7 +1877,12 @@ struct EventDetailView: View {
         guard removalInFlight == nil else { return }
         removalInFlight = member.id
         Task {
-            let outcome = await feed.removeParticipant(member, from: occurrence)
+            // The organizer removes anyone through their own RPC. A member
+            // removing their own guest goes through remove_my_guest, which is
+            // the path that also returns that seat's share.
+            let outcome = feed.isCurrentTeamOwner
+                ? await feed.removeParticipant(member, from: occurrence)
+                : await feed.removeMyGuest(member, from: occurrence)
             removalInFlight = nil
             switch outcome {
             case .success:

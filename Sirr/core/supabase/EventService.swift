@@ -1141,6 +1141,40 @@ final class EventService {
         }
     }
 
+    /// The player's own version of `removeParticipant`. The server checks that
+    /// the caller is the one who added this guest, and returns that seat's
+    /// share of the payment when the workout has not started.
+    func removeMyGuest(participantId: UUID) async throws -> RemoveParticipantResult {
+        let params: [String: String] = ["p_participant_id": participantId.uuidString]
+
+        let response = try await client
+            .rpc("remove_my_guest", params: params)
+            .execute()
+
+        guard
+            let payload = try JSONSerialization.jsonObject(with: response.data) as? [String: Any],
+            let status = payload["status"] as? String
+        else {
+            throw NSError(
+                domain: "EventService",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "تعذر قراءة رد الخادم."]
+            )
+        }
+
+        eventLogger.info("API removeMyGuest: \(status)")
+        switch status {
+        case "removed": return .removed
+        case "not_found": return .notFound
+        default:
+            throw NSError(
+                domain: "EventService",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "رد غير متوقع من الخادم: \(status)"]
+            )
+        }
+    }
+
     /// Fetches invitation responses for an event. The server limits organizers
     /// to their own events and regular members to their own response.
     func getEventMemberResponses(eventId: UUID) async throws -> [EventMemberResponseRecord] {
