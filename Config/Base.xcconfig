@@ -33,7 +33,9 @@ MARKETING_VERSION = 1.8
 // step and let a workspace with no verified Moyasar recipient pay at all; (4)
 // makes دفع القطة open Apple Pay in one tap with no chooser at all, and adds
 // refunds — withdrawing before the start, removing a guest you paid for, and
-// the organizer cancelling all return the money.
+// the organizer cancelling all return the money. (5) makes Apple Pay appear the
+// moment a member registers, rather than after leaving and re-entering the
+// workout, and shows progress while a payment is being confirmed.
 //
 // That feature exists only on the development project — the migrations, the
 // three Edge Functions, their secrets and the Moyasar webhook are deployed to
@@ -41,7 +43,7 @@ MARKETING_VERSION = 1.8
 // the sandbox in Sirr/core/supabase/SupabaseEnvironment.swift, on top of the
 // banner at the top of Config/Release.xcconfig. Both have to come off before
 // any of this reaches the App Store.
-CURRENT_PROJECT_VERSION = 4
+CURRENT_PROJECT_VERSION = 5
 
 // Here rather than in the target so Staging.xcconfig can override it — a
 // staging build on the home screen has to be tellable from a real one.
