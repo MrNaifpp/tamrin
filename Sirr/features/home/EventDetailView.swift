@@ -33,6 +33,12 @@ struct EventDetailView: View {
     /// system Apple Pay button, and without one it opens the manual flow.
     @State private var payQuote: CardPaymentQuote?
     @State private var showCardSheet = false
+    /// Asking the server what is owed, right after the member starts owing.
+    @State private var isLoadingQuote = false
+    /// Apple Pay said yes and the server is deciding. Held until the roster has
+    /// reloaded, so the spinner hands straight over to the paid badge instead of
+    /// flashing the old pay button in between.
+    @State private var isConfirmingPayment = false
     @State private var paymentActionInFlight: UUID?
     @State private var memberAwaitingRejection: FeedMember?
     @State private var actionErrorMessage: String?
@@ -448,11 +454,20 @@ struct EventDetailView: View {
                 onSuccessDismiss: occurrence.requiresPaymentAction ? { dismiss() } : nil
             )
         }
-        .task(id: occurrence.id) {
-            // Asking the server what this member owes decides which pay control
-            // they get. A workspace that cannot take cards answers with nothing
-            // and keeps the manual flow it has always had.
-            guard occurrence.price > 0, !occurrence.isCancelled else { return }
+        .task(id: PayQuoteKey(eventID: occurrence.id, status: myRegistration?.status)) {
+            // Keyed on the member's status as well as the event. Registering is
+            // what makes someone owe money, and keyed on the event alone the
+            // answer from before they registered ("nothing owed") stuck until
+            // they left the screen and came back.
+            guard occurrence.price > 0, !occurrence.isCancelled,
+                  myRegistration?.status == .awaitingPayment else {
+                payQuote = nil
+                return
+            }
+            isLoadingQuote = true
+            defer { isLoadingQuote = false }
+            // A workspace that cannot take cards answers with nothing and keeps
+            // the manual flow it has always had.
             if case .ready(let quote) = try? await MoyasarPaymentService.shared
                 .startPayment(eventId: occurrence.id) {
                 payQuote = quote
@@ -835,7 +850,9 @@ struct EventDetailView: View {
             Haptics.error()
             actionErrorMessage = message
         case .authorized(let moyasarPaymentId):
+            isConfirmingPayment = true
             Task {
+                defer { isConfirmingPayment = false }
                 do {
                     let verdict = try await MoyasarPaymentService.shared.verifyUntilSettled(
                         paymentId: quote.paymentId,
@@ -844,8 +861,11 @@ struct EventDetailView: View {
                     switch verdict {
                     case .paid:
                         Haptics.success()
+                        // Awaited, because the roster reload is what turns this
+                        // member's status to registered and brings the paid
+                        // badge in. The quote is not cleared here: that status
+                        // change re-runs the quote task, which clears it.
                         await feed.markCardPaid(for: occurrence)
-                        payQuote = nil
                     case .processing:
                         actionErrorMessage = "تأخر التحقق من الدفع. سيتأكد مقعدك تلقائيًا عند وصول التأكيد."
                     case .failed(let reason):
@@ -879,6 +899,13 @@ struct EventDetailView: View {
         return Date.now >= occurrence.startAt
             ? "بدأ التمرين، فلن يُسترجع المبلغ."
             : "ما دفعته بالبطاقة يُسترجع إليها. التحويل البنكي يُرتَّب مع المشرف."
+    }
+
+    /// What the quote depends on. Equatable so `.task(id:)` re-runs exactly
+    /// when either the workout or this member's standing in it changes.
+    private struct PayQuoteKey: Equatable {
+        let eventID: UUID
+        let status: FeedRegStatus?
     }
 
     private var overduePaymentCTA: some View {
@@ -996,7 +1023,18 @@ struct EventDetailView: View {
             } else {
                 VStack(spacing: 10) {
                     if mine.status == .awaitingPayment, occurrence.price > 0 {
-                        if let payQuote, ApplePayButton.isAvailable {
+                        if isLoadingQuote || isConfirmingPayment {
+                            // Same height as the button it stands in for, so
+                            // nothing jumps when it resolves.
+                            ProgressView()
+                                .controlSize(.regular)
+                                .tint(.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: TamrinControlMetrics.glassActionHeight)
+                                .accessibilityLabel(isConfirmingPayment
+                                                    ? "نتحقق من الدفع"
+                                                    : "جارٍ تجهيز الدفع")
+                        } else if let payQuote, ApplePayButton.isAvailable {
                             // Apple requires the control that starts a payment
                             // to be their own button, and that is also what
                             // puts the Apple mark on it. One tap to Wallet.
