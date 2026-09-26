@@ -27,13 +27,8 @@ struct EventDetailView: View {
     /// paid one still has to walk the payment steps.
     @State private var showCompanionSheet = false
     @State private var showPaymentReview = false
-    /// The server's quote for what this member owes on this workout. Fetched
-    /// here rather than inside the payment sheet, because the pay control's
-    /// identity now depends on it: with a quote and Apple Pay it becomes the
-    /// system Apple Pay button, and without one it opens the manual flow.
-    @State private var payQuote: CardPaymentQuote?
     @State private var showCardSheet = false
-    /// Asking the server what is owed, right after the member starts owing.
+    /// Between the pay tap and the server's answer about what is owed.
     @State private var isLoadingQuote = false
     /// Apple Pay said yes and the server is deciding. Held until the roster has
     /// reloaded, so the spinner hands straight over to the paid badge instead of
@@ -454,27 +449,6 @@ struct EventDetailView: View {
                 onSuccessDismiss: occurrence.requiresPaymentAction ? { dismiss() } : nil
             )
         }
-        .task(id: PayQuoteKey(eventID: occurrence.id, status: myRegistration?.status)) {
-            // Keyed on the member's status as well as the event. Registering is
-            // what makes someone owe money, and keyed on the event alone the
-            // answer from before they registered ("nothing owed") stuck until
-            // they left the screen and came back.
-            guard occurrence.price > 0, !occurrence.isCancelled,
-                  myRegistration?.status == .awaitingPayment else {
-                payQuote = nil
-                return
-            }
-            isLoadingQuote = true
-            defer { isLoadingQuote = false }
-            // A workspace that cannot take cards answers with nothing and keeps
-            // the manual flow it has always had.
-            if case .ready(let quote) = try? await MoyasarPaymentService.shared
-                .startPayment(eventId: occurrence.id) {
-                payQuote = quote
-            } else {
-                payQuote = nil
-            }
-        }
         .sheet(isPresented: $showCardSheet) {
             CardPaymentSheet(eventId: occurrence.id, eventName: occurrence.title) {
                 Task { await feed.markCardPaid(for: occurrence) }
@@ -863,8 +837,7 @@ struct EventDetailView: View {
                         Haptics.success()
                         // Awaited, because the roster reload is what turns this
                         // member's status to registered and brings the paid
-                        // badge in. The quote is not cleared here: that status
-                        // change re-runs the quote task, which clears it.
+                        // badge in; the spinner holds until it has.
                         await feed.markCardPaid(for: occurrence)
                     case .processing:
                         actionErrorMessage = "تأخر التحقق من الدفع. سيتأكد مقعدك تلقائيًا عند وصول التأكيد."
@@ -901,11 +874,43 @@ struct EventDetailView: View {
             : "ما دفعته بالبطاقة يُسترجع إليها. التحويل البنكي يُرتَّب مع المشرف."
     }
 
-    /// What the quote depends on. Equatable so `.task(id:)` re-runs exactly
-    /// when either the workout or this member's standing in it changes.
-    private struct PayQuoteKey: Equatable {
-        let eventID: UUID
-        let status: FeedRegStatus?
+    /// Nothing is asked of the server until the member taps pay. Asking creates
+    /// a pending payment, which is a write, and opening a workout to look at it
+    /// should not make one. The server prices the member's own seat plus every
+    /// unpaid guest they added, then this routes on its answer: Apple Pay when
+    /// the device has it, the card form when it does not, and the manual
+    /// transfer when this workspace takes no cards at all.
+    private func beginPayment() {
+        guard !isLoadingQuote, !isConfirmingPayment else { return }
+        Haptics.impact(.light)
+        isLoadingQuote = true
+        Task {
+            defer { isLoadingQuote = false }
+            do {
+                switch try await MoyasarPaymentService.shared.startPayment(eventId: occurrence.id) {
+                case .ready(let quote):
+                    if ApplePayButton.isAvailable {
+                        ApplePayButton.present(quote: quote, eventName: occurrence.title) { outcome in
+                            handleApplePay(outcome, quote: quote)
+                        }
+                    } else {
+                        showCardSheet = true
+                    }
+                case .recipientNotOnboarded:
+                    showPaymentReview = true
+                case .alreadyPaid:
+                    await feed.markCardPaid(for: occurrence)
+                case .nothingDue, .freeEvent:
+                    await feed.reloadRoster(occurrence.id)
+                case .eventClosed:
+                    Haptics.error()
+                    actionErrorMessage = "أُغلق التسجيل لهذا الموعد."
+                }
+            } catch {
+                Haptics.error()
+                actionErrorMessage = ServerErrorMessage.arabic(for: error)
+            }
+        }
     }
 
     private var overduePaymentCTA: some View {
@@ -1034,35 +1039,15 @@ struct EventDetailView: View {
                                 .accessibilityLabel(isConfirmingPayment
                                                     ? "نتحقق من الدفع"
                                                     : "جارٍ تجهيز الدفع")
-                        } else if let payQuote, ApplePayButton.isAvailable {
+                        } else if ApplePayButton.isAvailable {
                             // Apple requires the control that starts a payment
                             // to be their own button, and that is also what
-                            // puts the Apple mark on it. One tap to Wallet.
-                            ApplePayButton(quote: payQuote, eventName: occurrence.title) { outcome in
-                                handleApplePay(outcome, quote: payQuote)
-                            }
-                            .accessibilityHint("يفتح Apple Pay لدفع قطة التمرين")
-                        } else if payQuote != nil {
-                            Button {
-                                Haptics.impact(.light)
-                                showCardSheet = true
-                            } label: {
-                                Label("ادفع بالبطاقة", systemImage: "creditcard.fill")
-                                    .font(TamrinFont.font(size: 16, weight: .bold))
-                                    .foregroundStyle(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: TamrinControlMetrics.glassActionHeight)
-                                    .contentShape(.capsule)
-                            }
-                            .buttonStyle(.glassProminent)
-                            .buttonBorderShape(.capsule)
-                            .controlSize(.regular)
-                            .tint(Self.moneyGreen)
-                            .accessibilityHint("يفتح نموذج البطاقة لدفع قطة التمرين")
+                            // puts the Apple mark on it.
+                            ApplePayButton { beginPayment() }
+                                .accessibilityHint("يجهّز الدفع ثم يفتح Apple Pay")
                         } else {
                             Button {
-                                Haptics.impact(.light)
-                                showPaymentReview = true
+                                beginPayment()
                             } label: {
                                 Label("دفع القطة", systemImage: "banknote.fill")
                                     .font(TamrinFont.font(size: 16, weight: .bold))
@@ -1078,7 +1063,7 @@ struct EventDetailView: View {
                             // the one button in the app that moves money, and it
                             // should read as money rather than as another accent.
                             .tint(Self.moneyGreen)
-                            .accessibilityHint("يفتح مبلغ القطة ووسائل الدفع المتاحة")
+                            .accessibilityHint("يجهّز الدفع ويفتح وسيلة الدفع المتاحة")
                         }
                     }
 
