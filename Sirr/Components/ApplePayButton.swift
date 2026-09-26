@@ -13,9 +13,26 @@ import PassKit
 import MoyasarSdk
 
 struct ApplePayButton: View {
-    let quote: CardPaymentQuote
-    let eventName: String
-    let onResult: (CardPaymentOutcome) -> Void
+    private let action: () -> Void
+
+    /// For a caller that already holds a quote, like the card sheet: tapping
+    /// presents Apple Pay straight away.
+    init(
+        quote: CardPaymentQuote,
+        eventName: String,
+        onResult: @escaping (CardPaymentOutcome) -> Void
+    ) {
+        self.action = {
+            Self.present(quote: quote, eventName: eventName, onResult: onResult)
+        }
+    }
+
+    /// For a caller that asks the server what is owed only once the member
+    /// taps, then calls `present` itself. Opening a screen must not create a
+    /// payment, so the quote cannot exist before the tap.
+    init(action: @escaping () -> Void) {
+        self.action = action
+    }
 
     /// Set from APPLE_PAY_MERCHANT_ID in Config/Base.xcconfig, through the
     /// ApplePayMerchantID placeholder in Info.plist. Absent or unsubstituted
@@ -38,15 +55,19 @@ struct ApplePayButton: View {
 
     var body: some View {
         PayWithApplePayButton(.plain) {
-            present()
+            action()
         }
         .payWithApplePayButtonStyle(.white)
         .frame(height: 48)
         .clipShape(.rect(cornerRadius: 17, style: .continuous))
     }
 
-    private func present() {
-        guard let merchant = Self.merchantIdentifier else {
+    static func present(
+        quote: CardPaymentQuote,
+        eventName: String,
+        onResult: @escaping (CardPaymentOutcome) -> Void
+    ) {
+        guard let merchant = merchantIdentifier else {
             onResult(.failed("الدفع عبر Apple Pay غير مهيأ في هذه النسخة."))
             return
         }
@@ -65,12 +86,18 @@ struct ApplePayButton: View {
         pk.currencyCode = quote.currency
         pk.supportedNetworks = [.visa, .masterCard, .mada]
         pk.merchantCapabilities = [.threeDSecure, .credit, .debit]
+        // Apple reads the LAST item as the grand total and wants the business
+        // receiving the money as its label, so the sheet ends "Pay تمرين". The
+        // line above it names the workout and how many seats the price covers,
+        // which is where a payer sees that their guests are included.
+        let total = NSDecimalNumber(value: quote.amountInRiyals)
         pk.paymentSummaryItems = [
             PKPaymentSummaryItem(
-                label: "تمرين: \(eventName)",
-                amount: NSDecimalNumber(value: quote.amountInRiyals),
+                label: "\(eventName) · \(quote.seatCount.counted(.seat))",
+                amount: total,
                 type: .final
-            )
+            ),
+            PKPaymentSummaryItem(label: "تمرين", amount: total, type: .final)
         ]
 
         let controller = PKPaymentAuthorizationController(paymentRequest: pk)
