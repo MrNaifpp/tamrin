@@ -49,14 +49,15 @@ No RPC changes. A path added later notifies for free, which is why the 2026-08-2
 v_uid   := auth.uid()                -- the actor; null for cron / system
 v_event := the event, locked for update
 
-if not published or cancelled: return
+if not published or cancelled: mark this event's unannounced seats; return
 
 -- Part 1: what did this tap add? (only when a person acted, and not the owner)
 if v_uid is not null and v_uid <> creator:
-    v_self   := exists seat where user_id = v_uid
-                      and created_at = now() and status in (pending, confirmed)
-    v_guests := count seats where user_id is null and added_by = v_uid
-                      and created_at = now() and status in (pending, confirmed)
+    v_self   := exists unannounced seat where user_id = v_uid
+                      and status in (pending, confirmed)
+    v_guests := count unannounced seats where user_id is null and added_by = v_uid
+                      and status in (pending, confirmed)
+mark every unannounced seat of this event as announced     -- always
 
 -- Part 2: milestone (only with a cap), exactly as today
 if max_participants is not null:
@@ -65,9 +66,10 @@ if max_participants is not null:
 
 -- Part 3: organizer (never when the organizer is the actor)
 if v_uid is distinct from creator:
-    if Part 1 ran and (v_self or v_guests > 0)
-       and no member_registered row for (creator, event, actor) with created_at = now():
-        enqueue member_registered for creator (actor_id, guest_count, fill_pct = v_milestone)
+    if v_self:
+        enqueue member_registered for creator (actor_id, guest_count = v_guests, fill_pct = v_milestone)
+    elsif v_guests > 0:
+        enqueue member_added_guests for creator (actor_id, guest_count = v_guests, fill_pct = v_milestone)
     elsif v_milestone:
         enqueue event_fill_* / event_full for creator        -- today's behaviour
 
@@ -77,9 +79,15 @@ if v_milestone and v_uid is not null:
     except v_uid and except creator
 ```
 
-### Why `created_at = now()` means "this tap"
+### How "this tap" is found
 
-`now()` is the transaction's start time, and both `event_participants.created_at` and `push_outbox.created_at` default to it. So every seat one tap inserts has the same timestamp, and seats from other transactions don't. The same equality dedupes Part 3: the first run enqueues the organizer's push, and later runs in the same transaction find it and skip.
+Each seat carries `registration_announced`. New seats start `false`, and the first trigger run in a transaction reads them, then marks every unannounced seat of the event `true`.
+
+- **One push per tap:** the later runs in the same transaction find nothing unannounced, so they enqueue nothing.
+- **Only this tap's seats:** the event row is locked `for update` and the trigger is deferred to commit. So when it runs, the unannounced seats are exactly the ones this transaction inserted.
+- **Seats nobody should be told about are still marked:** that covers the organizer's own seats, the weekly roll-over, and draft events. A member's carried-over seat therefore can't be swept into their next tap later and reported as a fresh registration.
+
+A timestamp such as `created_at = now()` was considered and rejected. It fails whenever two taps share a transaction, which is exactly how the SQL suites run.
 
 ### Why the registration push no longer needs a cap
 
@@ -89,11 +97,11 @@ Today the function returns early when `max_participants is null`, because there 
 
 | Case | Result |
 |---|---|
-| Waitlisted insert | Not counted in Part 1 (status `waitlisted`), never counted as a seat |
+| Joining the waitlist | Goes to `event_waitlist`, not `event_participants`: the trigger never runs |
 | Re-registering after a withdrawal | A new insert, so a new push. The milestone does not re-arm |
 | `already_joined` | No insert, so the trigger never runs |
 | Organizer adds a player by hand | Actor is the owner: no organizer push, the group gets any milestone |
-| Waitlist promotion | An update, not an insert, so no trigger. Unchanged |
+| Waitlist promotion | Inserts the promoted player's seat under the actor who freed it. It's neither the actor's own seat nor their guest, so it's marked with no registration push. The milestone logic is unchanged |
 | Draft (unpublished) or skipped event | Nothing, as today |
 
 ## Data model
@@ -107,19 +115,28 @@ alter table public.push_outbox
   add column if not exists fill_pct smallint;
 ```
 
+Seats gain the "already told" flag. Existing seats start `true`, so the first tap after the migration doesn't report seats taken before it. The default then flips to `false` for new seats.
+
+```sql
+alter table public.event_participants
+  add column if not exists registration_announced boolean not null default true;
+alter table public.event_participants
+  alter column registration_announced set default false;
+```
+
 `actor_id` is `on delete set null`, so deleting the actor's account keeps the organizer's push row.
 
 ## Copy (`send-push`)
 
 `index.ts` reads the whole row (`select("*")`) instead of naming columns, so it works before and after the migration adds the new ones. When `actor_id` is set, it reads `public.users.name` for it; a missing name falls back to «لاعب». `copyFor(type, eventName, details?)` gains an optional third argument, so every existing call keeps working.
 
-New type `member_registered`, title «تسجيل جديد ⚽». The body is built from three parts:
+Two new types, both titled «تسجيل جديد ⚽». There are two because the text depends on whether the player took their own seat:
 
-| Part | Wording |
-|---|---|
-| Self only | «فهد سجّل في {event}» |
-| Self + guests | «فهد سجّل ومعه {guests} في {event}» |
-| Guests only | «فهد سجّل {guests} في {event}» |
+| Type | guest_count | Body |
+|---|---|---|
+| `member_registered` | 0 | «فهد سجّل في {event}» |
+| `member_registered` | n | «فهد سجّل ومعه {guests} في {event}» |
+| `member_added_guests` | n | «فهد سجّل {guests} في {event}» |
 
 Guest count, in Arabic-Indic digits like the existing «٣ أرباع»: 1 → «ضيف», 2 → «ضيفين», 3–10 → «٣ ضيوف», 11 and up → «١١ ضيف».
 
@@ -140,12 +157,12 @@ The group receives the existing `event_fill_25/50/75` and `event_full` copy unch
 
 1. A member registers alone: one `member_registered` row to the owner, `guest_count = 0`.
 2. A member registers with 2 guests: still exactly one row to the owner, `guest_count = 2`.
-3. A member who already holds a seat adds guests only: one row with `guest_count` set. Their earlier seat is from another transaction, so it doesn't count as part of this tap.
+3. A member who already holds a seat adds guests only: one `member_added_guests` row. Their earlier seat is already announced, so it doesn't count.
 4. A tap crossing 50 %: the owner gets one `member_registered` row with `fill_pct = 50` and no separate `event_fill_50`. Every other member gets `event_fill_50`, the actor doesn't.
 5. The owner registers or adds a player by hand: no row to the owner, and the group gets any milestone.
-6. A waitlist join: no rows.
+6. A waitlist join on a full event: no rows.
 7. An event without a cap: a registration push, no milestone.
-8. A system insert (no `auth.uid()`) crossing a milestone: the owner gets `event_fill_*` alone and the group gets nothing.
+8. A system insert (no `auth.uid()`) crossing a milestone: the owner gets `event_fill_*` alone and the group gets nothing. When that member later adds a guest, it reads as `member_added_guests`, because their carried seat was marked.
 
 The existing `event_fill_notifications_test.sql` must keep passing where its expectations still hold. The places that assert "owner only" or no push to the owner get updated to the new rules.
 
