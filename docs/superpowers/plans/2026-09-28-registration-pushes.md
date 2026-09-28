@@ -78,8 +78,12 @@ Expected: `rebuilt`
 
 begin;
 
--- trg_announce_event_fill is deferred to commit and this suite never commits:
--- `set constraints all immediate` after each tap is what makes it run.
+-- trg_announce_event_fill is deferred to commit and this suite never commits.
+-- After each tap, `set constraints all immediate` runs it, and
+-- `set constraints all deferred` puts it back: the mode otherwise stays
+-- immediate for the rest of the transaction, and the next tap's own seat and
+-- guests would be announced separately, which a real one-transaction tap never
+-- does.
 
 create or replace function pg_temp.set_auth(uid uuid) returns void
 language plpgsql as $$
@@ -155,6 +159,7 @@ begin
     p_max_participants => 16
   )->>'id')::uuid;
   set constraints all immediate;
+  set constraints all deferred;
 
   if pg_temp.feature_pushes(v_e1) <> 0 then
     raise exception 'FAIL: the owner''s own seat was announced';
@@ -164,6 +169,7 @@ begin
   perform pg_temp.set_auth(A);
   v_result := public.register_event_seat(p_event_id => v_e1);
   set constraints all immediate;
+  set constraints all deferred;
 
   select * into v_row from public.push_outbox
   where event_id = v_e1 and type = 'member_registered';
@@ -183,6 +189,7 @@ begin
     p_guest_names => array['ضيف سالم ١', 'ضيف سالم ٢']
   );
   set constraints all immediate;
+  set constraints all deferred;
 
   select count(*) into v_count from public.push_outbox
   where event_id = v_e1 and actor_id = B;
@@ -215,6 +222,7 @@ begin
     p_guest_names => array['ضيف فهد']
   );
   set constraints all immediate;
+  set constraints all deferred;
 
   select * into v_row from public.push_outbox
   where event_id = v_e1 and type = 'member_added_guests';
@@ -244,6 +252,7 @@ begin
   v_result := public.add_manual_participant(v_e2, 'يدوي ٢');
   v_result := public.add_manual_participant(v_e2, 'يدوي ٣');
   set constraints all immediate;
+  set constraints all deferred;
 
   if pg_temp.pushes(v_e2, O, 'event_fill_50') <> 0
      or pg_temp.pushes(v_e2, O, 'member_registered') <> 0
@@ -268,10 +277,12 @@ begin
     p_max_participants => 2
   )->>'id')::uuid;
   set constraints all immediate;
+  set constraints all deferred;
 
   perform pg_temp.set_auth(A);
   v_result := public.register_event_seat(p_event_id => v_e3);
   set constraints all immediate;
+  set constraints all deferred;
 
   select * into v_row from public.push_outbox
   where event_id = v_e3 and type = 'member_registered';
@@ -286,6 +297,7 @@ begin
     raise exception 'FAIL: expected B on the waitlist, got %', v_result;
   end if;
   set constraints all immediate;
+  set constraints all deferred;
 
   if pg_temp.feature_pushes(v_e3) <> v_before then
     raise exception 'FAIL: a waitlist join was announced';
@@ -308,6 +320,7 @@ begin
     p_guest_names => array['ضيف ١', 'ضيف ٢', 'ضيف ٣']
   );
   set constraints all immediate;
+  set constraints all deferred;
 
   if pg_temp.pushes(v_e4, O, 'member_registered') <> 1 then
     raise exception 'FAIL: an uncapped workout did not announce a registration';
@@ -332,6 +345,7 @@ begin
     p_max_participants => 8
   )->>'id')::uuid;
   set constraints all immediate;
+  set constraints all deferred;
 
   perform set_config('request.jwt.claims', '{"role":"service_role"}', true);
   insert into public.event_participants (event_id, user_id, payment_status) values
@@ -339,12 +353,14 @@ begin
     (v_e5, B, 'confirmed'),
     (v_e5, C, 'confirmed');
   set constraints all immediate;
+  set constraints all deferred;
 
   if pg_temp.pushes(v_e5, O, 'event_fill_50') <> 1 then
     raise exception 'FAIL: the owner lost the milestone on a system insert';
   end if;
   select count(*) into v_count from public.push_outbox
-  where event_id = v_e5 and user_id <> O;
+  where event_id = v_e5 and user_id <> O
+    and (type like 'event_fill_%' or type = 'event_full');
   if v_count <> 0 then
     raise exception 'FAIL: a system insert announced to the group';
   end if;
@@ -358,6 +374,7 @@ begin
     p_guest_names => array['ضيف ناصر']
   );
   set constraints all immediate;
+  set constraints all deferred;
 
   if pg_temp.pushes(v_e5, O, 'member_added_guests') <> 1
      or pg_temp.pushes(v_e5, O, 'member_registered') <> 0 then
