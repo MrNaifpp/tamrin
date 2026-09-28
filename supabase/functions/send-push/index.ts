@@ -32,7 +32,9 @@ Deno.serve(async (req) => {
   // 2. Load the outbox row (authoritative).
   const { data: row } = await admin
     .from("push_outbox")
-    .select("id, user_id, type, event_id")
+    // The whole row, not named columns: this runs both before and after a
+    // migration adds optional fields, and must work on either side of it.
+    .select("*")
     .eq("id", outbox_id)
     .single();
   if (!row) return new Response("outbox row not found", { status: 404 });
@@ -61,8 +63,20 @@ Deno.serve(async (req) => {
     eventName = ev?.name ?? "";
   }
 
+  // 4b. Who acted, for copy that names them.
+  let actorName: string | null = null;
+  if (row.actor_id) {
+    const { data: actor } = await admin
+      .from("users").select("name").eq("user_id", row.actor_id).single();
+    actorName = actor?.name ?? null;
+  }
+
   // 5. Copy.
-  const copy = copyFor(row.type, eventName);
+  const copy = copyFor(row.type, eventName, {
+    actorName,
+    guestCount: row.guest_count ?? null,
+    fillPct: row.fill_pct ?? null,
+  });
   if (!copy) return await fail(`no copy for type ${row.type}`);
 
   // 6. Sign + send to every device.
