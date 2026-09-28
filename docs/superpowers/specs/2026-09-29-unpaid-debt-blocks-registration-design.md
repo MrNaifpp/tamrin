@@ -83,8 +83,10 @@ membership and "event has ended" checks:
 - Otherwise, if `unpaid_debt_event(v_event.workspace_id, payer)` is not null,
   raise:
   - `message`: `عليك قطة لم تُدفع من تمرين سابق. ادفعها أولاً عشان تسجّل.`
-  - `detail`: the unpaid event's id
-  - `hint`: `payment_owed` (the tag the app matches on)
+  - `hint`: `payment_owed:<unpaid event id>`, the tag the app matches on and
+    the workout it opens. It rides in `hint`, not `detail`: PostgREST sends
+    `details` while supabase-swift's `PostgrestError` decodes `detail`, so a
+    `detail` value never reaches the app.
 
 Because the trigger fires on every insert into `event_participants` and
 `event_waitlist`, one rule covers self-registration, adding guests
@@ -140,20 +142,24 @@ forgiven.
 
 `RegistrationOutcome` gains `case paymentOwed(eventId: UUID)`. Every feed
 function that registers (self-registration, adding guests, joining the waitlist)
-checks the caught error: a `PostgrestError` whose `hint == "payment_owed"` and
-whose `detail` parses as a UUID becomes `.paymentOwed`. Anything else keeps its
+checks the caught error: a `PostgrestError` whose `hint` is `payment_owed:`
+followed by a UUID becomes `.paymentOwed`. Anything else keeps its
 current handling. The Swift compiler lists every `switch` over the outcome that
 must handle the new case.
 
 ### 3. The sheet
 
-Every screen that registers presents the same sheet on `.paymentOwed`:
+All three paths run inside `RegistrationFlowSheet`, so the refusal is a new
+step of that sheet (like its existing `closedAtCapacity` step), not a second
+sheet on top:
 
 - title: «عليك قطة سابقة»
 - body: «ما دفعت قطتك في {اسم التمرين}. ادفعها عشان تقدر تسجّل.»
 - note: «إذا حوّلت للمنظم مباشرة، اطلب منه يأكد إنه وصلته.»
-- primary button «ادفع الآن»: closes the current workout and opens the unpaid
-  workout's detail screen, where its Apple Pay button is.
+- primary button «ادفع الآن»: closes the sheet and opens the unpaid workout's
+  detail screen, where its Apple Pay button is. Home presents workouts with
+  `fullScreenCover(item:)`; setting that item to the unpaid workout replaces the
+  open one, which is SwiftUI's documented behaviour for an item change.
 - secondary button «لاحقاً»: dismisses.
 
 The workout's name comes from the feed's loaded occurrences by id. If it is not
@@ -167,7 +173,7 @@ Database tests in `supabase/tests`, run on the local copy:
 
 - A member who owes cannot register, add guests, or join the waitlist in the same
   workspace. The error carries the Arabic message, `hint = payment_owed` and the
-  unpaid event's id in `detail`.
+  hint `payment_owed:<unpaid event id>`.
 - Another workspace is unaffected. A cancelled unpaid workout does not count. The
   workspace owner and the event creator are never blocked. An organizer-added
   player is still inserted as `confirmed`.
@@ -182,10 +188,14 @@ Database tests in `supabase/tests`, run on the local copy:
 - A member with an unpaid guest-only batch can register themselves.
 - `get_workspace_events` shows the next occurrence to a member who owes, and
   `requires_payment_action` matches the helper.
-- Existing suites updated: `recurring_payment_gate_test.sql` (inverted assertion
-  flips to expect the block), `waive_expired_event_debts_test.sql` (no longer
-  waives), `waitlist_promotion_test.sql`, and the guest suites that asserted the
-  removed refusal.
+- Existing suites updated: `recurring_payment_gate_test.sql` (the hold and the
+  "no block" probe flip to "shown" and "blocked"), `linger_unpaid_occurrence_test.sql`
+  (next week is shown while owed), `merge_guests_and_waitlist_test.sql` (a paid
+  promotion writes `waitlist_promoted_unpaid`), and
+  `register_event_guest_only_test.sql` (the removed refusal).
+  `waive_expired_event_debts_test.sql` stays as it is: the function is kept and
+  still waives when called directly; the new test asserts the job no longer
+  calls it.
 
 Edge Function test: `copy_test.ts` covers `waitlist_promoted_unpaid`.
 
