@@ -526,18 +526,17 @@ begin
     raise exception 'FAIL: existing confirm_payment missed guests';
   end if;
 
-  -- An organizer who has added nowhere to pay does not block guests. The
-  -- guest destination is only read to register, and every shipped client
-  -- stops on 'payment_method_required', so it answers 'available' with an
-  -- empty list (20260928100000_registration_without_payment_method).
+  -- The read and write surfaces deliberately differ now. Asking where to pay
+  -- still reports that the organizer has added nowhere to pay; taking a seat
+  -- no longer needs an answer to that question, so it succeeds anyway — the
+  -- same way register_event_seat seats the member on such an event.
   update public.events
   set payment_method_id = null,
       payment_method_ids = '{}'::uuid[]
   where id = v_paid_event_id;
   perform pg_temp.set_auth('44000000-0000-0000-0000-000000000002');
   v_destination := public.get_event_guest_payment_destination(v_paid_event_id);
-  if v_destination->>'status' <> 'available'
-     or jsonb_array_length((v_destination->'payment_methods')::jsonb) <> 0 then
+  if v_destination->>'status' <> 'payment_method_required' then
     raise exception 'FAIL: missing guest destination %', v_destination;
   end if;
   v_result := public.register_event_guests(
