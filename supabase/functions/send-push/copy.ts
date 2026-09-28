@@ -5,6 +5,7 @@
 export function copyFor(
   type: string,
   eventName: string,
+  details: CopyDetails = {},
 ): { title: string; body: string } | null {
   switch (type) {
     case "payment_submitted":
@@ -112,7 +113,63 @@ export function copyFor(
         title: "تمرين هذا الأسبوع متخطّى",
         body: `أُلغي ${eventName}. افتح التمرين لمعرفة السبب والتفاصيل.`,
       };
+    case "member_registered": {
+      const guests = details.guestCount ?? 0;
+      const verb = guests > 0 ? `سجّل ومعه ${guestPhrase(guests)}` : "سجّل";
+      return {
+        title: "تسجيل جديد ⚽",
+        body: registrationBody(details, verb, eventName),
+      };
+    }
+    case "member_added_guests":
+      return {
+        title: "تسجيل جديد ⚽",
+        body: registrationBody(
+          details,
+          `سجّل ${guestPhrase(details.guestCount ?? 1)}`,
+          eventName,
+        ),
+      };
     default:
       return null;
   }
+}
+
+// What the queue row carries beyond its type, for copy that names who acted.
+export type CopyDetails = {
+  actorName?: string | null;
+  guestCount?: number | null;
+  fillPct?: number | null;
+};
+
+const ARABIC_DIGITS = "٠١٢٣٤٥٦٧٨٩";
+const arabicNumber = (n: number) =>
+  String(n).replace(/[0-9]/g, (d) => ARABIC_DIGITS[Number(d)]);
+
+// Arabic counts: one and two have their own words, three to ten take the
+// plural, eleven and up take the singular.
+function guestPhrase(n: number): string {
+  if (n === 1) return "ضيف";
+  if (n === 2) return "ضيفين";
+  if (n <= 10) return `${arabicNumber(n)} ضيوف`;
+  return `${arabicNumber(n)} ضيف`;
+}
+
+// Appended to the organizer's registration push when the tap crossed a
+// milestone, so one tap is one push.
+const FILL_SUFFIX: Record<number, string> = {
+  25: ". ربع المقاعد انحجزت",
+  50: ". نص المقاعد انحجزت 🔥",
+  75: ". باقي ربع المقاعد ⏳",
+  100: " واكتمل العدد 🎉",
+};
+
+function registrationBody(
+  details: CopyDetails,
+  verb: string,
+  eventName: string,
+): string {
+  const name = details.actorName?.trim() || "لاعب";
+  const suffix = details.fillPct ? FILL_SUFFIX[details.fillPct] ?? "" : "";
+  return `${name} ${verb} في ${eventName}${suffix}`;
 }
