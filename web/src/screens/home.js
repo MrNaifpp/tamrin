@@ -457,14 +457,15 @@ function Welcome({ profile, onJoin }) {
     <div class="welcome enter-fade">
       <h1>حيّاك${name ? ` ${name}` : ''}</h1>
       <p class="welcome-sub">اختر كيف تبدأ، والباقي علينا.</p>
-      <a class="welcome-card" href=${APP_STORE_URL} target="_blank" rel="noopener">
+      <div class="welcome-card is-disabled" aria-disabled="true">
         <span class="welcome-icon">✨</span>
         <span class="grow">
           <strong>أنشئ تمرينك</strong>
           <span>رتّب روتين اللعب وادعُ الربع</span>
-          <span class="welcome-note">إنشاء التمارين من تطبيق تمرين على الآيفون</span>
+          <span class="welcome-note">متاح في تطبيق تمرين على الآيفون فقط</span>
         </span>
-      </a>
+        <a class="app-pill" href=${APP_STORE_URL} target="_blank" rel="noopener">حمّل التطبيق</a>
+      </div>
       <button class="welcome-card" onClick=${onJoin}>
         <span class="welcome-icon"><${Icon.link} /></span>
         <span class="grow">
@@ -492,14 +493,15 @@ function QuickAddSheet({ onClose, onJoin }) {
             <span>أدخل رمز الدعوة الذي وصلك من المشرف</span>
           </span>
         </button>
-        <a class="quick-row" href=${APP_STORE_URL} target="_blank" rel="noopener">
+        <div class="quick-row is-disabled" aria-disabled="true">
           <span class="quick-tile"><${Icon.people} /></span>
           <span class="grow">
             <strong>تمرين جديد</strong>
             <span>ابدأ تمرينًا مستقلًا وادعُ أعضاءه</span>
-            <span class="quick-note">من تطبيق تمرين على الآيفون</span>
+            <span class="quick-note">متاح في تطبيق تمرين على الآيفون فقط</span>
           </span>
-        </a>
+          <a class="app-pill" href=${APP_STORE_URL} target="_blank" rel="noopener">حمّل التطبيق</a>
+        </div>
       </div>
     <//>
   `
