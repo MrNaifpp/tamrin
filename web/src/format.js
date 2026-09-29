@@ -85,3 +85,43 @@ export function relativeWhen(date) {
   const days = Math.round(hours / 24)
   return `بعد ${counted(days, { singular: 'يوم', dual: 'يومين', plural: 'أيام' })}`
 }
+
+const monthFormatter = new Intl.DateTimeFormat(LOCALE, { month: 'long' })
+const yearFormatter = new Intl.DateTimeFormat(LOCALE, { year: 'numeric' })
+const fullDateFormatter = new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'long', year: 'numeric' })
+
+/// The poster's one line: «الأربعاء، 12 أغسطس، 9:00 م».
+export function posterWhen(date) {
+  if (!date) return ''
+  return `${arabicDay(date)}، ${arabicDate(date)}، ${arabicTime(date)}`
+}
+
+/// The archive card's line, which carries the year: «الأربعاء، 12 أغسطس 2026، 9:00 م».
+export function archiveWhen(date) {
+  if (!date) return ''
+  return `${arabicDay(date)}، ${fullDateFormatter.format(date)}، ${arabicTime(date)}`
+}
+
+/// «أغسطس», or «أغسطس 2025» when it is not this year.
+export function monthHeading(date) {
+  const month = monthFormatter.format(date)
+  return date.getFullYear() === new Date().getFullYear() ? month : `${month} ${yearFormatter.format(date)}`
+}
+
+/// «تمرين واحد», «تمرينان», «5 تمارين», «12 تمرينًا» — the archive's count.
+export function countedWorkouts(value) {
+  const n = Number(value) || 0
+  if (n === 1) return 'تمرين واحد'
+  if (n === 2) return 'تمرينان'
+  const lastTwo = Math.abs(n) % 100
+  return lastTwo >= 3 && lastTwo <= 10 ? `${n} تمارين` : `${n} تمرينًا`
+}
+
+/// Coalesce(end, start) < now — the one rule client and server share for
+/// "this workout is over".
+export function isPast(event, now = Date.now()) {
+  const end = parseDate(event?.end_date) ?? parseDate(event?.start_date)
+  return end ? end.getTime() < now : false
+}
+
+NOUNS.rating = { singular: 'تقييم', dual: 'تقييمين', plural: 'تقييمات' }

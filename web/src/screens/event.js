@@ -1,31 +1,40 @@
 import { html, useState, useEffect, useCallback } from '../../vendor/preact.js'
 import {
-  getEventById, getEventParticipants, getEventPaymentDestination,
-  leaveWaitlist, joinWaitlist, getMyWorkspaces
+  getEventById, getEventParticipants, getEventPaymentDestination, getMyWorkspaces,
+  getEventLineup, createCardPayment, removeMyGuest
 } from '../api.js'
 import { goBack, navigate } from '../router.js'
-import { Spinner, Icon, Toast, RowCard, artFor, fadeInImage } from '../ui.js'
-import { parseDate, arabicDay, arabicTime, counted, NOUNS } from '../format.js'
+import { Spinner, Icon, Toast, RowCard, eventArt, sportOf, usesFootballFeatures, fadeInImage } from '../ui.js'
+import { parseDate, arabicDay, arabicTime, counted, NOUNS, isPast } from '../format.js'
 import { APP_STORE_URL } from '../config.js'
 import { DeclineSheet } from './decline.js'
 import { RegistrationSheet } from './registration.js'
+import { CardPaymentSheet, resumeCardPayment, verifyMessage } from './card.js'
+import { LineupSection, resolveLineup } from './lineup.js'
+import { PlayerSheet } from './rating.js'
+import { ConfirmSheet } from './confirm.js'
 
-/// EventHeroDetailView: artwork at the top, then one panel carrying its own
-/// frost, so no card is ever left sitting on bare artwork.
+/// EventDetailView: artwork at the top, then one panel carrying its own
+/// frost. Everything the member does with an exercise happens here now —
+/// the poster on Home only opens it.
 export function EventScreen({ eventId, entry, session, profile }) {
   const userId = session.user.id
   const [event, setEvent] = useState(null)
   const [roster, setRoster] = useState(null)
   const [destination, setDestination] = useState(null)
-  const [ownedWorkspaces, setOwnedWorkspaces] = useState([])
+  const [workspace, setWorkspace] = useState(null) // the member's groups, once loaded
+  const [lineupRecord, setLineupRecord] = useState(null)
   const [error, setError] = useState(null)
   const [toast, setToast] = useState(null)
-  const [sheet, setSheet] = useState(null)
+  const [sheet, setSheet] = useState(null) // register | guests | pay | decline | card
+  const [quote, setQuote] = useState(null)
+  const [paying, setPaying] = useState(false)
+  const [player, setPlayer] = useState(null)
+  const [removing, setRemoving] = useState(null)
   const [busy, setBusy] = useState(false)
   const [handledEntry, setHandledEntry] = useState(false)
   // Where the panel's top edge currently sits, so its frost dissolves in at
-  // the panel's own edge rather than at a fixed point on the screen — the
-  // same thing panelTop does on the phone.
+  // the panel's own edge rather than at a fixed point on the screen.
   const [panelTop, setPanelTop] = useState(300)
 
   useEffect(() => {
@@ -37,42 +46,73 @@ export function EventScreen({ eventId, entry, session, profile }) {
   const load = useCallback(async () => {
     const record = await getEventById(eventId)
     setEvent(record)
-    const [rows, payment] = await Promise.all([
+    const paid = Number(record.total_price ?? 0) > 0 || Number(record.price_per_person ?? 0) > 0
+    const [rows, payment, lineup] = await Promise.all([
       getEventParticipants(eventId).catch(() => null),
-      Number(record.total_price ?? 0) > 0
-        ? getEventPaymentDestination(eventId).catch(() => null)
-        : Promise.resolve(null)
+      paid ? getEventPaymentDestination(eventId).catch(() => null) : Promise.resolve(null),
+      getEventLineup(eventId).catch(() => null)
     ])
     setRoster(rows)
     setDestination(payment)
+    setLineupRecord(lineup)
     return { record, rows }
   }, [eventId])
-
-  useEffect(() => {
-    let live = true
-    load()
-      .then(({ record, rows }) => {
-        if (!live || handledEntry || !entry) return
-        setHandledEntry(true)
-        const mine = rows?.find((row) => row.user_id === userId && !row.is_waitlisted)
-        // The card's own button opens the same sheet it would have taken two
-        // taps to reach — «سجّل حضورك» lands on registration, «دفع القطة» on
-        // the transfer.
-        if (entry === 'register' && !mine) setSheet('register')
-        if (entry === 'pay' && mine) setSheet('pay')
-      })
-      .catch((failure) => live && setError(failure.message))
-    getMyWorkspaces()
-      .then((list) => live && setOwnedWorkspaces(list.filter((w) => w.owner_id === userId).map((w) => w.id)))
-      .catch(() => {})
-    return () => { live = false }
-  }, [load])
 
   const refresh = useCallback(async () => {
     try { await load() } catch (failure) { setError(failure.message) }
   }, [load])
 
   const flash = useCallback((text) => setToast(text), [])
+
+  /// «دفع القطة»: the payment is created on the tap, not when the page opens.
+  /// A group with a verified recipient pays by card; one that takes transfers
+  /// by hand gets the transfer sheet.
+  const beginPayment = useCallback(async (current) => {
+    setPaying(true)
+    try {
+      const answer = await createCardPayment(current.id)
+      switch (answer?.status) {
+        case 'ready': setQuote(answer); setSheet('card'); break
+        case 'recipient_not_onboarded': setSheet('pay'); break
+        case 'event_closed': flash('أُغلق التسجيل لهذا الموعد.'); break
+        default: await refresh()
+      }
+    } catch (failure) {
+      flash(failure.message)
+    } finally {
+      setPaying(false)
+    }
+  }, [refresh])
+
+  useEffect(() => {
+    let live = true
+    load()
+      .then(async ({ record, rows }) => {
+        if (!live) return
+        // Back from the bank's 3-D Secure page: settle before anything else.
+        const returned = await resumeCardPayment(record.id).catch(() => null)
+        if (returned) {
+          const message = verifyMessage(returned)
+          flash(message ?? 'دُفعت القطة وتأكد مقعدك')
+          await refresh()
+          return
+        }
+        if (handledEntry || !entry) return
+        setHandledEntry(true)
+        const mine = rows?.find((row) => row.user_id === userId && !row.guest_name && !row.is_waitlisted)
+        // The entry segment opens the step it names: registration for
+        // «سجّل», and the payment for an exercise still owed.
+        if (entry === 'register' && !mine && !isPast(record)) setSheet('register')
+        if (entry === 'pay') beginPayment(record)
+      })
+      .catch((failure) => live && setError(failure.message))
+    // The group decides the sport, and the sport decides the photo, so the
+    // page waits for it rather than drawing one picture and swapping it.
+    getMyWorkspaces()
+      .then((list) => live && setWorkspace(list ?? []))
+      .catch(() => live && setWorkspace([]))
+    return () => { live = false }
+  }, [load])
 
   if (error) {
     return html`
@@ -82,39 +122,72 @@ export function EventScreen({ eventId, entry, session, profile }) {
       </div></div></div>
     `
   }
-  if (!event) return html`<div class="app"><${Spinner} /></div>`
+  if (!event || workspace === null) return html`<div class="app"><${Spinner} /></div>`
 
-  const art = artFor(event.id)
+  const group = Array.isArray(workspace) ? workspace.find((w) => w.id === event.workspace_id) ?? null : null
+  const sport = sportOf(group)
+  const football = usesFootballFeatures(sport)
+  const art = eventArt(event.id, sport)
   const startAt = parseDate(event.start_date)
   const cancelled = Boolean(event.cancelled_at)
+  const past = isPast(event)
+  const started = startAt ? startAt.getTime() <= Date.now() : false
   const price = Number(event.price_per_person ?? 0)
-  const isPaid = Number(event.total_price ?? 0) > 0
+  const isPaid = Number(event.total_price ?? 0) > 0 || price > 0
   const seats = roster?.filter((row) => !row.is_waitlisted) ?? []
   const waiting = roster?.filter((row) => row.is_waitlisted) ?? []
-  const mine = roster?.find((row) => row.user_id === userId && !row.is_waitlisted) ?? null
+  const mine = roster?.find((row) => row.user_id === userId && !row.guest_name && !row.is_waitlisted) ?? null
   const myWait = roster?.find((row) => row.user_id === userId && row.is_waitlisted) ?? null
-  const myGuests = roster?.filter((row) => !row.user_id && row.added_by === userId) ?? []
-  const isOwner = ownedWorkspaces.includes(event.workspace_id)
+  const myGuests = roster?.filter((row) => !row.user_id && row.added_by === userId && !row.is_waitlisted) ?? []
+  const isOwner = group?.owner_id === userId
   const capacity = event.max_participants ?? 0
   const full = capacity > 0 && seats.length >= capacity
   const closedAtCapacity = full && event.capacity_policy === 'closed'
-  const owes = isPaid && mine && mine.payment_status === 'pending' && !mine.payment_declared_at
-  const awaiting = isPaid && mine?.payment_declared_at && mine.payment_status === 'pending'
-  const settled = isPaid && mine?.payment_status === 'confirmed'
 
-  // Which control is on screen. When it changes the block is re-created, so
-  // the new state rises into place instead of replacing the old one mid-frame.
+  // Owed covers the member's own seat and any guest they added: a guest added
+  // after paying brings the pay button back.
+  const awaiting = (row) => row.payment_status === 'pending' && !row.payment_declared_at
+  const owes = isPaid && Boolean(mine) && [mine, ...myGuests].some(awaiting)
+  const declared = isPaid && mine?.payment_status === 'pending' && Boolean(mine?.payment_declared_at)
+  const settled = isPaid && Boolean(mine) && !owes && !declared
+  const overdue = past && !cancelled && !isOwner && isPaid && [mine, ...myGuests].filter(Boolean).some(awaiting)
+
+  const lineup = !cancelled ? resolveLineup(lineupRecord, roster) : null
+
+  const refundNotice = isPaid
+    ? (started ? 'بدأ التمرين، فلن يُسترجع المبلغ.' : 'ما دفعته بالبطاقة يُسترجع إليها. التحويل البنكي يُرتَّب مع المشرف.')
+    : null
+
   const ctaKey = [
-    myWait ? 'queue' : mine ? 'seat' : full ? 'full' : 'open',
-    owes ? 'owes' : awaiting ? 'awaiting' : settled ? 'settled' : '',
-    myGuests.length
+    cancelled ? 'cancelled' : overdue ? 'overdue' : past ? 'past' : myWait ? 'queue' : mine ? 'seat' : full ? 'full' : 'open',
+    owes ? 'owes' : declared ? 'declared' : settled ? 'settled' : '',
+    myGuests.length,
+    paying ? 'paying' : ''
   ].join('-')
 
-  async function run(work, success) {
+  const nameOf = (row) => row.display_name ?? row.guest_name ?? 'لاعب'
+
+  function openPlayer(row, seatNumber) {
+    const adder = row.added_by ? roster?.find((r) => r.user_id === row.added_by && !r.guest_name) : null
+    const mayRemove = !row.user_id && row.added_by === userId && !row.added_manually && !past
+    setPlayer({
+      userId: row.user_id,
+      participantId: row.participant_id,
+      name: nameOf(row),
+      avatarUrl: row.avatar_url,
+      position: row.player_position,
+      seatNumber,
+      registeredBy: !row.user_id ? (row.added_manually ? 'المشرف' : adder ? nameOf(adder) : null) : null,
+      joinedAt: row.joined_at,
+      removable: mayRemove
+    })
+  }
+
+  async function removeGuest(row) {
     setBusy(true)
     try {
-      await work()
-      if (success) flash(success)
+      await removeMyGuest(row.participant_id)
+      flash(`أُزيل ${nameOf(row)} وتحرر مقعده`)
       await refresh()
     } catch (failure) {
       flash(failure.message)
@@ -131,7 +204,12 @@ export function EventScreen({ eventId, entry, session, profile }) {
         <div class="event-shade"></div>
 
         <button class="glass-circle event-back" onClick=${goBack} aria-label="إغلاق">
-          <${Icon.back} />
+          <${Icon.close} />
+        </button>
+        <button class="glass-circle event-details" disabled=${!event.workspace_id}
+                onClick=${() => navigate({ name: 'team', workspaceId: event.workspace_id, eventId: event.id })}
+                aria-label="تفاصيل التمرين" title="يفتح قالب التمرين وأعضاءه وطرق الدفع">
+          <${Icon.details} />
         </button>
 
         <div class="event-scroll">
@@ -143,54 +221,62 @@ export function EventScreen({ eventId, entry, session, profile }) {
               <div class="when">يوم ${arabicDay(startAt)}، الساعة ${arabicTime(startAt)}</div>
             </div>
 
-            ${cancelled
-              ? html`
-                  <div class="card enter" style="--i:1">
-                    <div style="font-size:14px;font-weight:700;margin-bottom:8px">ⓘ سبب التخطي</div>
-                    <div style="font-size:14px;color:rgba(255,255,255,0.76)">
-                      ${event.cancellation_reason_text
-                        || reasonLabel(event.cancellation_reason_code)
-                        || 'موعد هذا الأسبوع متخطّى، وتستمر المواعيد القادمة كالمعتاد.'}
-                    </div>
-                  </div>
-                `
-              : isOwner
-                ? html`<${OwnerNote} />`
-                : html`
-                    <div class="change" key=${ctaKey}><${MemberCTA}
-                      mine=${mine}
-                      myWait=${myWait}
-                      myGuests=${myGuests}
-                      isPaid=${isPaid}
-                      owes=${owes}
-                      awaiting=${awaiting}
-                      settled=${settled}
-                      full=${full}
-                      closedAtCapacity=${closedAtCapacity}
-                      locked=${Boolean(event.registration_locked)}
-                      busy=${busy}
-                      onRegister=${() => setSheet('register')}
-                      onPay=${() => setSheet('pay')}
-                      onGuests=${() => setSheet('guests')}
-                      onDecline=${() => setSheet('decline')}
-                      onLeaveQueue=${() => run(() => leaveWaitlist(event.id, userId), 'انسحبت من قائمة الانتظار')}
-                      onJoinQueue=${() => run(() => joinWaitlist(event.id, userId), 'انضممت لقائمة الانتظار')}
-                    /></div>
-                  `}
+            <div class="change" key=${ctaKey}>
+              ${cancelled
+                ? html`<${CancellationPanel} event=${event} />`
+                : overdue
+                  ? html`
+                      <div class="card vstack enter" style="--i:1;gap:12px">
+                        <div class="panel-title"><${Icon.banknote} /> باقي دفع القطة</div>
+                        <div class="panel-body">انتهى الموعد، وتقدر تسدد قطتك الآن قبل الانتقال للموعد القادم.</div>
+                        <${PayControl} paying=${paying} onPay=${() => beginPayment(event)} />
+                      </div>
+                    `
+                  : past
+                    ? html`
+                        <div class="card historical enter" style="--i:1">
+                          <span class="historical-icon"><${Icon.history} /></span>
+                          <span>
+                            <strong>تمرين سابق</strong>
+                            <span>انتهى التسجيل والتعديل لهذا الموعد</span>
+                          </span>
+                        </div>
+                      `
+                    : isOwner
+                      ? html`<${OwnerNote} />`
+                      : html`<${MemberCTA}
+                          mine=${mine}
+                          myWait=${myWait}
+                          myGuests=${myGuests}
+                          isPaid=${isPaid}
+                          owes=${owes}
+                          declared=${declared}
+                          settled=${settled}
+                          full=${full}
+                          closedAtCapacity=${closedAtCapacity}
+                          rosterFailed=${roster === null}
+                          busy=${busy}
+                          paying=${paying}
+                          onRetry=${refresh}
+                          onRegister=${() => setSheet('register')}
+                          onPay=${() => beginPayment(event)}
+                          onReview=${() => setSheet('pay')}
+                          onGuests=${() => setSheet('guests')}
+                          onDecline=${() => setSheet('decline')}
+                          onRemoveGuest=${(row) => setRemoving(row)}
+                        />`}
+            </div>
 
-            ${event.location &&
+            ${(event.location?.trim() || event.latitude != null) &&
             html`
               <a class="link-row enter" style="--i:2"
-                 href=${event.latitude != null
-                   ? `https://maps.google.com/?q=${event.latitude},${event.longitude}`
-                   : `https://maps.google.com/?q=${encodeURIComponent(event.location)}`}
-                 target="_blank" rel="noopener">
+                 href=${directionsUrl(event)} target="_blank" rel="noopener"
+                 aria-label=${event.location ? `الاتجاهات إلى ${event.location}` : 'الاتجاهات'}>
                 <${Icon.directions} />
-                <span class="truncate">${event.location}</span>
+                <span class="truncate">${event.location?.trim() || 'الاتجاهات'}</span>
                 <span class="chev"><${Icon.chevronStart} /></span>
               </a>
             `}
-
 
             <div class="card enter" style="--i:3">
               <div class="progress-head">
@@ -208,6 +294,8 @@ export function EventScreen({ eventId, entry, session, profile }) {
                   : null}
             </div>
 
+            ${lineup && html`<${LineupSection} lineup=${lineup} sport=${sport} meId=${userId} art=${art} />`}
+
             <div class="section-label enter" style="--i:4">القائمة</div>
             ${roster === null
               ? html`<${Spinner} />`
@@ -219,10 +307,11 @@ export function EventScreen({ eventId, entry, session, profile }) {
                           <${RowCard}
                             key=${person.participant_id}
                             index=${5 + position}
-                            name=${person.display_name ?? person.guest_name ?? 'لاعب'}
-                            subtitle=${rosterSubtitle(person, userId)}
+                            name=${nameOf(person)}
+                            subtitle=${rosterSubtitle(person, roster)}
                             avatarUrl=${person.avatar_url}
-                            accessory=${statusAccessory(person, isPaid, userId)}
+                            accessory=${statusAccessory(person, isPaid)}
+                            onClick=${() => openPlayer(person, position + 1)}
                           />
                         `
                       )}
@@ -271,9 +360,23 @@ export function EventScreen({ eventId, entry, session, profile }) {
         }}
       />`}
 
+      ${sheet === 'card' && quote &&
+      html`<${CardPaymentSheet}
+        event=${event}
+        quote=${quote}
+        onClose=${() => { setSheet(null); setQuote(null) }}
+        onPaid=${async () => {
+          setSheet(null)
+          setQuote(null)
+          flash('دُفعت القطة وتأكد مقعدك')
+          await refresh()
+        }}
+      />`}
+
       ${sheet === 'decline' &&
       html`<${DeclineSheet}
         eventId=${event.id}
+        refundNotice=${refundNotice}
         onClose=${() => setSheet(null)}
         onDone=${async () => {
           setSheet(null)
@@ -281,25 +384,60 @@ export function EventScreen({ eventId, entry, session, profile }) {
           await refresh()
         }}
       />`}
+
+      ${player &&
+      html`<${PlayerSheet}
+        player=${player}
+        workspaceId=${event.workspace_id}
+        football=${football}
+        meId=${userId}
+        onClose=${() => setPlayer(null)}
+        onRemove=${player.removable
+          ? () => { const row = roster.find((r) => r.participant_id === player.participantId); setPlayer(null); if (row) setRemoving(row) }
+          : null}
+      />`}
+
+      ${removing &&
+      html`<${ConfirmSheet}
+        title="إزالة اللاعب؟"
+        message=${`سيُزال ${nameOf(removing)} من قائمة «${event.name}» ويتحرر مقعده.${isPaid && !started ? ' وما دفعته عنه بالبطاقة يُسترجع إليها.' : ''}`}
+        confirm="إزالة"
+        cancel="تراجع"
+        onClose=${() => setRemoving(null)}
+        onConfirm=${() => { const row = removing; setRemoving(null); removeGuest(row) }}
+      />`}
     </div>
   `
 }
 
 /// participationCTA — what the member can do, in the app's order: the seat,
-/// then the money, then the way out.
+/// then the money, then their guests, then the way out.
 function MemberCTA({
-  mine, myWait, myGuests, isPaid, owes, awaiting, settled, full, closedAtCapacity, locked,
-  busy, onRegister, onPay, onGuests, onDecline, onLeaveQueue, onJoinQueue
+  mine, myWait, myGuests, isPaid, owes, declared, settled, full, closedAtCapacity, rosterFailed,
+  busy, paying, onRetry, onRegister, onPay, onReview, onGuests, onDecline, onRemoveGuest
 }) {
+  if (rosterFailed) {
+    return html`<button class="action action-glass" onClick=${onRetry}>تعذر التحقق من تسجيلك. حاول مجددًا</button>`
+  }
+
   if (myWait) {
     return html`
-      <div class="vstack">
-        <div class="state-row"><span class="dot-check dot-orange"><${Icon.clock} /></span>أنت في قائمة الانتظار</div>
-        <button class="status-row" disabled=${busy} onClick=${onLeaveQueue}>
-          <span class="dot-check dot-orange"><${Icon.clock} /></span>
-          مكانك في الدور محفوظ
-          <span class="leave">انسحب</span>
-        </button>
+      <button class="status-row" disabled=${busy} onClick=${onDecline} title="يفتح تأكيد الاعتذار عن الموعد">
+        <span class="dot-check dot-orange"><${Icon.clock} /></span>
+        أنت في قائمة الانتظار
+        <span class="leave">انسحب</span>
+      </button>
+    `
+  }
+
+  if (mine && declared) {
+    return html`
+      <div class="card vstack" style="gap:12px">
+        <div class="state-row" style="padding:0"><span class="dot-check dot-orange"><${Icon.clock} /></span>بانتظار تأكيد الدفع</div>
+        <div class="hstack" style="gap:8px">
+          <button class="pill-button grow" onClick=${onReview}>مراجعة التفاصيل</button>
+          <button class="pill-button pill-danger grow" onClick=${onDecline}>إلغاء الطلب</button>
+        </div>
       </div>
     `
   }
@@ -307,46 +445,73 @@ function MemberCTA({
   if (mine) {
     return html`
       <div class="vstack">
-        ${owes && html`
-          <button class="action action-money" onClick=${onPay}>
-            <${Icon.banknote} /> دفع القطة
-          </button>`}
-        ${awaiting && html`
-          <div class="state-row"><span class="dot-check dot-orange"><${Icon.clock} /></span>بانتظار تأكيد وصول القطة</div>`}
-        ${settled && html`
-          <div class="state-row"><span class="dot-check dot-green"><${Icon.seal} /></span>القطة مدفوعة</div>`}
-        <button class="action action-glass" onClick=${onGuests}>
+        ${owes && html`<${PayControl} paying=${paying} onPay=${onPay} />`}
+        ${settled && isPaid && html`
+          <div class="paid-pill"><span class="dot-check dot-green"><${Icon.seal} /></span>القطة مدفوعة</div>`}
+        ${myGuests.length > 0 && html`
+          <div class="my-guests">
+            <div class="my-guests-title">ضيوفك</div>
+            ${myGuests.map((guest) => html`
+              <div class="guest-pill" key=${guest.participant_id}>
+                <span class="grow truncate">${guest.guest_name}</span>
+                <button class="guest-minus" disabled=${busy} onClick=${() => onRemoveGuest(guest)}
+                        aria-label=${`إزالة ${guest.guest_name}`}><${Icon.minus} /></button>
+              </div>
+            `)}
+          </div>`}
+        <button class="action action-glass" onClick=${onGuests} title="يفتح تسجيل ضيوف جدد دون تغيير تسجيلك">
           <${Icon.personPlus} /> سجّل معك أحد
         </button>
-        <button class="status-row" onClick=${onDecline}>
+        <button class="status-row" onClick=${onDecline} title="يفتح تأكيد الاعتذار عن الموعد">
           <span class="dot-check dot-lime"><${Icon.seal} /></span>
-          مكانك محفوظ${myGuests.length ? ` ومعك ${counted(myGuests.length, NOUNS.player)}` : ''}
+          مكانك محفوظ
           <span class="leave">اعتذر</span>
         </button>
       </div>
     `
   }
 
-  if (locked) {
-    return html`<div class="action action-quiet">التسجيل مقفل</div>`
-  }
-
   if (closedAtCapacity) {
-    return html`<div class="action action-quiet">🔒 التسجيل مغلق</div>`
+    return html`<div class="action action-quiet" aria-label="التسجيل مغلق، اكتمل العدد"><${Icon.lock} /> التسجيل مغلق</div>`
   }
 
   return html`
-    <button class="action action-prominent" disabled=${busy}
-            onClick=${full ? onJoinQueue : onRegister}>
-      ${full ? '⏳ سجل كاحتياط' : '+ سجل في التمرين'}
+    <button class="action action-prominent" disabled=${busy} onClick=${onRegister}>
+      ${full ? html`<${Icon.clock} /> سجل كاحتياط` : html`<${Icon.plus} /> سجل في التمرين`}
     </button>
+  `
+}
+
+/// payControl: a spinner while the payment is prepared, otherwise «دفع القطة».
+function PayControl({ paying, onPay }) {
+  if (paying) {
+    return html`<div class="action action-quiet" aria-label="جارٍ تجهيز الدفع"><span class="spinner spinner-small"></span></div>`
+  }
+  return html`
+    <button class="action action-money" onClick=${onPay} title="يجهّز الدفع ويفتح وسيلة الدفع المتاحة">
+      <${Icon.banknote} /> دفع القطة
+    </button>
+  `
+}
+
+function CancellationPanel({ event }) {
+  const reason = event.cancellation_reason_text || reasonLabel(event.cancellation_reason_code)
+  return html`
+    <div class="card enter" style="--i:1">
+      ${reason
+        ? html`
+            <div class="panel-title">ⓘ سبب التخطي</div>
+            <div class="panel-body">${reason}</div>
+          `
+        : html`<div class="panel-body">موعد هذا الأسبوع متخطّى، وتستمر المواعيد القادمة كالمعتاد.</div>`}
+    </div>
   `
 }
 
 function OwnerNote() {
   return html`
     <div class="notice notice-info">
-      أنت مشرف هذا التمرين. أدوات المشرف — فتح المواعيد وتعديلها، تأكيد وصول القطات، تنبيه الأعضاء —
+      أنت مشرف هذا التمرين. أدوات المشرف (فتح المواعيد وتعديلها، تأكيد وصول القطات، تقسيم الفريقين، تنبيه الأعضاء)
       موجودة في التطبيق.
       <div style="margin-top:10px">
         <a class="action action-glass" style="height:42px;font-size:14px"
@@ -356,25 +521,28 @@ function OwnerNote() {
   `
 }
 
-function rosterSubtitle(person, userId) {
-  if (!person.user_id) {
-    if (person.added_manually) return 'سجّله المشرف'
-    return person.added_by === userId ? 'سجّلته أنت' : 'ضيف'
+/// Google Maps directions: a pin when the organizer dropped one, the venue's
+/// name otherwise — EventDirections' web fallback.
+export function directionsUrl(event) {
+  if (event.latitude != null && event.longitude != null) {
+    return `https://www.google.com/maps/dir/?api=1&destination=${event.latitude},${event.longitude}`
   }
-  if (person.user_id === userId) return 'أنت'
-  return null
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(event.location ?? '')}`
 }
 
-function statusAccessory(person, isPaid, userId) {
-  if (!isPaid) return null
-  if (person.payment_status === 'pending' && !person.payment_declared_at) {
-    return html`<span class="dot-check dot-orange" title="باقي السداد">﷼</span>`
-  }
-  if (person.payment_status === 'pending') {
-    return html`<span class="dot-check dot-orange" title="بانتظار التأكيد"><${Icon.clock} /></span>`
-  }
-  if (person.payment_status === 'confirmed') {
-    return html`<span class="dot-check dot-green" title="القطة مدفوعة"><${Icon.seal} /></span>`
+function rosterSubtitle(person, roster) {
+  if (person.user_id) return null
+  if (person.added_manually) return 'سجّله المشرف'
+  const adder = roster?.find((row) => row.user_id === person.added_by && !row.guest_name)
+  const name = adder?.display_name
+  return name ? `سجّله ${name}` : null
+}
+
+/// A member sees one payment mark on other rows: the hourglass of a transfer
+/// waiting on the organizer.
+function statusAccessory(person, isPaid) {
+  if (isPaid && person.payment_status === 'pending' && person.payment_declared_at) {
+    return html`<span class="dot-check dot-orange" title="بانتظار تأكيد وصول القطة"><${Icon.clock} /></span>`
   }
   return null
 }

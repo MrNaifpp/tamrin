@@ -15,7 +15,7 @@ const REASONS = [
   { code: 'other', title: 'أخرى', free: true }
 ]
 
-export function DeclineSheet({ eventId, onClose, onDone }) {
+export function DeclineSheet({ eventId, refundNotice = null, onClose, onDone }) {
   const [step, setStep] = useState('confirm')
   const [reason, setReason] = useState(REASONS[0])
   const [text, setText] = useState('')
@@ -43,6 +43,7 @@ export function DeclineSheet({ eventId, onClose, onDone }) {
             <span style="color:var(--orange);font-size:18px">⚠︎</span>
             <p style="margin:0;font-size:17px;opacity:0.75">
               هل أنت متأكد من الاعتذار؟ سيتاح مكانك لبقية أعضاء التمرين، ويمكنك إضافة السبب بشكل اختياري.
+              ${refundNotice && html`<span style="display:block;margin-top:12px">${refundNotice}</span>`}
             </p>
           </div>
           <${SlideToConfirm} title="اسحب لتأكيد الاعتذار" onConfirm=${() => setStep('reason')} />
@@ -54,7 +55,7 @@ export function DeclineSheet({ eventId, onClose, onDone }) {
   return html`
     <${Sheet}
       title="سبب الاعتذار"
-      subtitle="اختياري، ويساعد المشرف يرتب الموعد"
+      subtitle="تحب تضيف سبب اعتذارك؟ اختياري، ويساعد المشرف يرتب الموعد."
       onClose=${onClose}
       closing=${closing}
     >
@@ -72,7 +73,7 @@ export function DeclineSheet({ eventId, onClose, onDone }) {
         </div>
         ${reason.free &&
         html`<textarea class="guest-field" style="height:88px;border-radius:20px;padding:12px 16px;resize:none"
-                       maxlength="500" placeholder="اكتب سببك"
+                       maxlength="500" placeholder="اكتب السبب"
                        value=${text} onInput=${(e) => setText(e.target.value)}></textarea>`}
         ${error && html`<div class="notice notice-error">${error}</div>`}
         <button class="action" style="background:var(--danger);color:#fff" disabled=${busy} onClick=${submit}>

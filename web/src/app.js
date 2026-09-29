@@ -65,11 +65,12 @@ function App() {
       case 'join':
         return html`<${JoinScreen} key=${route.code} code=${route.code} />`
       case 'team':
-        return html`<${TeamScreen} key=${route.workspaceId} workspaceId=${route.workspaceId} session=${session} />`
+        return html`<${TeamScreen} key=${route.workspaceId} workspaceId=${route.workspaceId} eventId=${route.eventId}
+                      session=${session} />`
       case 'settings':
         return html`<${SettingsScreen} session=${session} profile=${profile} onProfileChanged=${loadProfile} />`
       default:
-        return html`<${HomeScreen} session=${session} profile=${profile} onProfileChanged=${loadProfile} />`
+        return html`<${HomeScreen} session=${session} profile=${profile} />`
     }
   }
 
