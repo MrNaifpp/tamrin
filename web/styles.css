@@ -485,6 +485,26 @@ img { display: block; }
   display: grid; place-items: center;
   background: color-mix(in srgb, var(--accent-blue) 14%, transparent); color: var(--accent-blue);
 }
+.quick-row.is-disabled, .welcome-card.is-disabled { cursor: default; }
+/* The row reads as unavailable: the text and its tile dim, the one live
+   control inside it, the download, stays at full strength. */
+.quick-row.is-disabled > .grow, .quick-row.is-disabled > .quick-tile,
+.welcome-card.is-disabled > .grow, .welcome-card.is-disabled > .welcome-icon { opacity: 0.45; }
+.app-pill {
+  flex: 0 0 auto;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.app-pill:active { transform: scale(0.96); }
 .quick-tile-solid { background: var(--accent-blue); color: #fff; }
 
 /* PastEventsArchiveView */
