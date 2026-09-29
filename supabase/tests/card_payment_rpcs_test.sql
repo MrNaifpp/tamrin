@@ -237,4 +237,94 @@ begin
 end;
 $$;
 
+-- ============================================================
+-- Section 3: a guest added after paying can still be paid for.
+--
+-- Paying for yourself used to make any guest added afterwards
+-- unpayable: begin_card_payment answered "already paid" whenever
+-- any paid payment existed, before counting the seats still owed.
+-- ============================================================
+insert into auth.users (id, email) values
+  ('74000000-0000-0000-0000-000000000001', 'late-owner@test.local'),
+  ('74000000-0000-0000-0000-000000000002', 'late-member@test.local');
+
+insert into public.workspaces (id, name, owner_id)
+values ('74000000-0000-0000-0000-0000000000a1', 'Late Guest WS',
+        '74000000-0000-0000-0000-000000000001');
+
+insert into public.workspace_members (workspace_id, user_id) values
+  ('74000000-0000-0000-0000-0000000000a1', '74000000-0000-0000-0000-000000000001'),
+  ('74000000-0000-0000-0000-0000000000a1', '74000000-0000-0000-0000-000000000002');
+
+insert into public.workspace_moyasar_recipients
+  (workspace_id, moyasar_recipient_id, recipient_type, status, verified_at)
+values ('74000000-0000-0000-0000-0000000000a1', 'rcp_late', 'Beneficiary',
+        'verified', now());
+
+insert into public.events (id, creator_id, workspace_id, name, start_date,
+                           total_price, max_participants, published_at)
+values ('74000000-0000-0000-0000-0000000000e1',
+        '74000000-0000-0000-0000-000000000001',
+        '74000000-0000-0000-0000-0000000000a1',
+        'تمرين الضيف المتأخر', now() + interval '2 days', 600, 10, now());
+
+insert into public.event_participants (event_id, user_id, payment_status)
+values ('74000000-0000-0000-0000-0000000000e1',
+        '74000000-0000-0000-0000-000000000002', 'pending');
+
+do $$
+declare
+  v json;
+  v_first uuid;
+  v_second uuid;
+  v_confirmed int;
+begin
+  -- 1. Pay for yourself.
+  v := public.begin_card_payment('74000000-0000-0000-0000-0000000000e1',
+                                 '74000000-0000-0000-0000-000000000002');
+  v_first := (v ->> 'payment_id')::uuid;
+  v := public.settle_payment(v_first, 'pay_moy_late_1', 'paid', 'applepay', 6000, 'SAR');
+  if v ->> 'status' <> 'settled' then
+    raise exception 'FAIL: the first payment did not settle, got %', v;
+  end if;
+
+  -- 2. Bring a guest afterwards.
+  insert into public.event_participants (event_id, user_id, added_by, guest_name, payment_status)
+  values ('74000000-0000-0000-0000-0000000000e1', null,
+          '74000000-0000-0000-0000-000000000002', 'ضيف متأخر', 'pending');
+
+  -- 3. The guest is payable: one seat, its own payment.
+  v := public.begin_card_payment('74000000-0000-0000-0000-0000000000e1',
+                                 '74000000-0000-0000-0000-000000000002');
+  if v ->> 'status' <> 'ready' then
+    raise exception 'FAIL: a guest added after paying should be payable, got %', v;
+  end if;
+  if (v ->> 'seat_count')::int <> 1 or (v ->> 'amount')::int <> 6000 then
+    raise exception 'FAIL: expected 1 seat at 6000, got %', v;
+  end if;
+  v_second := (v ->> 'payment_id')::uuid;
+  if v_second = v_first then
+    raise exception 'FAIL: the guest must get its own payment, not reuse the paid one';
+  end if;
+
+  -- 4. Paying for the guest confirms them too.
+  v := public.settle_payment(v_second, 'pay_moy_late_2', 'paid', 'applepay', 6000, 'SAR');
+  select count(*) into v_confirmed from public.event_participants
+  where event_id = '74000000-0000-0000-0000-0000000000e1'
+    and payment_status = 'confirmed';
+  if v_confirmed <> 2 then
+    raise exception 'FAIL: expected both seats confirmed, got %', v_confirmed;
+  end if;
+
+  -- 5. With nothing left owing, "already paid" is the honest answer.
+  v := public.begin_card_payment('74000000-0000-0000-0000-0000000000e1',
+                                 '74000000-0000-0000-0000-000000000002');
+  if v ->> 'status' <> 'already_paid' then
+    raise exception 'FAIL: fully paid should answer already_paid, got %', v;
+  end if;
+
+  raise notice 'PASS: a guest added after paying can be paid for';
+end;
+$$;
+
 rollback;
