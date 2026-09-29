@@ -89,6 +89,14 @@ Deno.test("waitlist_promoted copy does not need the event name", () => {
   });
 });
 
+Deno.test("waitlist_promoted_unpaid copy names the event and asks to pay", () => {
+  const c = copyFor("waitlist_promoted_unpaid", "تمرين الخميس");
+  assertEquals(c, {
+    title: "لاعب اعتذر، أنت في القائمة✨",
+    body: "انضممت إلى القائمة الرئيسية في تمرين الخميس. لا تنسَ تدفع القطة 💳",
+  });
+});
+
 Deno.test("member_declined copy interpolates the event name", () => {
   const c = copyFor("member_declined", "تمرين الخميس");
   assertEquals(c, {

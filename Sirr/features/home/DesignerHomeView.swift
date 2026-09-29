@@ -469,6 +469,14 @@ struct DesignerHomeView: View {
                 .onChange(of: selected?.id) { _, newValue in
                     if newValue == nil { registrationEntryEventID = nil }
                 }
+                // A refused registration asks for the unpaid workout. Setting
+                // the cover's item to a different workout replaces the one on
+                // screen (SwiftUI dismisses and re-presents on an item change).
+                .onChange(of: feed.requestedOccurrenceID) { _, requested in
+                    guard let requested else { return }
+                    feed.requestedOccurrenceID = nil
+                    selected = feed.occurrence(withID: requested)
+                }
                 // Decode the small palette samples immediately, then prepare
                 // the display-sized photos away from the main actor. LazyVStack
                 // can otherwise encounter a PNG for the first time while the

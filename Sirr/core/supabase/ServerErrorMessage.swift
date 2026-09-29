@@ -56,6 +56,11 @@ enum ServerErrorMessage {
     }
 
     private static let table: [String: String] = [
+        // Already Arabic, and already says what to do. Listed so nothing on the
+        // way to the screen replaces it with the general apology.
+        "عليك قطة لم تُدفع من تمرين سابق. ادفعها أولاً عشان تسجّل.":
+            "عليك قطة لم تُدفع من تمرين سابق. ادفعها أولاً عشان تسجّل.",
+
         // The one a member meets in ordinary use: he owes for a week that has
         // already happened. The sentence has to carry the way out, because the
         // registration he was trying to make stays refused until he declares.

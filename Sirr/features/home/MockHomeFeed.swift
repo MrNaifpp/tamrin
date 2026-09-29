@@ -473,6 +473,14 @@ final class HomeStore {
     /// it belongs to and whether they run it or just play in it, nearest date
     /// first. History joins this list only after its lazy load, while duplicate
     /// ids from an event crossing the live/history boundary collapse to one.
+    /// A workout another screen asked Home to open, e.g. the unpaid one a
+    /// refused registration points at. Home presents it and clears this.
+    var requestedOccurrenceID: UUID?
+
+    func occurrence(withID id: UUID) -> FeedOccurrence? {
+        allOccurrences.first { $0.id == id }
+    }
+
     var allOccurrences: [FeedOccurrence] {
         let activeTeamIDs = Set(teams.map(\.id))
         var byID: [UUID: FeedOccurrence] = [:]
@@ -606,6 +614,9 @@ final class HomeStore {
             await reloadRoster(occurrence.id)
             return .success
         } catch {
+            if let unpaid = PaymentOwed.unpaidEventID(in: error) {
+                return .paymentOwed(eventId: unpaid)
+            }
             return .failure(error.localizedDescription)
         }
     }
@@ -1887,6 +1898,9 @@ final class HomeStore {
         case seatsFullOfferWaitlist
         /// Every seat is taken on a session that closes at capacity.
         case closedAtCapacity
+        /// An ended workout in this group is still unpaid, so the server
+        /// refused. The sheet offers to open it.
+        case paymentOwed(eventId: UUID)
     }
 
     /// Cancels only the visible occurrence. A recurring template remains live
@@ -1957,7 +1971,7 @@ final class HomeStore {
         if isDebugMemberFixtureEvent(occurrence.id) {
             guard var rows = rosterCache[occurrence.id] else { return .success }
             for index in rows.indices where
-                rows[index].status == .paymentPending
+                (rows[index].status == .paymentPending || rows[index].status == .awaitingPayment)
                     && rows[index].paymentOwnerId == joinerId {
                 rows[index].status = .registered
             }
@@ -2400,6 +2414,9 @@ final class HomeStore {
             }
         } catch {
             await reloadRoster(occurrence.id)
+            if let unpaid = PaymentOwed.unpaidEventID(in: error) {
+                return .paymentOwed(eventId: unpaid)
+            }
             return .failure(error.localizedDescription)
         }
     }
@@ -2609,6 +2626,9 @@ final class HomeStore {
             }
         } catch {
             await reloadRoster(occurrence.id)
+            if let unpaid = PaymentOwed.unpaidEventID(in: error) {
+                return .paymentOwed(eventId: unpaid)
+            }
             return .failure(error.localizedDescription)
         }
     }
