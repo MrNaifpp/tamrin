@@ -154,9 +154,11 @@ img { display: block; }
 .home {
   position: relative;
   height: 100dvh;
-  display: flex;
-  flex-direction: column;
   isolation: isolate;
+  /* StickyHomeHeader: 18 above the 52pt controls, 46 below them. That 46 is
+     the gap to the top of a resting card: the header's inset ends there and
+     the shelf starts. On an installed web app the status bar adds its own. */
+  --header-h: calc(18px + 52px + 46px + env(safe-area-inset-top, 0px));
 }
 .home-backdrop {
   position: fixed;
@@ -173,22 +175,30 @@ img { display: block; }
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transform: scale(1.22);
-  filter: blur(58px);
+  /* SportArtLibrary blurs a 512px copy at radius 32 and the page stretches
+     it to fill, so the blur scales with the height: 32 / 512 of it. */
+  transform: scale(1.12);
+  filter: blur(calc(100dvh * 0.0625));
 }
 .home-backdrop::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.46);
+  background: rgba(0, 0, 0, 0.42);
 }
 
 .home-header {
-  position: sticky;
+  /* Over the shelf, not above it: cards travel under the header and the
+     reveal mask below dissolves them into the backdrop, which is the header's
+     whole background. Leading (the physical right) 30, trailing 24. */
+  position: absolute;
   top: 0;
+  inset-inline: 0;
   z-index: 5;
-  padding: 18px 24px 22px 20px;
+  padding: calc(18px + env(safe-area-inset-top, 0px)) 30px 46px 24px;
+  pointer-events: none;
 }
+.home-header .home-topbar > * { pointer-events: auto; }
 .home-topbar { display: flex; align-items: center; gap: 14px; }
 
 /* The section title is the toggle between the stack and the archive. */
@@ -203,7 +213,7 @@ img { display: block; }
   text-shadow: 0 2px 14px rgba(0, 0, 0, 0.25);
 }
 .shelf-chev { color: rgba(255, 255, 255, 0.52); display: grid; place-items: center; }
-.home-control { width: 52px; height: 52px; }
+.home-topbar .home-control { width: 52px; height: 52px; }
 
 /* Glass chrome: circle button, capsule pill, action row. */
 .glass, .glass-pill, .glass-circle {
@@ -240,7 +250,38 @@ img { display: block; }
 }
 .avatar-button img { width: 100%; height: 100%; object-fit: cover; }
 
-.shelf-body { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.shelf-body { position: absolute; inset: 0; display: flex; flex-direction: column; }
+
+/* ShelfHeaderRevealMask, depth measured from the top of the screen to where a
+   resting card starts: clear to 40%, then 0.08 / 0.34 / 0.76 at 58 / 74 / 88%,
+   solid at the card's top edge. The transparent part shows the backdrop, the
+   same blurred photo, so a card sliding up blurs into it. */
+.shelf-mask {
+  -webkit-mask-image: linear-gradient(to bottom,
+    transparent 0,
+    transparent calc(var(--header-h) * 0.40),
+    rgba(0, 0, 0, 0.08) calc(var(--header-h) * 0.58),
+    rgba(0, 0, 0, 0.34) calc(var(--header-h) * 0.74),
+    rgba(0, 0, 0, 0.76) calc(var(--header-h) * 0.88),
+    #000 var(--header-h));
+  mask-image: linear-gradient(to bottom,
+    transparent 0,
+    transparent calc(var(--header-h) * 0.40),
+    rgba(0, 0, 0, 0.08) calc(var(--header-h) * 0.58),
+    rgba(0, 0, 0, 0.34) calc(var(--header-h) * 0.74),
+    rgba(0, 0, 0, 0.76) calc(var(--header-h) * 0.88),
+    #000 var(--header-h));
+}
+
+/* ShelfBottomScrim: a very light dissolve under the stack, to the bottom edge. */
+.shelf-bottom-scrim {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 96px;
+  background: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.08));
+  pointer-events: none;
+}
 
 /* The stack. Each card is a screenful minus 96, one per swipe, 80 apart, so
    the next card's top edge peeks under the one in front. */
@@ -249,14 +290,13 @@ img { display: block; }
   min-height: 0;
   overflow-y: auto;
   scroll-snap-type: y mandatory;
-  padding: 0 var(--page-pad) 96px;
+  /* The header's inset on top, the 96 of clearance beneath. */
+  scroll-padding-top: var(--header-h);
+  padding: var(--header-h) var(--page-pad) 96px;
   display: flex;
   flex-direction: column;
   gap: 80px;
   scrollbar-width: none;
-  /* ShelfHeaderRevealMask: cards fade out as they slide under the title. */
-  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0.4) 0, #000 60px);
-  mask-image: linear-gradient(to bottom, rgba(0,0,0,0.4) 0, #000 60px);
 }
 .poster-scroll::-webkit-scrollbar { display: none; }
 
@@ -381,7 +421,7 @@ img { display: block; }
 
 /* EmptyScheduleCard */
 .empty-poster {
-  margin: 0 var(--page-pad) 96px;
+  margin: var(--header-h) var(--page-pad) 96px;
   flex: 1;
   min-height: 320px;
   border-radius: var(--poster-radius);
@@ -452,7 +492,7 @@ img { display: block; }
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 16px var(--page-pad) 96px;
+  padding: calc(var(--header-h) + 16px) var(--page-pad) 96px;
   display: flex;
   flex-direction: column;
   gap: 44px;

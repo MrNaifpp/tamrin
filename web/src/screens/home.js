@@ -165,7 +165,7 @@ export function HomeScreen({ session, profile }) {
           </div>
         </header>
 
-        <div class="change shelf-body" key=${showsPast ? 'past' : 'upcoming'}>
+        <div class="change shelf-body ${shelf.length ? 'shelf-mask' : ''}" key=${showsPast ? 'past' : 'upcoming'}>
           ${showsPast
             ? html`<${PastArchive}
                 past=${past}
@@ -188,6 +188,7 @@ export function HomeScreen({ session, profile }) {
                   onOpen=${openEvent}
                 />`}
         </div>
+        ${!showsPast && upcoming.length > 0 && html`<div class="shelf-bottom-scrim"></div>`}
       </div>
 
       ${toast && html`<${Toast} text=${toast} onDone=${() => setToast(null)} />`}
@@ -217,10 +218,12 @@ function Shelf({ events, rosters, workspaceById, userId, artOf, index, onFront, 
   const onScroll = useCallback((event) => {
     const node = event.currentTarget
     const cards = [...node.querySelectorAll('.poster')]
+    // Measured from the first card, since the stack starts under the header.
+    const base = cards[0]?.offsetTop ?? 0
     const top = node.scrollTop
     let nearest = 0
     cards.forEach((card, i) => {
-      if (card.offsetTop - node.offsetTop <= top + 80) nearest = i
+      if (card.offsetTop - base <= top + 80) nearest = i
     })
     onFront(nearest)
   }, [onFront])
