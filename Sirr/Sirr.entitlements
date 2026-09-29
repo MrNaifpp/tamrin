@@ -6,11 +6,16 @@
 	<string>development</string>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
+		<string>applinks:tamrien.app</string>
 		<string>applinks:guileless-squirrel-b6537a.netlify.app</string>
 	</array>
 	<key>com.apple.developer.applesignin</key>
 	<array>
 		<string>Default</string>
+	</array>
+	<key>com.apple.developer.in-app-payments</key>
+	<array>
+		<string>merchant.com.businessech.tmrin</string>
 	</array>
 </dict>
 </plist>

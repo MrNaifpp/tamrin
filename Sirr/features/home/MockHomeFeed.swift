@@ -473,6 +473,14 @@ final class HomeStore {
     /// it belongs to and whether they run it or just play in it, nearest date
     /// first. History joins this list only after its lazy load, while duplicate
     /// ids from an event crossing the live/history boundary collapse to one.
+    /// A workout another screen asked Home to open, e.g. the unpaid one a
+    /// refused registration points at. Home presents it and clears this.
+    var requestedOccurrenceID: UUID?
+
+    func occurrence(withID id: UUID) -> FeedOccurrence? {
+        allOccurrences.first { $0.id == id }
+    }
+
     var allOccurrences: [FeedOccurrence] {
         let activeTeamIDs = Set(teams.map(\.id))
         var byID: [UUID: FeedOccurrence] = [:]
@@ -606,6 +614,9 @@ final class HomeStore {
             await reloadRoster(occurrence.id)
             return .success
         } catch {
+            if let unpaid = PaymentOwed.unpaidEventID(in: error) {
+                return .paymentOwed(eventId: unpaid)
+            }
             return .failure(error.localizedDescription)
         }
     }
@@ -1887,6 +1898,9 @@ final class HomeStore {
         case seatsFullOfferWaitlist
         /// Every seat is taken on a session that closes at capacity.
         case closedAtCapacity
+        /// An ended workout in this group is still unpaid, so the server
+        /// refused. The sheet offers to open it.
+        case paymentOwed(eventId: UUID)
     }
 
     /// Cancels only the visible occurrence. A recurring template remains live
@@ -1957,7 +1971,7 @@ final class HomeStore {
         if isDebugMemberFixtureEvent(occurrence.id) {
             guard var rows = rosterCache[occurrence.id] else { return .success }
             for index in rows.indices where
-                rows[index].status == .paymentPending
+                (rows[index].status == .paymentPending || rows[index].status == .awaitingPayment)
                     && rows[index].paymentOwnerId == joinerId {
                 rows[index].status = .registered
             }
@@ -2400,6 +2414,9 @@ final class HomeStore {
             }
         } catch {
             await reloadRoster(occurrence.id)
+            if let unpaid = PaymentOwed.unpaidEventID(in: error) {
+                return .paymentOwed(eventId: unpaid)
+            }
             return .failure(error.localizedDescription)
         }
     }
@@ -2447,6 +2464,50 @@ final class HomeStore {
             }
         } catch {
             await reloadRoster(occurrence.id)
+            return .failure(error.localizedDescription)
+        }
+    }
+
+    /// A card payment was verified by the server. The seat is already
+    /// confirmed in the database; this only brings the local roster and the
+    /// shelf up to date, the same way a declared transfer does.
+    func markCardPaid(for occurrence: FeedOccurrence) async {
+        guard !isPreview else {
+            setMyStatus(.registered, on: occurrence)
+            resolvePaymentAction(for: occurrence.id)
+            return
+        }
+        await reloadRoster(occurrence.id)
+        resolvePaymentAction(for: occurrence.id)
+        if let workspaceID = teamID(for: occurrence) {
+            Task { await loadTeamData(workspaceID) }
+        }
+    }
+
+    /// Removing a guest you added. The server frees the seat and, when the
+    /// workout has not started and the seat was paid by card, returns that
+    /// seat's share. The money is the server's business; this only refreshes
+    /// what the roster shows.
+    func removeMyGuest(
+        _ member: FeedMember,
+        from occurrence: FeedOccurrence
+    ) async -> RegistrationOutcome {
+        guard !isPreview else {
+            rosterCache[occurrence.id]?.removeAll { $0.id == member.id }
+            return .success
+        }
+        do {
+            switch try await EventService.shared.removeMyGuest(participantId: member.id) {
+            case .removed, .notFound:
+                await reloadRoster(occurrence.id)
+                if let workspaceID = teamID(for: occurrence) {
+                    Task { await loadTeamData(workspaceID) }
+                }
+                return .success
+            case .isCreator:
+                return .failure("لا يمكن إزالة هذا المقعد.")
+            }
+        } catch {
             return .failure(error.localizedDescription)
         }
     }
@@ -2565,6 +2626,9 @@ final class HomeStore {
             }
         } catch {
             await reloadRoster(occurrence.id)
+            if let unpaid = PaymentOwed.unpaidEventID(in: error) {
+                return .paymentOwed(eventId: unpaid)
+            }
             return .failure(error.localizedDescription)
         }
     }

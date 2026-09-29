@@ -192,9 +192,10 @@ begin
     raise exception 'FAIL: the unpaid finished exercise is not flagged, so the shelf will not offer «دفع القطة»';
   end if;
 
-  -- And once declared, it stops being held back.
+  -- And once paid, it stops being held back. Declaring a transfer no longer
+  -- counts (20260929120000); only a confirmed seat is paid.
   update public.event_participants
-  set payment_declared_at = now()
+  set payment_status = 'confirmed'
   where event_id = e_id and user_id = '00000000-0000-0000-0000-000000000002';
 
   feed := public.get_my_feed();
@@ -202,7 +203,7 @@ begin
     select 1 from json_array_elements(feed->'events') value
     where value->>'id' = e_id::text
   ) then
-    raise exception 'FAIL: a declared finished exercise is still held on the shelf';
+    raise exception 'FAIL: a paid finished exercise is still held on the shelf';
   end if;
 end $$;
 

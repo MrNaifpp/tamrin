@@ -104,7 +104,7 @@ begin
 
   if not exists (
     select 1 from public.push_outbox
-    where event_id = v_event_id and user_id = B_ID and type = 'waitlist_promoted'
+    where event_id = v_event_id and user_id = B_ID and type = 'waitlist_promoted_unpaid'
   ) then
     raise exception 'FAIL: B was not told they were promoted';
   end if;

@@ -256,7 +256,17 @@ final class AuthService {
                 .upload(
                     path,
                     data: imageData,
-                    options: FileOptions(contentType: "image/jpeg", upsert: true)
+                    // A year, not the SDK's one-hour default. Every device
+                    // was re-fetching every avatar it could see once an hour,
+                    // which is what turned a 23 MB bucket into 7.75 GB of
+                    // egress. Safe to cache this hard because the URL below
+                    // carries a version stamp: a replacement is a different
+                    // URL, not a stale one.
+                    options: FileOptions(
+                        cacheControl: "31536000",
+                        contentType: "image/jpeg",
+                        upsert: true
+                    )
                 )
             let url = try? client.storage.from(bucketName).getPublicURL(path: path).absoluteString
             authLogger.info("API uploadAvatar succeeded (url: \(url ?? "nil", privacy: .public))")
