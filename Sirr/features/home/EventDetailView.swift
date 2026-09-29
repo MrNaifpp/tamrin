@@ -839,6 +839,10 @@ struct EventDetailView: View {
                         // member's status to registered and brings the paid
                         // badge in; the spinner holds until it has.
                         await feed.markCardPaid(for: occurrence)
+                        // A past workout's debt was the only reason this screen
+                        // was open. The transfer path closes it on success, so
+                        // paying by card does the same.
+                        if isHistorical { dismiss() }
                     case .processing:
                         actionErrorMessage = "تأخر التحقق من الدفع. سيتأكد مقعدك تلقائيًا عند وصول التأكيد."
                     case .failed(let reason):
@@ -924,9 +928,97 @@ struct EventDetailView: View {
                 .foregroundStyle(.white.opacity(0.68))
                 .fixedSize(horizontal: false, vertical: true)
 
+            // The same control as a live workout: a debt from last week is
+            // still paid in one tap.
+            payControl
+        }
+        .padding(16)
+        .tamrinGlassCard()
+    }
+
+    /// The one pay control, shared by a live workout and a past one still owed.
+    /// Spinner while the server prices the seats or confirms a payment; the
+    /// system Apple Pay button when the device has it; otherwise a plain button
+    /// that routes to the card form or the transfer, whichever the workspace takes.
+    /// Guests this member brought, each removable in one tap. Before this the
+    /// only way to remove one was to find their card in the roster and open its
+    /// details. Tapping minus goes through the same confirmation and removal as
+    /// that sheet, so a guest paid for by card gets their share back before the
+    /// workout starts. The server refuses once it has ended, so the buttons go
+    /// with it rather than offering something that cannot work.
+    @ViewBuilder
+    private var myGuestsSection: some View {
+        let myGuests = roster.filter {
+            $0.isGuest && !$0.isManual && $0.addedBy != nil && $0.addedBy == feed.currentUserID
+        }
+        if !myGuests.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("ضيوفك")
+                    .font(TamrinFont.font(size: 13, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.6))
+                ForEach(myGuests) { guest in
+                    HStack(spacing: 8) {
+                        Text(guest.name)
+                            .font(TamrinFont.font(size: 15, weight: .medium))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 14)
+                            .frame(height: 48)
+                            .background(.white.opacity(0.08), in: .capsule)
+
+                        if !isHistorical {
+                            // The same red minus the add-guest sheet uses to drop
+                            // a name, so removing reads the same everywhere.
+                            Button {
+                                Haptics.impact(.light)
+                                memberAwaitingRemoval = guest
+                            } label: {
+                                Image(systemName: "minus")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(.red)
+                                    .frame(width: 40, height: 40)
+                                    .background(.red.opacity(0.12), in: .circle)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(removalInFlight != nil)
+                            .accessibilityLabel("إزالة \(guest.name)")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Whether this member owes anything here: their own seat, or any guest
+    /// they brought. Their own status alone is not enough. Paying confirms
+    /// their seat, so a guest added afterwards would owe money with no pay
+    /// button in sight, under a badge saying everything was paid. The
+    /// past-workout card already counts guests this way.
+    private func owesPayment(for mine: FeedMember) -> Bool {
+        mine.status == .awaitingPayment
+            || roster.contains {
+                $0.paymentOwnerId == feed.currentUserID && $0.status == .awaitingPayment
+            }
+    }
+
+    @ViewBuilder
+    private var payControl: some View {
+        if isLoadingQuote || isConfirmingPayment {
+            // Same height as the button it stands in for, so nothing jumps.
+            ProgressView()
+                .controlSize(.regular)
+                .tint(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: TamrinControlMetrics.glassActionHeight)
+                .accessibilityLabel(isConfirmingPayment ? "نتحقق من الدفع" : "جارٍ تجهيز الدفع")
+        } else if ApplePayButton.isAvailable {
+            // Apple requires the control that starts a payment to be their own
+            // button, and that is also what puts the Apple mark on it.
+            ApplePayButton { beginPayment() }
+                .accessibilityHint("يجهّز الدفع ثم يفتح Apple Pay")
+        } else {
             Button {
-                Haptics.impact(.light)
-                showPaymentReview = true
+                beginPayment()
             } label: {
                 Label("دفع القطة", systemImage: "banknote.fill")
                     .font(TamrinFont.font(size: 16, weight: .bold))
@@ -938,11 +1030,11 @@ struct EventDetailView: View {
             .buttonStyle(.glassProminent)
             .buttonBorderShape(.capsule)
             .controlSize(.regular)
+            // Banknote green rather than the app's lime: this is the one button
+            // in the app that moves money, and it should read as money.
             .tint(Self.moneyGreen)
-            .accessibilityHint("يفتح مبلغ القطة ووسائل الدفع المتاحة")
+            .accessibilityHint("يجهّز الدفع ويفتح وسيلة الدفع المتاحة")
         }
-        .padding(16)
-        .tamrinGlassCard()
     }
 
     private var historicalStatusPanel: some View {
@@ -1027,44 +1119,8 @@ struct EventDetailView: View {
                 .tamrinGlassCard()
             } else {
                 VStack(spacing: 10) {
-                    if mine.status == .awaitingPayment, occurrence.price > 0 {
-                        if isLoadingQuote || isConfirmingPayment {
-                            // Same height as the button it stands in for, so
-                            // nothing jumps when it resolves.
-                            ProgressView()
-                                .controlSize(.regular)
-                                .tint(.white)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: TamrinControlMetrics.glassActionHeight)
-                                .accessibilityLabel(isConfirmingPayment
-                                                    ? "نتحقق من الدفع"
-                                                    : "جارٍ تجهيز الدفع")
-                        } else if ApplePayButton.isAvailable {
-                            // Apple requires the control that starts a payment
-                            // to be their own button, and that is also what
-                            // puts the Apple mark on it.
-                            ApplePayButton { beginPayment() }
-                                .accessibilityHint("يجهّز الدفع ثم يفتح Apple Pay")
-                        } else {
-                            Button {
-                                beginPayment()
-                            } label: {
-                                Label("دفع القطة", systemImage: "banknote.fill")
-                                    .font(TamrinFont.font(size: 16, weight: .bold))
-                                    .foregroundStyle(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .frame(height: TamrinControlMetrics.glassActionHeight)
-                                    .contentShape(.capsule)
-                            }
-                            .buttonStyle(.glassProminent)
-                            .buttonBorderShape(.capsule)
-                            .controlSize(.regular)
-                            // Banknote green rather than the app's lime: this is
-                            // the one button in the app that moves money, and it
-                            // should read as money rather than as another accent.
-                            .tint(Self.moneyGreen)
-                            .accessibilityHint("يجهّز الدفع ويفتح وسيلة الدفع المتاحة")
-                        }
+                    if owesPayment(for: mine), occurrence.price > 0 {
+                        payControl
                     }
 
                     if mine.status == .paymentPending, occurrence.price > 0 {
@@ -1075,13 +1131,15 @@ struct EventDetailView: View {
                         )
                     }
 
-                    if mine.status == .registered, occurrence.price > 0 {
+                    if mine.status == .registered, !owesPayment(for: mine), occurrence.price > 0 {
                         paymentStateRow(
                             title: "القطة مدفوعة",
                             systemImage: "checkmark.seal.fill",
                             tint: Self.moneyGreen
                         )
                     }
+
+                    myGuestsSection
 
                     if mine.status == .registered || mine.status == .awaitingPayment,
                        occurrence.isPublished,
@@ -1877,6 +1935,14 @@ struct EventDetailView: View {
                 Button("تفاصيل اللاعب", systemImage: "info.circle") {
                     memberInDetails = member
                 }
+                // Cash in hand or a transfer nobody declared: the organizer
+                // settles it themselves. Past workouts too — that is often
+                // when the money changes hands.
+                if member.status == .awaitingPayment, member.paymentOwnerId != nil {
+                    Button("وصلتني القطة", systemImage: "checkmark.circle") {
+                        confirmPayment(member)
+                    }
+                }
                 if !isHistorical {
                     Button("إزالة اللاعب من التمرين", systemImage: "person.badge.minus", role: .destructive) {
                         memberAwaitingRemoval = member
@@ -1913,7 +1979,7 @@ struct EventDetailView: View {
             case .failure(let message):
                 actionErrorMessage = message
                 Haptics.error()
-            case .seatsFullOfferWaitlist, .closedAtCapacity:
+            case .seatsFullOfferWaitlist, .closedAtCapacity, .paymentOwed:
                 actionErrorMessage = "اكتملت المقاعد لهذا الموعد."
                 Haptics.error()
             }
@@ -2042,7 +2108,7 @@ struct EventDetailView: View {
             case .failure(let message):
                 actionErrorMessage = message
                 Haptics.error()
-            case .seatsFullOfferWaitlist, .closedAtCapacity:
+            case .seatsFullOfferWaitlist, .closedAtCapacity, .paymentOwed:
                 actionErrorMessage = "اكتملت المقاعد لهذا الموعد."
                 Haptics.error()
             }
@@ -2061,7 +2127,7 @@ struct EventDetailView: View {
             case .failure(let message):
                 actionErrorMessage = message
                 Haptics.error()
-            case .seatsFullOfferWaitlist, .closedAtCapacity:
+            case .seatsFullOfferWaitlist, .closedAtCapacity, .paymentOwed:
                 actionErrorMessage = "اكتملت المقاعد لهذا الموعد."
                 Haptics.error()
             }
@@ -2211,6 +2277,8 @@ struct RegistrationFlowSheet: View {
         case waitlisted
         /// Every seat is taken on a session that closes at capacity.
         case closedAtCapacity
+        /// An ended workout in this group is unpaid; registering waits on it.
+        case paymentOwed(UUID)
     }
 
     init(
@@ -2337,6 +2405,7 @@ struct RegistrationFlowSheet: View {
         case .success: "تم"
         case .waitlistOffer, .waitlisted: "قائمة الانتظار"
         case .closedAtCapacity: "اكتمل العدد"
+        case .paymentOwed: "عليك قطة سابقة"
         }
     }
 
@@ -2344,7 +2413,7 @@ struct RegistrationFlowSheet: View {
     /// close the sheet instead.
     private var backStep: Step? {
         switch step {
-        case .selection, .success, .waitlistOffer, .waitlisted, .closedAtCapacity: nil
+        case .selection, .success, .waitlistOffer, .waitlisted, .closedAtCapacity, .paymentOwed: nil
         case .paymentMethod: reviewOnly ? nil : .selection
         case .details: .paymentMethod
         }
@@ -2380,6 +2449,8 @@ struct RegistrationFlowSheet: View {
                         waitlistedStep
                     case .closedAtCapacity:
                         closedAtCapacityStep
+                    case .paymentOwed(let eventId):
+                        paymentOwedStep(eventId)
                     }
                 }
                 .sheetContentHeight()
@@ -2848,6 +2919,9 @@ struct RegistrationFlowSheet: View {
                     case .seatsFullOfferWaitlist, .closedAtCapacity:
                         Haptics.error()
                         failureMessage = "تعذر الانضمام لقائمة الانتظار."
+                    case .paymentOwed(let eventId):
+                        Haptics.error()
+                        withAnimation(.smooth(duration: 0.3)) { step = .paymentOwed(eventId) }
                     }
                 }
             }
@@ -2908,6 +2982,54 @@ struct RegistrationFlowSheet: View {
             primaryButton(title: "حسنًا", color: .white, foregroundColor: .black) {
                 dismiss()
             }
+        }
+    }
+
+    /// The server refused because an ended workout here is unpaid. Its name
+    /// comes from the loaded feed; without it the sentence still reads.
+    private func paymentOwedStep(_ unpaidEventID: UUID) -> some View {
+        let unpaid = feed.occurrence(withID: unpaidEventID)
+        let message = unpaid.map { "ما دفعت قطتك في \($0.title). ادفعها عشان تقدر تسجّل." }
+            ?? "ما دفعت قطتك في تمرين سابق. ادفعها عشان تقدر تسجّل."
+        return VStack(spacing: 14) {
+            Color.clear.frame(height: 26)
+
+            ZStack {
+                Circle().fill(.white.opacity(0.12))
+                Image(systemName: "creditcard.fill")
+                    .font(.system(size: 29, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 76, height: 76)
+
+            Text("عليك قطة سابقة")
+                .font(TamrinFont.font(size: 24, weight: .bold))
+                .foregroundStyle(.white)
+
+            Text(message)
+                .font(TamrinFont.font(size: 14, weight: .medium))
+                .foregroundStyle(.white.opacity(0.62))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 28)
+
+            Text("إذا حوّلت للمنظم مباشرة، اطلب منه يأكد إنه وصلته.")
+                .font(TamrinFont.font(size: 13, weight: .medium))
+                .foregroundStyle(.white.opacity(0.45))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 28)
+
+            primaryButton(title: "ادفع الآن", color: TamrinTheme.lime, foregroundColor: TamrinTheme.ink) {
+                // Home swaps its presented workout for the unpaid one, or, when
+                // the feed does not hold it, simply closes back to Home where
+                // the unpaid workout is listed.
+                feed.requestedOccurrenceID = unpaidEventID
+                dismiss()
+            }
+
+            Button("لاحقاً") { dismiss() }
+                .font(TamrinFont.font(size: 15, weight: .bold))
+                .foregroundStyle(.white.opacity(0.7))
+                .frame(minHeight: 44)
         }
     }
 
@@ -3056,7 +3178,7 @@ struct RegistrationFlowSheet: View {
                 failureMessage = message
             // Declaring a transfer says nothing about seats; the server cannot
             // answer with either of these. Reported rather than ignored.
-            case .seatsFullOfferWaitlist, .closedAtCapacity:
+            case .seatsFullOfferWaitlist, .closedAtCapacity, .paymentOwed:
                 Haptics.error()
                 failureMessage = "اكتملت المقاعد لهذا الموعد."
             }
@@ -3096,6 +3218,9 @@ struct RegistrationFlowSheet: View {
             case .closedAtCapacity:
                 Haptics.error()
                 withAnimation(.smooth(duration: 0.3)) { step = .closedAtCapacity }
+            case .paymentOwed(let eventId):
+                Haptics.error()
+                withAnimation(.smooth(duration: 0.3)) { step = .paymentOwed(eventId) }
             }
         }
     }

@@ -102,6 +102,8 @@ insert into public.workspaces (id, name, owner_id) values
   ('71000000-0000-0000-0000-0000000000a2', 'Other WS', '71000000-0000-0000-0000-000000000001');
 
 insert into public.workspace_members (workspace_id, user_id) values
+  ('71000000-0000-0000-0000-0000000000a1', '71000000-0000-0000-0000-000000000001'),
+  ('71000000-0000-0000-0000-0000000000a2', '71000000-0000-0000-0000-000000000001'),
   ('71000000-0000-0000-0000-0000000000a1', '71000000-0000-0000-0000-000000000002'),
   ('71000000-0000-0000-0000-0000000000a1', '71000000-0000-0000-0000-000000000003'),
   ('71000000-0000-0000-0000-0000000000a1', '71000000-0000-0000-0000-000000000004'),
@@ -689,6 +691,10 @@ with:
 
 The rest of that suite (it calls `waive_expired_event_debts()` directly and checks both release) stays valid: the function still waives when called.
 
+- [ ] **Step 5b: Settled means paid, not declared** (found during execution)
+
+`linger_unpaid_occurrence_test.sql` settles its second member with `declare_event_payment`, and `get_my_feed_test.sql` clears its debt by setting `payment_declared_at`. Under this design a declared seat still owes, so both now settle by payment: linger has the owner call `confirm_payment(v_old, v_settled, v_owner)` in place of the declaration; the feed test sets `payment_status = 'confirmed'` in place of `payment_declared_at = now()`. Linger's header comment is rewritten to describe the new rule.
+
 - [ ] **Step 6: Rewrite the gate suite's debt section**
 
 In `supabase/tests/recurring_payment_gate_test.sql`, add `v_hint text;` to the `declare` list (after `v_failed boolean;`). Then replace everything from the comment line `-- One card, not two. While the old exercise is still owed for it is the only` through the `end if;` that closes the `FAIL: history lacks settled old occurrence` check (the last statement before `end;` / `$$;`) with:
@@ -1207,7 +1213,7 @@ In `RegistrationFlowSheet`, directly after `closedAtCapacityStep`:
             }
 
             Button("لاحقاً") { dismiss() }
-                .font(TamrinFont.font(size: 15, weight: .semibold))
+                .font(TamrinFont.font(size: 15, weight: .bold))
                 .foregroundStyle(.white.opacity(0.7))
                 .frame(minHeight: 44)
         }

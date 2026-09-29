@@ -97,6 +97,11 @@ export function copyFor(
         title: "لاعب اعتذر، أنت في القائمة✨",
         body: "انضممت من قائمة الانتظار إلى القائمة الرئيسية. جهز عمرك 🏃‍♂️",
       };
+    case "waitlist_promoted_unpaid":
+      return {
+        title: "لاعب اعتذر، أنت في القائمة✨",
+        body: `انضممت إلى القائمة الرئيسية في ${eventName}. لا تنسَ تدفع القطة 💳`,
+      };
     case "member_declined":
       return {
         title: "اعتذر لاعب 🏳️",
