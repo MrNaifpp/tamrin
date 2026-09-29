@@ -71,7 +71,7 @@ export function SettingsScreen({ session, profile, onProfileChanged }) {
           ${message && html`<div class="notice notice-error">${message}</div>`}
 
           <div class="notice notice-info">
-            الصورة الشخصية، رقم STC Pay، وحذف الحساب — كلها في تطبيق «تمرين» على الآيفون.
+            الصورة الشخصية ورقم STC Pay وحذف الحساب كلها في تطبيق «تمرين» على الآيفون.
           </div>
 
           <button class="action" style="background:rgba(255,69,58,0.12);color:var(--danger)"
