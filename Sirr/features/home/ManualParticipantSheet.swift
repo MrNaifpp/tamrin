@@ -11,8 +11,8 @@ struct ManualParticipantSheet: View {
     /// The sheet is also used to add a guest alongside your own seat, which is
     /// the same one-name question asked by a different person about a
     /// different seat — so only the words change.
-    var title: String = "تسجيل يدوي"
-    var subtitle: String = "سجّل لاعبًا ما عنده حساب في التطبيق"
+    var title: String = String(localized: "تسجيل يدوي")
+    var subtitle: String = String(localized: "سجّل لاعبًا ما عنده حساب في التطبيق")
     var footnote: String?
     /// Returns nil on success, or the reason the registration did not happen.
     let onAdd: @MainActor (_ name: String) async -> String?
@@ -54,8 +54,8 @@ struct ManualParticipantSheet: View {
                     .background(TamrinTheme.card, in: .capsule)
 
                 Text(footnote ?? (isPaid
-                     ? "يحجز مقعده في هذا الموعد فقط. مقعده محسوب مدفوع، وتسوّون المبلغ بينكم خارج التطبيق."
-                     : "يحجز مقعده في هذا الموعد فقط، ولا يحتاج حساب في التطبيق."))
+                     ? String(localized: "يحجز مقعده في هذا الموعد فقط. مقعده محسوب مدفوع، وتسوّون المبلغ بينكم خارج التطبيق.")
+                     : String(localized: "يحجز مقعده في هذا الموعد فقط، ولا يحتاج حساب في التطبيق.")))
                     .font(TamrinFont.footnote)
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -100,7 +100,7 @@ struct ManualParticipantSheet: View {
             }
             .animation(.smooth(duration: 0.2), value: isSubmitting)
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .fittedSheet(minHeight: 200, includesNavigationBar: true)
         .interactiveDismissDisabled(isSubmitting)
         .onAppear { nameFocused = true }

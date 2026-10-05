@@ -127,9 +127,11 @@ enum TamrinTheme {
             : UIColor(white: 1, alpha: 0.74)
     })
     /// Fixed near-black: used both as a filled surface (with white content on
-    /// top) and as the text colour over `lime` / white, so it must not invert.
+    /// top) and as the text colour over white, so it must not invert.
     static let ink = Color(white: 0.078)
-    static let lime = Color(red: 0.76, green: 0.92, blue: 0.39)
+    /// Success: a confirmed seat, an accepted request, a top rating. The
+    /// system's own green, so it reads as "done" the way iOS means it.
+    static let success = Color(uiColor: .systemGreen)
     /// اللون الأخضر المستخدم كلَكْنة في ملف Figma (العناوين والحالات الإيجابية).
     static let brandGreen = Color(red: 0.34, green: 0.73, blue: 0.47)
     static let mint = Color(red: 0.62, green: 0.86, blue: 0.72)
@@ -546,7 +548,7 @@ struct AuroraBackdrop: View {
     var body: some View {
         ZStack {
             TamrinTheme.page
-            Circle().fill(TamrinTheme.lime.opacity(0.30 * intensity)).frame(width: 340, height: 340).blur(radius: 75).offset(x: 150, y: -280)
+            Circle().fill(TamrinTheme.success.opacity(0.30 * intensity)).frame(width: 340, height: 340).blur(radius: 75).offset(x: 150, y: -280)
             Circle().fill(TamrinTheme.mint.opacity(0.22 * intensity)).frame(width: 280, height: 280).blur(radius: 85).offset(x: -170, y: -80)
             LinearGradient(colors: [.white.opacity(0.18), .clear], startPoint: .top, endPoint: .bottom)
         }.ignoresSafeArea()
@@ -687,7 +689,17 @@ struct SectionEyebrow: View {
 
 struct DayPicker: View {
     @Binding var selection: Set<Int>
-    private let days = [(7,"س"), (1,"ح"), (2,"ن"), (3,"ث"), (4,"ر"), (5,"خ"), (6,"ج")]
+    /// Arabic weeks start on Saturday, English ones on Sunday.
+    private let days: [(Int, String)] = {
+        let arabicOrder = [7, 1, 2, 3, 4, 5, 6]
+        let order = AppLanguage.isArabic ? arabicOrder : [1, 2, 3, 4, 5, 6, 7]
+        let initials = [
+            1: String(localized: "ح"), 2: String(localized: "ن"), 3: String(localized: "ث"),
+            4: String(localized: "ر"), 5: String(localized: "خ"), 6: String(localized: "ج"),
+            7: String(localized: "س")
+        ]
+        return order.map { ($0, initials[$0] ?? "") }
+    }()
 
     var body: some View {
         HStack(spacing: 7) {
@@ -708,7 +720,11 @@ struct DayPicker: View {
     }
 
     private func dayName(_ value: Int) -> String {
-        [1:"الأحد",2:"الاثنين",3:"الثلاثاء",4:"الأربعاء",5:"الخميس",6:"الجمعة",7:"السبت"][value] ?? ""
+        [
+            1: String(localized: "الأحد"), 2: String(localized: "الاثنين"), 3: String(localized: "الثلاثاء"),
+            4: String(localized: "الأربعاء"), 5: String(localized: "الخميس"), 6: String(localized: "الجمعة"),
+            7: String(localized: "السبت")
+        ][value] ?? ""
     }
 }
 
@@ -729,13 +745,14 @@ struct StatusPill: View {
 }
 
 extension Locale {
-    /// Arabic copy, Western digits — the only locale the UI formats against.
+    /// The app language's locale, Western digits — the only locale the UI
+    /// formats against.
     ///
     /// Plain `ar` / `ar_SA` render Arabic-Indic numerals (٠١٢٣), which this app
-    /// never shows: every number on screen is 0123456789. The `numbers=latn`
-    /// keyword keeps month names, weekday names and AM/PM Arabic while pinning
-    /// the numbering system, so callers get the Arabic wording for free.
-    static let tamrin = Locale(identifier: "ar_SA@numbers=latn")
+    /// never shows: every number on screen is 0123456789. In Arabic the
+    /// `numbers=latn` keyword keeps month names, weekday names and AM/PM Arabic
+    /// while pinning the numbering system, so callers get the wording for free.
+    static let tamrin = AppLanguage.current.locale
 }
 
 extension Date {

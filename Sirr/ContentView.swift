@@ -5,7 +5,9 @@
 //  Created by فارس أبومالح on 07/04/1447 AH.
 //
 
+import Combine
 import SwiftUI
+import UIKit
 
 enum AuthScreen: Hashable {
     case login
@@ -16,6 +18,7 @@ struct ContentView: View {
     @StateObject private var appState = AppState()
     @StateObject private var updateGate = AppUpdateGate()
     #if DEBUG
+    @State private var paymentArchivePreview = HomeStore.paymentArchivePreview
     @State private var paymentRequestPreview = HomeStore.paymentRequestPreview
     @State private var guestOnlyRegistrationPreview = HomeStore.guestOnlyRegistrationPreview
     @State private var guestAttributionPreview = HomeStore.guestAttributionPreview
@@ -31,7 +34,9 @@ struct ContentView: View {
 
     var body: some View {
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("-demoGuestOnlyDetailScreen") {
+        if ProcessInfo.processInfo.arguments.contains("-demoPaymentArchive") {
+            DesignerHomeView(appState: appState, feed: paymentArchivePreview)
+        } else if ProcessInfo.processInfo.arguments.contains("-demoGuestOnlyDetailScreen") {
             EventDetailView(
                 feed: guestOnlyRegistrationPreview,
                 occurrence: guestOnlyRegistrationPreview.occurrences[0],
@@ -149,6 +154,10 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: appState.deepLinkEventId != nil || appState.deepLinkJoinCode != nil)
+        .task(id: appState.sessionChecked) {
+            guard appState.sessionChecked, !appState.isLoggedIn else { return }
+            await WorkoutLiveActivityManager.shared.synchronize(next: nil)
+        }
         .onChange(of: appState.isLoggedIn) { loggedIn in
             guard loggedIn else {
                 // Signed out: drop any stale deep-link so overlays don't
@@ -157,6 +166,7 @@ struct ContentView: View {
                 appState.deepLinkJoinCode = nil
                 pendingEventId = nil
                 pendingJoinCode = nil
+                Task { await WorkoutLiveActivityManager.shared.synchronize(next: nil) }
                 return
             }
             // Resume whichever deep link was pending before login.
@@ -173,6 +183,11 @@ struct ContentView: View {
             guard let url else { return }
             appState.handleDeepLink(url)
             DeepLinkRouter.shared.clear()
+        }
+        .onReceive(appState.$deepLinkDirections.compactMap { $0 }) { destination in
+            appState.deepLinkDirections = nil
+            guard let url = EventDirectionsProvider.hudhud.url(for: destination) else { return }
+            UIApplication.shared.open(url)
         }
         // Outermost on purpose: the gate has to cover the deep-link overlays
         // above as well, or an invite link would be a way around it.

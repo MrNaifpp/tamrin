@@ -37,15 +37,15 @@ enum FeedVenueKind: String, Hashable, CaseIterable {
 
     var title: String {
         switch self {
-        case .custom: "ملعب مخصص"
-        case .rented: "ملعب مؤجر"
+        case .custom: String(localized: "ملعب مخصص")
+        case .rented: String(localized: "ملعب مؤجر")
         }
     }
 
     var detail: String {
         switch self {
-        case .custom: "ملعب معروف بينكم وخاص فيكم، مثل ملعب الاستراحة أو ملعب الحي."
-        case .rented: "ملعب تجاري تستأجرونه لتمارينكم."
+        case .custom: String(localized: "ملعب معروف بينكم وخاص فيكم، مثل ملعب الاستراحة أو ملعب الحي.")
+        case .rented: String(localized: "ملعب تجاري تستأجرونه لتمارينكم.")
         }
     }
 
@@ -85,7 +85,8 @@ enum TeamColor: String, CaseIterable, Identifiable {
 
     var color: Color {
         switch self {
-        case .lime: return TamrinTheme.lime
+        // Stored as "lime" on older groups; drawn as the success green now.
+        case .lime: return TamrinTheme.success
         case .blue: return Color(red: 0.0, green: 0.48, blue: 1.0)
         case .red: return Color(red: 1.0, green: 0.23, blue: 0.19)
         case .orange: return Color(red: 1.0, green: 0.58, blue: 0.0)
@@ -98,7 +99,7 @@ enum TeamColor: String, CaseIterable, Identifiable {
     /// Lime and yellow are too bright to carry white; the rest are not.
     var symbolColor: Color {
         switch self {
-        case .lime, .yellow: return TamrinTheme.ink
+        case .yellow: return TamrinTheme.ink
         default: return .white
         }
     }
@@ -179,7 +180,7 @@ extension FeedTeamMember {
             collationName(for: rhs.displayName),
             options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive, .numeric],
             range: nil,
-            locale: Locale(identifier: "ar_SA@numbers=latn")
+            locale: .tamrin
         )
         if comparison != .orderedSame { return comparison == .orderedAscending }
 
@@ -273,6 +274,10 @@ enum MemberEventParticipation {
     case paymentPending
     case waitlisted
     case declined
+    /// Asked to join a manually approved exercise; the organizer has not
+    /// answered.
+    case requested
+    case requestDeclined
     case cancelled
     case unavailable
 }
@@ -340,6 +345,11 @@ struct FeedOccurrence: Identifiable {
     /// opened, or a closed door. Defaults to the reserve list, which is what
     /// every event did before the choice existed.
     var capacityPolicy: FeedCapacityPolicy = .waitlist
+    var registrationLocked = false
+    /// Nil is open from publish. The rule that produced it, and the other
+    /// registration choices, travel in `registrationSettings`.
+    var registrationOpensAt: Date? = nil
+    var registrationSettings: RegistrationSettings = .standard
 
     /// Compatibility convenience for surfaces that only need a representative
     /// method (the participant flow always uses `paymentMethodIds`).
@@ -348,6 +358,9 @@ struct FeedOccurrence: Identifiable {
     var effectiveEndAt: Date { endAt ?? startAt }
     func isPast(relativeTo date: Date = .now) -> Bool {
         effectiveEndAt < date
+    }
+    func isRegistrationOpen(at date: Date = .now) -> Bool {
+        registrationOpensAt.map { $0 <= date } ?? true
     }
     var hasCancellationReason: Bool {
         cancellationReasonText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
@@ -378,6 +391,10 @@ final class HomeStore {
 
     var isLoading = false
     var errorMessage: String?
+    /// Becomes true only after Home has received an authoritative upcoming
+    /// snapshot. Until then, an empty shelf can mean "offline" rather than
+    /// "no workouts", so consumers must not erase persisted system state.
+    private(set) var hasAuthoritativeUpcomingSnapshot = false
     private(set) var isLoadingPastOccurrences = false
     private(set) var isLoadingMorePastOccurrences = false
     /// History failures are intentionally isolated from `errorMessage`: the
@@ -404,7 +421,15 @@ final class HomeStore {
     private(set) var avatarUrl: String?
     /// Mapped roster + my status per event id (source for the detail page).
     private var rosterCache: [UUID: [FeedMember]] = [:]
+    #if DEBUG
+    private var debugRatingChanges: [UUID: PlayerRatingChange] = [:]
+    #endif
     private var myEventStatus: [UUID: FeedRegStatus] = [:]
+    /// My own request on a manually approved exercise. Kept apart from
+    /// `myEventStatus`: a request holds no seat and counts toward nothing.
+    private var myRequestByEvent: [UUID: MyRegistrationRequestStatus] = [:]
+    /// Organizer-only, in name order.
+    private var requestsByEvent: [UUID: [FeedRegistrationRequest]] = [:]
     private var rosterLoadFailedEventIDs: Set<UUID> = []
     private var memberResponseByEvent: [UUID: FeedMemberResponse] = [:]
     /// Organizer-only invitation responses, fetched for the cards currently
@@ -437,6 +462,8 @@ final class HomeStore {
             || teamID == HomeDebugMemberFixture.volleyTeamID
             || teamID == HomeDebugMemberFixture.basketTeamID
             || teamID == HomeDebugMemberFixture.padelTeamID
+            || teamID == HomeDebugMemberFixture.opensLaterTeamID
+            || teamID == HomeDebugMemberFixture.manualTeamID
         #else
         return false
         #endif
@@ -444,7 +471,9 @@ final class HomeStore {
 
     private func isDebugMemberFixtureEvent(_ eventID: UUID) -> Bool {
         #if DEBUG
-        return eventID == HomeDebugMemberFixture.eventID
+        return occurrencesByTeam.contains { isDebugMemberFixtureTeam($0.key) && $0.value.contains { $0.id == eventID } }
+            || eventID == HomeDebugMemberFixture.paymentReviewPastEventID
+            || eventID == HomeDebugMemberFixture.eventID
             || eventID == HomeDebugMemberFixture.paidMemberEventID
             || eventID == HomeDebugMemberFixture.ownerEventID
             || eventID == HomeDebugMemberFixture.volleyOpenEventID
@@ -494,7 +523,36 @@ final class HomeStore {
                 byID[occurrence.id] = occurrence
             }
         }
-        return byID.values.sorted { $0.startAt < $1.startAt }
+        return byID.values.sorted {
+            if $0.startAt != $1.startAt { return $0.startAt < $1.startAt }
+            return $0.id.uuidString < $1.id.uuidString
+        }
+    }
+
+    /// A workspace remains reachable independently of the dates it contains.
+    /// A missing cache is a failed/unattempted load, not an empty schedule.
+    func teamsWithoutUpcomingOccurrences(at date: Date = .now) -> [FeedTeam] {
+        teams.filter { team in
+            guard let events = occurrencesByTeam[team.id] else { return false }
+            return !events.contains { !$0.isCancelled && !$0.isPast(relativeTo: date) }
+        }
+    }
+
+    func focusTeam(id: UUID) {
+        guard teams.contains(where: { $0.id == id }), selectedTeamID != id else { return }
+        selectedTeamID = id
+        onSelectWorkspace?(id)
+    }
+
+    func newSessionDraft(for teamID: UUID) -> PlanDraft {
+        var draft = PlanDraft()
+        draft.name = teams.first { $0.id == teamID }?.name ?? ""
+        draft.scheduleKind = .oneOff
+        draft.startTime = Date.now.addingTimeInterval(3 * 3600)
+        draft.oneOffDate = draft.startTime
+        draft.endTime = draft.startTime.addingTimeInterval(90 * 60)
+        draft.paymentMethods = methods(for: teamID).map(\.asDraft)
+        return draft
     }
 
     /// Historical exercises across active workspaces, newest first. The
@@ -604,7 +662,7 @@ final class HomeStore {
 
     /// Puts the current user in the queue for a full session.
     func joinWaitlist(_ occurrence: FeedOccurrence) async -> RegistrationOutcome {
-        guard let uid = currentUserID else { return .failure("يجب تسجيل الدخول أولاً.") }
+        guard let uid = currentUserID else { return .failure(String(localized: "يجب تسجيل الدخول أولاً.")) }
         if isPreview || isDebugMemberFixtureEvent(occurrence.id) {
             myEventStatus[occurrence.id] = .waitlisted
             return .success
@@ -622,7 +680,7 @@ final class HomeStore {
     }
     func myRegistration(for occurrence: FeedOccurrence) -> FeedMember? {
         guard let status = myEventStatus[occurrence.id] else { return nil }
-        return FeedMember(id: currentUserID ?? occurrence.id, name: profileName.isEmpty ? "أنا" : profileName, status: status)
+        return FeedMember(id: currentUserID ?? occurrence.id, name: profileName.isEmpty ? String(localized: "أنا") : profileName, status: status)
     }
     func declinedResponses(for occurrence: FeedOccurrence) -> [EventMemberResponseRecord] {
         guard isCurrentTeamOwner else { return [] }
@@ -642,6 +700,9 @@ final class HomeStore {
         case .paymentPending: return .paymentPending
         case .waitlisted: return .waitlisted
         case nil:
+            if let request = myRequestByEvent[occurrence.id] {
+                return request == .pending ? .requested : .requestDeclined
+            }
             if memberResponseByEvent[occurrence.id] == .declined || occurrence.memberResponse == .declined {
                 return .declined
             }
@@ -656,6 +717,46 @@ final class HomeStore {
     static var preview: HomeStore { HomeStore(previewSeed: true) }
 
     #if DEBUG
+    private var paymentArchiveDemoNext: FeedOccurrence?
+
+    /// An isolated, repeatable payment handoff. Restarting the demo restores
+    /// yesterday's unpaid occurrence; its successor is unlocked only on pay.
+    static var paymentArchivePreview: HomeStore {
+        let store = paymentRequestPreview
+        let now = Date.now
+        let teamID = HomeDebugMemberFixture.paidMemberTeamID
+        let old = FeedOccurrence(
+            id: HomeDebugMemberFixture.paidMemberEventID,
+            title: "تجربة انتقال القطة",
+            startAt: now.addingTimeInterval(-86400),
+            endAt: now.addingTimeInterval(-79200),
+            locationName: "ملعب الندى",
+            capacity: 16, price: 30, isCancelled: false, artIndex: 3,
+            isRecurring: true,
+            templateId: HomeDebugMemberFixture.paidMemberTemplateID,
+            paymentMethodIds: HomeDebugMemberFixture.paymentMethodIDs,
+            publishedAt: now.addingTimeInterval(-172800),
+            paymentReminderSentAt: now.addingTimeInterval(-3600),
+            requiresPaymentAction: true
+        )
+        store.occurrencesByTeam = [teamID: [old]]
+        store.pastOccurrencesByTeam = [teamID: [old]]
+        store.setMyStatus(.awaitingPayment, on: old)
+        store.paymentArchiveDemoNext = FeedOccurrence(
+            id: HomeDebugMemberFixture.eventID,
+            title: old.title,
+            startAt: now.addingTimeInterval(6 * 86400),
+            endAt: now.addingTimeInterval(6 * 86400 + 7200),
+            locationName: old.locationName,
+            capacity: old.capacity, price: old.price,
+            isCancelled: false, artIndex: old.artIndex,
+            isRecurring: true, templateId: old.templateId,
+            paymentMethodIds: old.paymentMethodIds,
+            publishedAt: now
+        )
+        return store
+    }
+
     /// Deterministic member-side screen for visually checking the persistent
     /// contribution entry point added in T-40. It never reaches Supabase.
     static var paymentRequestPreview: HomeStore {
@@ -808,6 +909,13 @@ final class HomeStore {
             rosterCache[mine.id] = HomeDebugMemberFixture.ownerRoster()
         }
 
+        let paymentReview = HomeDebugMemberFixture.paymentReviewPastOccurrence()
+        if !(occurrencesByTeam[ownerTeamID] ?? []).contains(where: { $0.id == paymentReview.id }) {
+            occurrencesByTeam[ownerTeamID, default: []].append(paymentReview)
+            pastOccurrencesByTeam[ownerTeamID, default: []].append(paymentReview)
+            rosterCache[paymentReview.id] = HomeDebugMemberFixture.paymentReviewPastRoster()
+        }
+
         // The three groups above all play football. These carry the rest of
         // the sports, so Home actually shows what a volleyball or padel card
         // looks like — the sport is what picks the photograph.
@@ -824,7 +932,8 @@ final class HomeStore {
             HomeDebugMemberFixture.basketTeam,
             fixtureUserID: fixtureUserID,
             occurrences: [
-                (HomeDebugMemberFixture.basketOccurrence(), HomeDebugMemberFixture.basketRoster()),
+                (HomeDebugMemberFixture.withOrganizerOpening(HomeDebugMemberFixture.basketOccurrence()),
+                 HomeDebugMemberFixture.basketRoster()),
                 (HomeDebugMemberFixture.basketPastOccurrence(), HomeDebugMemberFixture.basketRoster())
             ]
         )
@@ -832,10 +941,49 @@ final class HomeStore {
             HomeDebugMemberFixture.padelTeam,
             fixtureUserID: fixtureUserID,
             occurrences: [
-                (HomeDebugMemberFixture.padelOccurrence(), HomeDebugMemberFixture.padelRoster()),
+                (HomeDebugMemberFixture.withManualApproval(HomeDebugMemberFixture.padelOccurrence()),
+                 HomeDebugMemberFixture.padelRoster()),
                 (HomeDebugMemberFixture.padelPastOccurrence(), HomeDebugMemberFixture.padelRoster())
             ]
         )
+        if requestsByEvent[HomeDebugMemberFixture.padelEventID] == nil {
+            requestsByEvent[HomeDebugMemberFixture.padelEventID] = HomeDebugMemberFixture.organizerRequests
+        }
+
+        // Registration settings, seen from a member's seat.
+        for (team, occurrence, seated) in [
+            (HomeDebugMemberFixture.opensLaterTeam, HomeDebugMemberFixture.opensLaterOccurrence(), 0),
+            (HomeDebugMemberFixture.manualTeam, HomeDebugMemberFixture.manualOccurrence(), 6)
+        ] {
+            if !teams.contains(where: { $0.id == team.id }) {
+                teams.append(team)
+            }
+            ownerByTeam[team.id] = HomeDebugMemberFixture.organizerID
+            membersByTeam[team.id] = HomeDebugMemberFixture.memberTeamMembers(
+                currentUserID: fixtureUserID,
+                profileName: profileName
+            )
+            guard occurrencesByTeam[team.id] == nil else { continue }
+            occurrencesByTeam[team.id] = [occurrence]
+            plansByTeam[team.id] = [HomeDebugMemberFixture.plan(for: occurrence)]
+            rosterCache[occurrence.id] = HomeDebugMemberFixture.registrationRoster(count: seated)
+        }
+
+        if memberResponseRecordsByEvent[HomeDebugMemberFixture.ownerEventID] == nil {
+            memberResponseRecordsByEvent[HomeDebugMemberFixture.ownerEventID] =
+                HomeDebugMemberFixture.ownerDeclines()
+        }
+
+        // Every fixture venue gets a pin in Riyadh, so the directions buttons
+        // behave the way they do on a real exercise picked from the map.
+        for teamID in occurrencesByTeam.keys where isDebugMemberFixtureTeam(teamID) {
+            for index in occurrencesByTeam[teamID, default: []].indices
+            where occurrencesByTeam[teamID]?[index].latitude == nil {
+                let offset = Double(index) * 0.011
+                occurrencesByTeam[teamID]?[index].latitude = 24.7743 - offset
+                occurrencesByTeam[teamID]?[index].longitude = 46.7386 + offset
+            }
+        }
     }
 
     /// One sport group and its exercises. Owned by the signed-in tester, so
@@ -875,6 +1023,11 @@ final class HomeStore {
 
     func loadProfile() async {
         guard !isPreview else { return }
+        // The auth session is the source of identity even if the optional
+        // profile row cannot be fetched. Participation matching must never run
+        // with a nil user id and mistake an outage for "not registered".
+        currentUserID = try? await AuthService.shared.getCurrentUserID()
+        guard currentUserID != nil else { return }
         if let profile = (try? await AuthService.shared.getCurrentUserProfile()) ?? nil {
             currentUserID = profile.userId
             profileName = profile.name
@@ -888,11 +1041,18 @@ final class HomeStore {
     /// rosters. Used by pull-to-refresh, foreground return, and after mutations.
     func refresh() async {
         guard !isPreview, !isDebugMemberFixtureTeam(selectedTeamID) else { return }
+        if currentUserID == nil {
+            await loadProfile()
+        }
         await loadWorkspaces(preferred: selectedTeamID)
     }
 
     func loadWorkspaces(preferred: UUID?) async {
         guard !isPreview else { return }
+        // Keep a pending system Live Activity untouched while this refresh is
+        // incomplete. Success below flips this back only after metadata and
+        // every participation roster form one coherent snapshot.
+        hasAuthoritativeUpcomingSnapshot = false
         do {
             let records = try await WorkspaceService.shared.getMyWorkspaces()
             // Read before `teams` is replaced. A record can come back with no
@@ -915,6 +1075,7 @@ final class HomeStore {
                 // than on whichever real workspace happens to sort first.
                 selectedTeamID = HomeDebugMemberFixture.teamID
                 onSelectWorkspace?(HomeDebugMemberFixture.teamID)
+                hasAuthoritativeUpcomingSnapshot = true
                 return
             }
             #endif
@@ -926,7 +1087,11 @@ final class HomeStore {
             } else {
                 onSelectWorkspace?(nil)
             }
-            if !teams.isEmpty { await loadAllTeamsData() }
+            if teams.isEmpty {
+                hasAuthoritativeUpcomingSnapshot = true
+            } else {
+                await loadAllTeamsData()
+            }
         } catch {
             #if DEBUG
             // The local member journey remains testable when the development
@@ -966,7 +1131,15 @@ final class HomeStore {
         guard let feed = try? await EventService.shared.getMyFeed() else {
             // One failed request must not leave Home blank when the per
             // workspace path can still answer.
-            for team in teams { await loadTeamData(team.id) }
+            var loadedEveryTeam = true
+            for team in teams {
+                if !(await loadTeamDataSnapshot(team.id)) {
+                    loadedEveryTeam = false
+                }
+            }
+            if loadedEveryTeam {
+                hasAuthoritativeUpcomingSnapshot = true
+            }
             return
         }
 
@@ -1002,6 +1175,7 @@ final class HomeStore {
         for (eventId, responses) in responsesByEvent {
             memberResponseRecordsByEvent[eventId] = responses
         }
+        hasAuthoritativeUpcomingSnapshot = true
     }
 
     /// Lazily loads one bounded history page for each workspace currently on
@@ -1106,8 +1280,8 @@ final class HomeStore {
 
         if failedCount > 0 {
             pastOccurrencesError = failedCount == targets.count
-                ? "تعذر تحميل التمارين الماضية الآن. حاول مرة أخرى."
-                : "تعذر تحديث بعض التمارين الماضية."
+                ? String(localized: "تعذر تحميل التمارين الماضية الآن. حاول مرة أخرى.")
+                : String(localized: "تعذر تحديث بعض التمارين الماضية.")
         }
 
         isLoadingPastOccurrences = false
@@ -1180,8 +1354,8 @@ final class HomeStore {
 
         if failedCount > 0 {
             pastLoadMoreError = failedCount == targets.count
-                ? "تعذر تحميل المزيد من التمارين الماضية الآن. حاول مرة أخرى."
-                : "تعذر تحميل المزيد لبعض التمارين الماضية."
+                ? String(localized: "تعذر تحميل المزيد من التمارين الماضية الآن. حاول مرة أخرى.")
+                : String(localized: "تعذر تحميل المزيد لبعض التمارين الماضية.")
         }
 
 
@@ -1226,7 +1400,13 @@ final class HomeStore {
     }
 
     func loadTeamData(_ id: UUID) async {
-        guard !isPreview, !isDebugMemberFixtureTeam(id) else { return }
+        _ = await loadTeamDataSnapshot(id)
+    }
+
+    /// Returns whether event metadata and every participation roster needed by
+    /// the Live Activity candidate were loaded successfully.
+    private func loadTeamDataSnapshot(_ id: UUID) async -> Bool {
+        guard !isPreview, !isDebugMemberFixtureTeam(id) else { return true }
         let isOwner = currentUserID.map { ownerByTeam[id] == $0 } ?? false
 
         if isOwner {
@@ -1243,7 +1423,7 @@ final class HomeStore {
         // read fails; replacing it with an empty array makes a saved exercise
         // and all its plans appear deleted during a transient outage.
         guard let events = try? await EventService.shared.getWorkspaceEvents(workspaceId: id) else {
-            return
+            return false
         }
         for event in events { eventRecordsByID[event.id] = event }
         occurrencesByTeam[id] = events.map(mapOccurrence)
@@ -1263,6 +1443,7 @@ final class HomeStore {
         // Home is an unbounded horizontal shelf, so every card needs an
         // authoritative roster and participation state before it is shown.
         let visible = events
+        var loadedEveryRoster = true
         await withTaskGroup(of: (UUID, [ParticipantRecord]?).self) { group in
             for ev in visible {
                 group.addTask {
@@ -1276,8 +1457,11 @@ final class HomeStore {
             for await (eventId, parts) in group {
                 if let parts {
                     applyParticipants(parts, to: eventId)
-                } else if rosterCache[eventId] == nil {
-                    rosterLoadFailedEventIDs.insert(eventId)
+                } else {
+                    loadedEveryRoster = false
+                    if rosterCache[eventId] == nil {
+                        rosterLoadFailedEventIDs.insert(eventId)
+                    }
                 }
             }
         }
@@ -1298,6 +1482,7 @@ final class HomeStore {
                 }
             }
         }
+        return loadedEveryRoster
     }
 
     func reloadRoster(_ eventId: UUID) async {
@@ -1305,6 +1490,7 @@ final class HomeStore {
         do {
             let parts = try await EventService.shared.getEventParticipants(eventId: eventId)
             applyParticipants(parts, to: eventId)
+            await reloadRegistrationRequests(eventId)
         } catch {
             // A transient fetch failure must not turn a registered member into
             // an apparently available one. Keep the last known roster/status.
@@ -1357,7 +1543,7 @@ final class HomeStore {
     /// in detail, including events reached by a deep link outside Home's first
     /// six cards. Failures preserve the last known private response cache.
     func reloadMemberResponses(_ eventId: UUID) async {
-        guard !isPreview, isCurrentTeamOwner else { return }
+        guard !isPreview, isCurrentTeamOwner, !isDebugMemberFixtureEvent(eventId) else { return }
         do {
             memberResponseRecordsByEvent[eventId] = try await EventService.shared
                 .getEventMemberResponses(eventId: eventId)
@@ -1419,6 +1605,34 @@ final class HomeStore {
     func deleteTeam(_ id: UUID) {
         let isLocalDebugFixture = isDebugMemberFixtureTeam(id)
         let isOwner = ownerByTeam[id] == currentUserID
+        removeTeamLocally(id)
+        guard !isPreview, !isLocalDebugFixture else { return }
+        Task {
+            do {
+                if isOwner { try await WorkspaceService.shared.deleteWorkspace(id: id) }
+                else { try await WorkspaceService.shared.leaveWorkspace(id: id) }
+            } catch { errorMessage = ServerErrorMessage.arabic(for: error) }
+            // Re-sync from the server either way — confirms the delete, or
+            // restores the row if the server refused it.
+            await refresh()
+        }
+    }
+
+    /// Keep the group visible until the server accepts the member's departure.
+    func leaveTeam(_ id: UUID) async throws {
+        guard !isOwner(ofTeamID: id) else {
+            throw NSError(domain: "HomeStore.Leave", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: String(localized: "مشرف المجموعة لا يمكنه مغادرتها.")])
+        }
+        if !isPreview && !isDebugMemberFixtureTeam(id) {
+            try await WorkspaceService.shared.leaveWorkspace(id: id)
+        }
+        removeTeamLocally(id)
+    }
+
+    private func removeTeamLocally(_ id: UUID) {
+        let eventIDs = Set((occurrencesByTeam[id] ?? []).map(\.id)
+            + (pastOccurrencesByTeam[id] ?? []).map(\.id))
         teams.removeAll { $0.id == id }
         occurrencesByTeam[id] = nil
         pastOccurrencesByTeam[id] = nil
@@ -1430,31 +1644,18 @@ final class HomeStore {
         membersByTeam[id] = nil
         paymentMethodsByTeam[id] = nil
         eventRecordsByID = eventRecordsByID.filter { $0.value.workspaceId != id }
-        #if DEBUG
-        if isLocalDebugFixture {
-            let eventID = HomeDebugMemberFixture.eventID
-            ownerByTeam[id] = nil
+        ownerByTeam[id] = nil
+        for eventID in eventIDs {
             rosterCache[eventID] = nil
             myEventStatus[eventID] = nil
             memberResponseByEvent[eventID] = nil
             memberResponseRecordsByEvent[eventID] = nil
         }
-        #endif
         if selectedTeamID == id, let next = teams.first?.id {
             selectedTeamID = next
             onSelectWorkspace?(next)
         } else if teams.isEmpty {
             onSelectWorkspace?(nil)
-        }
-        guard !isPreview, !isLocalDebugFixture else { return }
-        Task {
-            do {
-                if isOwner { try await WorkspaceService.shared.deleteWorkspace(id: id) }
-                else { try await WorkspaceService.shared.leaveWorkspace(id: id) }
-            } catch { errorMessage = ServerErrorMessage.arabic(for: error) }
-            // Re-sync from the server either way — confirms the delete, or
-            // restores the row if the server refused it.
-            await refresh()
         }
     }
 
@@ -1489,7 +1690,7 @@ final class HomeStore {
             throw NSError(
                 domain: "HomeStore.CreateTeam",
                 code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "اكتب اسم التمرين أولًا."]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "اكتب اسم التمرين أولًا.")]
             )
         }
         // A preview store has no backend behind it. Kept as its own guard so a
@@ -1498,7 +1699,7 @@ final class HomeStore {
             throw NSError(
                 domain: "HomeStore.CreateTeam",
                 code: 2,
-                userInfo: [NSLocalizedDescriptionKey: "الإنشاء غير متاح في وضع المعاينة."]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "الإنشاء غير متاح في وضع المعاينة.")]
             )
         }
         var createdWorkspace: WorkspaceRecord?
@@ -1571,7 +1772,7 @@ final class HomeStore {
             start = combine(day: Date(), time: plan.startTime, cal: cal)
         }
         var end = combine(day: start, time: plan.endTime, cal: cal)
-        if end <= start { end = cal.date(byAdding: .hour, value: 1, to: start) ?? start }
+        if end <= start { end = cal.date(byAdding: .day, value: 1, to: end) ?? start.addingTimeInterval(5400) }
         do {
             let paymentMethodIds = try await persistPaymentMethods(for: plan, workspaceId: selectedTeamID)
             try await EventService.shared.updateEventWithScope(
@@ -1717,7 +1918,8 @@ final class HomeStore {
     /// Maps each wizard plan to real event(s). Backend recurrence is weekly-only,
     /// so a recurring plan with multiple weekdays becomes one weekly series per
     /// day; a one-off plan becomes a single non-recurring event.
-    private func createEvents(from plans: [PlanDraft], startDate: Date, in workspaceId: UUID) async throws {
+    @discardableResult
+    private func createEvents(from plans: [PlanDraft], startDate: Date, in workspaceId: UUID) async throws -> [EventRecord] {
         let cal = Calendar(identifier: .gregorian)
         let base = max(Date(), startDate)
         var createdEvents: [EventRecord] = []
@@ -1726,6 +1928,10 @@ final class HomeStore {
             for plan in plans {
                 let name = plan.name.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !name.isEmpty else { continue }
+                if let message = plan.newSessionValidationError() {
+                    throw NSError(domain: "HomeStore.Session", code: 2,
+                                  userInfo: [NSLocalizedDescriptionKey: message])
+                }
                 let paymentMethodIds = try await persistPaymentMethods(for: plan, workspaceId: workspaceId)
 
                 if plan.scheduleKind == .oneOff {
@@ -1767,6 +1973,7 @@ final class HomeStore {
             }
             throw error
         }
+        return createdEvents
     }
 
     private func createOneEvent(
@@ -1859,7 +2066,7 @@ final class HomeStore {
         NSError(
             domain: "HomeStore.Payment",
             code: 1,
-            userInfo: [NSLocalizedDescriptionKey: "أضف وسيلة دفع صحيحة واحدة على الأقل قبل الحفظ."]
+            userInfo: [NSLocalizedDescriptionKey: String(localized: "أضف وسيلة دفع صحيحة واحدة على الأقل قبل الحفظ.")]
         )
     }
 
@@ -1901,6 +2108,8 @@ final class HomeStore {
         /// An ended workout in this group is still unpaid, so the server
         /// refused. The sheet offers to open it.
         case paymentOwed(eventId: UUID)
+        /// A manually approved exercise: the organizer now has the request.
+        case requested
     }
 
     /// Cancels only the visible occurrence. A recurring template remains live
@@ -1910,7 +2119,7 @@ final class HomeStore {
         reasonCode: String?,
         reasonText: String?
     ) async -> RegistrationOutcome {
-        guard isCurrentTeamOwner else { return .failure("هذا الإجراء متاح لمشرف التمرين فقط.") }
+        guard isCurrentTeamOwner else { return .failure(String(localized: "هذا الإجراء متاح لمشرف التمرين فقط.")) }
         if isPreview {
             updateOccurrence(occurrence.id) {
                 $0.cancelledAt = .now
@@ -1965,7 +2174,7 @@ final class HomeStore {
         guard let creatorId = currentUserID,
               let joinerId = member.paymentOwnerId,
               isCurrentTeamOwner else {
-            return .failure("لا يمكن تأكيد هذه الدفعة.")
+            return .failure(String(localized: "لا يمكن تأكيد هذه الدفعة."))
         }
         #if DEBUG
         if isDebugMemberFixtureEvent(occurrence.id) {
@@ -1989,7 +2198,7 @@ final class HomeStore {
             return .success
         } catch {
             await reloadRoster(occurrence.id)
-            return .failure("تعذر تأكيد الدفعة. حاول مرة أخرى.")
+            return .failure(String(localized: "تعذر تأكيد الدفعة. حاول مرة أخرى."))
         }
     }
 
@@ -1997,18 +2206,22 @@ final class HomeStore {
         guard let creatorId = currentUserID,
               let joinerId = member.paymentOwnerId,
               isCurrentTeamOwner else {
-            return .failure("لا يمكن رفض هذه الدفعة.")
+            return .failure(String(localized: "لا يمكن إعادة فتح دفع هذه القطة."))
         }
         #if DEBUG
         if isDebugMemberFixtureEvent(occurrence.id) {
-            rosterCache[occurrence.id]?.removeAll {
-                $0.status == .paymentPending && $0.paymentOwnerId == joinerId
+            guard var rows = rosterCache[occurrence.id] else { return .success }
+            for index in rows.indices where
+                rows[index].status == .paymentPending
+                    && rows[index].paymentOwnerId == joinerId {
+                rows[index].status = .awaitingPayment
             }
+            rosterCache[occurrence.id] = rows
             return .success
         }
         #endif
         do {
-            _ = try await STCPayService.shared.rejectPayment(
+            try await STCPayService.shared.resetPaymentDeclaration(
                 eventId: occurrence.id,
                 joinerId: joinerId,
                 creatorId: creatorId
@@ -2017,7 +2230,7 @@ final class HomeStore {
             return .success
         } catch {
             await reloadRoster(occurrence.id)
-            return .failure("تعذر رفض الدفعة. حاول مرة أخرى.")
+            return .failure(String(localized: "تعذر إعادة فتح دفع القطة. حاول مرة أخرى."))
         }
     }
 
@@ -2026,9 +2239,9 @@ final class HomeStore {
     /// the money is settled with the organizer outside the app, so no payment
     /// request is raised.
     func addManualParticipant(named rawName: String, to occurrence: FeedOccurrence) async -> RegistrationOutcome {
-        guard isCurrentTeamOwner else { return .failure("هذا الإجراء متاح لمشرف التمرين فقط.") }
+        guard isCurrentTeamOwner else { return .failure(String(localized: "هذا الإجراء متاح لمشرف التمرين فقط.")) }
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return .failure("اكتب اسم اللاعب أولًا.") }
+        guard !name.isEmpty else { return .failure(String(localized: "اكتب اسم اللاعب أولًا.")) }
 
         if isPreview || isDebugMemberFixtureEvent(occurrence.id) {
             appendManualParticipant(named: name, to: occurrence.id)
@@ -2045,17 +2258,17 @@ final class HomeStore {
             case .added:
                 return .success
             case .seatsFull:
-                return .failure("اكتملت المقاعد لهذا الموعد.")
+                return .failure(String(localized: "اكتملت المقاعد لهذا الموعد."))
             case .duplicateName:
-                return .failure("فيه لاعب مسجل بنفس الاسم. ميّزه باسم العائلة أو رقم.")
+                return .failure(String(localized: "فيه لاعب مسجل بنفس الاسم. ميّزه باسم العائلة أو رقم."))
             case .registrationClosed:
-                return .failure("التسجيل مقفل لهذا الموعد. افتحه من إعدادات الموعد ثم أضفه.")
+                return .failure(String(localized: "التسجيل مقفل لهذا الموعد. افتحه من إعدادات الموعد ثم أضفه."))
             case .notPublished:
-                return .failure("أرسل الموعد لأعضاء التمرين أولًا، بعدها تقدر تسجل لاعبين يدويًا.")
+                return .failure(String(localized: "أرسل الموعد لأعضاء التمرين أولًا، بعدها تقدر تسجل لاعبين يدويًا."))
             case .cancelled:
-                return .failure("هذا الموعد متخطى.")
+                return .failure(String(localized: "هذا الموعد متخطى."))
             case .emptyName:
-                return .failure("اكتب اسم اللاعب أولًا.")
+                return .failure(String(localized: "اكتب اسم اللاعب أولًا."))
             }
         } catch {
             await reloadRoster(occurrence.id)
@@ -2067,7 +2280,7 @@ final class HomeStore {
     /// takes those seats too — the server owns that rule.
     func removeParticipant(_ member: FeedMember, from occurrence: FeedOccurrence) async -> RegistrationOutcome {
         guard isCurrentTeamOwner else {
-            return .failure("هذا الإجراء متاح لمشرف التمرين فقط.")
+            return .failure(String(localized: "هذا الإجراء متاح لمشرف التمرين فقط."))
         }
 
         if isPreview || isDebugMemberFixtureEvent(occurrence.id) {
@@ -2082,13 +2295,13 @@ final class HomeStore {
             case .removed:
                 return .success
             case .isCreator:
-                return .failure("لا يمكن إزالة منظّم التمرين من قائمته.")
+                return .failure(String(localized: "لا يمكن إزالة منظّم التمرين من قائمته."))
             case .notFound:
                 return .success
             }
         } catch {
             await reloadRoster(occurrence.id)
-            return .failure("تعذر إزالة اللاعب. حاول مرة أخرى.")
+            return .failure(String(localized: "تعذر إزالة اللاعب. حاول مرة أخرى."))
         }
     }
 
@@ -2105,7 +2318,7 @@ final class HomeStore {
     /// stays disabled across reopenings of the sheet and across devices.
     func remindPayment(_ member: FeedMember, on occurrence: FeedOccurrence) async -> PaymentReminderOutcome {
         guard isCurrentTeamOwner else {
-            return .failure("هذا الإجراء متاح لمشرف التمرين فقط.")
+            return .failure(String(localized: "هذا الإجراء متاح لمشرف التمرين فقط."))
         }
 
         if isPreview || isDebugMemberFixtureEvent(occurrence.id) {
@@ -2129,17 +2342,17 @@ final class HomeStore {
                 }
                 return .tooSoon(nextAllowedAt: nextAllowedAt)
             case .noAccount:
-                return .failure("هذا اللاعب ما عنده حساب في التطبيق، فما يوصله تذكير.")
+                return .failure(String(localized: "هذا اللاعب ما عنده حساب في التطبيق، فما يوصله تذكير."))
             case .isSelf:
-                return .failure("هذا مقعدك أنت.")
+                return .failure(String(localized: "هذا مقعدك أنت."))
             case .notFound:
                 await reloadRoster(occurrence.id)
-                return .failure("هذا اللاعب ما عاد مسجل في الموعد.")
+                return .failure(String(localized: "هذا اللاعب ما عاد مسجل في الموعد."))
             case .cancelled:
-                return .failure("هذا الموعد متخطى.")
+                return .failure(String(localized: "هذا الموعد متخطى."))
             }
         } catch {
-            return .failure("تعذر إرسال التذكير. تحقق من اتصالك وحاول مرة أخرى.")
+            return .failure(String(localized: "تعذر إرسال التذكير. تحقق من اتصالك وحاول مرة أخرى."))
         }
     }
 
@@ -2156,11 +2369,11 @@ final class HomeStore {
         on occurrence: FeedOccurrence
     ) async -> MemberReminderOutcome {
         guard isCurrentTeamOwner else {
-            return .failure("هذا الإجراء متاح لمشرف التمرين فقط.")
+            return .failure(String(localized: "هذا الإجراء متاح لمشرف التمرين فقط."))
         }
 
         if isPreview || isDebugMemberFixtureEvent(occurrence.id) {
-            return .sent(message: "أُرسل التذكير إلى الأعضاء")
+            return .sent(message: String(localized: "أُرسل التذكير إلى الأعضاء"))
         }
 
         do {
@@ -2173,23 +2386,23 @@ final class HomeStore {
                 if kind == .payment {
                     updateOccurrence(occurrence.id) { $0.paymentReminderSentAt = .now }
                 }
-                return .sent(message: "أُرسل التذكير إلى \(recipients.counted(.player))")
+                return .sent(message: String(localized: "أُرسل التذكير إلى \(recipients.counted(.player))"))
             case .tooSoon(let nextAllowedAt):
                 let minutes = max(Int(nextAllowedAt.timeIntervalSinceNow / 60), 1)
-                return .failure("أرسلت تذكيرًا قبل قليل. تقدر ترسل غيره بعد \(minutes) دقيقة.")
+                return .failure(String(localized: "أرسلت تذكيرًا قبل قليل. تقدر ترسل غيره بعد \(minutes) دقيقة."))
             case .noRecipients:
                 return .failure(
                     kind == .register
-                        ? "كل الأعضاء مسجلين في الموعد."
-                        : "ما فيه لاعبين مسجلين لتذكيرهم."
+                        ? String(localized: "كل الأعضاء مسجلين في الموعد.")
+                        : String(localized: "ما فيه لاعبين مسجلين لتذكيرهم.")
                 )
             case .notPublished:
-                return .failure("انشر الموعد أولًا، بعدها تقدر تذكّر الأعضاء.")
+                return .failure(String(localized: "انشر الموعد أولًا، بعدها تقدر تذكّر الأعضاء."))
             case .cancelled:
-                return .failure("هذا الموعد متخطى.")
+                return .failure(String(localized: "هذا الموعد متخطى."))
             }
         } catch {
-            return .failure("تعذر إرسال التذكير. تحقق من اتصالك وحاول مرة أخرى.")
+            return .failure(String(localized: "تعذر إرسال التذكير. تحقق من اتصالك وحاول مرة أخرى."))
         }
     }
 
@@ -2238,7 +2451,7 @@ final class HomeStore {
             throw NSError(
                 domain: "HomeStore.Rating",
                 code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "هذا اللاعب بدون حساب."]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "هذا اللاعب بدون حساب.")]
             )
         }
 
@@ -2254,6 +2467,32 @@ final class HomeStore {
         )
     }
 
+    /// My own rating, for my own card.
+    ///
+    /// `playerRating(for:)` takes a roster row, and I am not on my own roster
+    /// when I am looking at my profile. This asks the same service for the same
+    /// summary, addressed by account.
+    func myPlayerRating() async throws -> PlayerRatingSummary {
+        guard let currentUserID else {
+            throw NSError(
+                domain: "HomeStore.Rating",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "لا يوجد حساب مسجّل.")]
+            )
+        }
+
+        #if DEBUG
+        if HomeDebugMemberFixture.isEnabled {
+            return debugRatingSummary(for: currentUserID, position: playerPosition)
+        }
+        #endif
+
+        return try await RatingService.shared.getPlayerRating(
+            workspaceId: selectedTeamID,
+            userId: currentUserID
+        )
+    }
+
     func submitPlayerRating(
         _ scores: PlayerRatingScores,
         for member: FeedMember
@@ -2262,7 +2501,13 @@ final class HomeStore {
 
         #if DEBUG
         if HomeDebugMemberFixture.isFixturePlayer(userId) {
+            let before = debugRatingSummary(for: userId, position: member.position).averageOverall
             HomeDebugMemberFixture.submittedRatings[userId] = scores
+            let after = debugRatingSummary(for: userId, position: member.position).averageOverall
+            if let before, let after, before != after {
+                debugRatingChanges[userId] = PlayerRatingChange(previousOverall: before,
+                                                               currentOverall: after, changedAt: .now)
+            }
             return .saved(debugRatingSummary(for: userId, position: member.position))
         }
         #endif
@@ -2293,7 +2538,8 @@ final class HomeStore {
                 mine: mine,
                 average: nil,
                 averageOverall: nil,
-                myOverall: mine?.overall(for: resolved)
+                myOverall: mine?.overall(for: resolved),
+            change: debugRatingChanges[playerID]
             )
         }
 
@@ -2313,7 +2559,8 @@ final class HomeStore {
             mine: mine,
             average: averaged,
             averageOverall: averageOverall,
-            myOverall: mine?.overall(for: resolved)
+            myOverall: mine?.overall(for: resolved),
+            change: debugRatingChanges[playerID]
         )
     }
 
@@ -2361,7 +2608,23 @@ final class HomeStore {
         #if DEBUG
         if isDebugMemberFixtureEvent(occurrence.id) {
             guard expectedDestination.eventId == occurrence.id else {
-                return .failure("بيانات الموعد غير متطابقة.")
+                return .failure(String(localized: "بيانات الموعد غير متطابقة."))
+            }
+            let live = allOccurrences.first { $0.id == occurrence.id } ?? occurrence
+            if !live.isRegistrationOpen() {
+                return .failure(String(localized: "التسجيل في هذا الموعد لم يفتح بعد."))
+            }
+            if !cleanGuests.isEmpty, !live.registrationSettings.guestsAllowed {
+                return .failure(String(localized: "تسجيل الضيوف موقف في هذا التمرين."))
+            }
+            if live.registrationSettings.approvalMode == .manual {
+                if myRequestByEvent[occurrence.id] == .declined {
+                    return .failure(String(localized: "لم يُقبل طلبك لهذا الموعد."))
+                }
+                myRequestByEvent[occurrence.id] = .pending
+                memberResponseByEvent[occurrence.id] = nil
+                updateOccurrence(occurrence.id) { $0.memberResponse = nil }
+                return .requested
             }
             // No payment method is chosen at registration any more: a paid
             // seat is simply taken and left owing until «دفع القطة».
@@ -2375,7 +2638,7 @@ final class HomeStore {
             return .success
         }
         #endif
-        guard currentUserID != nil else { return .failure("يجب تسجيل الدخول أولاً.") }
+        guard currentUserID != nil else { return .failure(String(localized: "يجب تسجيل الدخول أولاً.")) }
         do {
             // The seat first. Paying is its own act now, so no payment method
             // is chosen or snapshotted here.
@@ -2401,16 +2664,30 @@ final class HomeStore {
                 return .seatsFullOfferWaitlist
             case "registration_closed_full":
                 return .closedAtCapacity
+            case "requested":
+                myRequestByEvent[occurrence.id] = .pending
+                memberResponseByEvent[occurrence.id] = nil
+                updateOccurrence(occurrence.id) { $0.memberResponse = nil }
+                return .requested
+            case "request_declined":
+                myRequestByEvent[occurrence.id] = .declined
+                return .failure(String(localized: "لم يُقبل طلبك لهذا الموعد."))
+            case "registration_not_open":
+                await reloadOccurrence(occurrence.id)
+                return .failure(String(localized: "التسجيل في هذا الموعد لم يفتح بعد."))
+            case "guests_not_allowed":
+                await reloadOccurrence(occurrence.id)
+                return .failure(String(localized: "تسجيل الضيوف موقف في هذا التمرين."))
             case "registration_closed":
-                return .failure("التسجيل مقفل لهذا الموعد.")
+                return .failure(String(localized: "التسجيل مقفل لهذا الموعد."))
             case "not_published":
-                return .failure("لم يُنشر هذا الموعد بعد.")
+                return .failure(String(localized: "لم يُنشر هذا الموعد بعد."))
             case "cancelled":
-                return .failure("هذا الموعد متخطى.")
+                return .failure(String(localized: "هذا الموعد متخطى."))
             case "event_terms_changed":
-                return .failure("غيّر المشرف مبلغ الموعد. أغلق النافذة وافتحها مجددًا لمراجعة المبلغ الجديد.")
+                return .failure(String(localized: "غيّر المشرف مبلغ الموعد. أغلق النافذة وافتحها مجددًا لمراجعة المبلغ الجديد."))
             default:
-                return .failure("تعذر إكمال التسجيل.")
+                return .failure(String(localized: "تعذر إكمال التسجيل."))
             }
         } catch {
             await reloadRoster(occurrence.id)
@@ -2430,6 +2707,12 @@ final class HomeStore {
         guard !isPreview else {
             setMyStatus(.paymentPending, on: occurrence)
             resolvePaymentAction(for: occurrence.id)
+            #if DEBUG
+            if let next = paymentArchiveDemoNext {
+                occurrencesByTeam[selectedTeamID, default: []].append(next)
+                paymentArchiveDemoNext = nil
+            }
+            #endif
             return .success
         }
         #if DEBUG
@@ -2458,9 +2741,9 @@ final class HomeStore {
                 }
                 return .success
             case "payment_method_required", "event_terms_changed":
-                return .failure("تغيّرت وسائل الدفع لهذا الموعد. أغلق النافذة وافتحها مجددًا.")
+                return .failure(String(localized: "تغيّرت وسائل الدفع لهذا الموعد. أغلق النافذة وافتحها مجددًا."))
             default:
-                return .failure("تعذر تسجيل التحويل.")
+                return .failure(String(localized: "تعذر تسجيل التحويل."))
             }
         } catch {
             await reloadRoster(occurrence.id)
@@ -2505,7 +2788,7 @@ final class HomeStore {
                 }
                 return .success
             case .isCreator:
-                return .failure("لا يمكن إزالة هذا المقعد.")
+                return .failure(String(localized: "لا يمكن إزالة هذا المقعد."))
             }
         } catch {
             return .failure(error.localizedDescription)
@@ -2557,7 +2840,7 @@ final class HomeStore {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         guard !cleanGuests.isEmpty else {
-            return .failure("أضف اسم لاعب واحد على الأقل.")
+            return .failure(String(localized: "أضف اسم لاعب واحد على الأقل."))
         }
 
         let localStatus: FeedRegStatus = occurrence.price > 0
@@ -2569,24 +2852,31 @@ final class HomeStore {
         }
         #if DEBUG
         if isDebugMemberFixtureEvent(occurrence.id) {
+            let live = allOccurrences.first { $0.id == occurrence.id } ?? occurrence
+            if !live.registrationSettings.guestsAllowed {
+                return .failure(String(localized: "تسجيل الضيوف موقف في هذا التمرين."))
+            }
+            if live.registrationSettings.approvalMode == .manual {
+                return .failure(String(localized: "التسجيل في هذا التمرين بموافقة المشرف."))
+            }
             if withoutSelf {
                 guard myEventStatus[occurrence.id] == nil else {
-                    return .failure("لديك تسجيل قائم في هذا الموعد.")
+                    return .failure(String(localized: "لديك تسجيل قائم في هذا الموعد."))
                 }
             } else {
                 guard myEventStatus[occurrence.id] == .registered
                         || myEventStatus[occurrence.id] == .awaitingPayment else {
-                    return .failure("سجّل نفسك في الموعد أولًا.")
+                    return .failure(String(localized: "سجّل نفسك في الموعد أولًا."))
                 }
             }
             guard expectedDestination.eventId == occurrence.id else {
-                return .failure("بيانات الموعد غير متطابقة.")
+                return .failure(String(localized: "بيانات الموعد غير متطابقة."))
             }
             appendGuests(cleanGuests, to: occurrence.id, as: localStatus, capacity: occurrence.capacity)
             return .success
         }
         #endif
-        guard currentUserID != nil else { return .failure("يجب تسجيل الدخول أولاً.") }
+        guard currentUserID != nil else { return .failure(String(localized: "يجب تسجيل الدخول أولاً.")) }
 
         do {
             let result = try await ManualPaymentService.shared.registerGuests(
@@ -2600,29 +2890,29 @@ final class HomeStore {
             case .submitted:
                 return .success
             case .seatsFull:
-                return .failure("المقاعد المتبقية لا تكفي لكل الضيوف.")
+                return .failure(String(localized: "المقاعد المتبقية لا تكفي لكل الضيوف."))
             case .notRegistered:
-                return .failure("لازم يكون تسجيلك مؤكد قبل إضافة ضيوف.")
+                return .failure(String(localized: "لازم يكون تسجيلك مؤكد قبل إضافة ضيوف."))
             case .selfAlreadyRegistered:
-                return .failure("أنت مسجل في الموعد. استخدم «سجّل معك أحد» لإضافة ضيوف.")
+                return .failure(String(localized: "أنت مسجل في الموعد. استخدم «سجّل معك أحد» لإضافة ضيوف."))
             case .selfRegistrationPending:
-                return .failure("طلب تسجيلك ما زال بانتظار التأكيد. انتظر حسمه قبل تسجيل ضيف بدونك.")
+                return .failure(String(localized: "طلب تسجيلك ما زال بانتظار التأكيد. انتظر حسمه قبل تسجيل ضيف بدونك."))
             case .emptyGuests:
-                return .failure("أضف اسم لاعب واحد على الأقل.")
+                return .failure(String(localized: "أضف اسم لاعب واحد على الأقل."))
             case .duplicateName:
-                return .failure("أحد هذه الأسماء مسجل معك مسبقًا.")
+                return .failure(String(localized: "أحد هذه الأسماء مسجل معك مسبقًا."))
             case .pendingGuestRequest:
-                return .failure("عندك طلب ضيوف بانتظار تأكيد المشرف. انتظر تأكيده قبل إضافة طلب جديد.")
+                return .failure(String(localized: "عندك طلب ضيوف بانتظار تأكيد المشرف. انتظر تأكيده قبل إضافة طلب جديد."))
             case .creatorMissingPaymentMethod:
-                return .failure("منظّم التمرين لم يضف وسيلة دفع لهذا الموعد بعد.")
+                return .failure(String(localized: "منظّم التمرين لم يضف وسيلة دفع لهذا الموعد بعد."))
             case .registrationClosed:
-                return .failure("التسجيل مقفل لهذا الموعد.")
+                return .failure(String(localized: "التسجيل مقفل لهذا الموعد."))
             case .eventTermsChanged:
-                return .failure("غيّر المشرف مبلغ الموعد أو وسيلة الدفع. ارجع خطوة وراجع البيانات الجديدة.")
+                return .failure(String(localized: "غيّر المشرف مبلغ الموعد أو وسيلة الدفع. ارجع خطوة وراجع البيانات الجديدة."))
             case .notPublished:
-                return .failure("لم يُنشر هذا الموعد بعد.")
+                return .failure(String(localized: "لم يُنشر هذا الموعد بعد."))
             case .cancelled:
-                return .failure("هذا الموعد متخطى.")
+                return .failure(String(localized: "هذا الموعد متخطى."))
             }
         } catch {
             await reloadRoster(occurrence.id)
@@ -2631,6 +2921,166 @@ final class HomeStore {
             }
             return .failure(error.localizedDescription)
         }
+    }
+
+    // MARK: Registration settings
+
+    func registrationRequests(for occurrence: FeedOccurrence) -> [FeedRegistrationRequest] {
+        requestsByEvent[occurrence.id] ?? []
+    }
+
+    /// Organizers get the pending requests; a member gets their own request,
+    /// and only on an exercise that asks for approval or one they asked on.
+    func reloadRegistrationRequests(_ eventId: UUID) async {
+        guard !isPreview, !isDebugMemberFixtureEvent(eventId),
+              let occurrence = allOccurrences.first(where: { $0.id == eventId }) else { return }
+        do {
+            if isOwner(of: occurrence) {
+                requestsByEvent[eventId] = occurrence.registrationSettings.approvalMode == .manual
+                    ? try await RegistrationSettingsService.shared.requests(eventID: eventId)
+                    : []
+            } else if occurrence.registrationSettings.approvalMode == .manual
+                        || myRequestByEvent[eventId] != nil {
+                myRequestByEvent[eventId] = try await RegistrationSettingsService.shared
+                    .myRequest(eventID: eventId)
+            }
+        } catch {
+            // Keep the last known requests; the roster above already loaded.
+        }
+    }
+
+    /// Saves on this exercise, every later one of the same group, and the
+    /// group's default. Returns the reason it failed, or nil.
+    func updateRegistrationSettings(
+        _ settings: RegistrationSettings,
+        for occurrence: FeedOccurrence
+    ) async -> String? {
+        guard isOwner(of: occurrence) else { return String(localized: "هذا الإجراء للمشرف فقط.") }
+        guard let teamID = teamID(for: occurrence) else { return ServerErrorMessage.general }
+        if isPreview || isDebugMemberFixtureEvent(occurrence.id) {
+            applyRegistrationSettingsLocally(settings, teamID: teamID)
+            return nil
+        }
+        do {
+            let saved = try await RegistrationSettingsService.shared.update(
+                eventID: occurrence.id,
+                settings: settings
+            )
+            applyRegistrationSettingsLocally(settings, teamID: teamID, seatsRequests: false)
+            updateOccurrence(occurrence.id) {
+                $0.registrationOpensAt = saved.registrationOpensAt
+                $0.registrationSettings = Self.registrationSettings(from: saved)
+            }
+            await reloadRoster(occurrence.id)
+            return nil
+        } catch {
+            return ServerErrorMessage.arabic(for: error)
+        }
+    }
+
+    func openRegistrationNow(for occurrence: FeedOccurrence) async -> String? {
+        guard isOwner(of: occurrence) else { return String(localized: "هذا الإجراء للمشرف فقط.") }
+        if isPreview || isDebugMemberFixtureEvent(occurrence.id) {
+            updateOccurrence(occurrence.id) { $0.registrationOpensAt = .now }
+            return nil
+        }
+        do {
+            let saved = try await RegistrationSettingsService.shared.openNow(eventID: occurrence.id)
+            updateOccurrence(occurrence.id) {
+                $0.registrationOpensAt = saved.registrationOpensAt ?? .now
+            }
+            return nil
+        } catch {
+            return ServerErrorMessage.arabic(for: error)
+        }
+    }
+
+    /// Accepting seats the member and the guests they asked to bring.
+    func respond(
+        to request: FeedRegistrationRequest,
+        accept: Bool,
+        on occurrence: FeedOccurrence
+    ) async -> String? {
+        guard isOwner(of: occurrence) else { return String(localized: "هذا الإجراء للمشرف فقط.") }
+        let seatsFull = String(localized: "المقاعد المتبقية لا تكفي لهذا الطلب.")
+        if isPreview || isDebugMemberFixtureEvent(occurrence.id) {
+            if accept, !seatRequestLocally(request, in: occurrence) { return seatsFull }
+            requestsByEvent[occurrence.id]?.removeAll { $0.id == request.id }
+            return nil
+        }
+        do {
+            let result = try await RegistrationSettingsService.shared.respond(
+                requestID: request.id,
+                accept: accept
+            )
+            if result == .seatsFull { return seatsFull }
+            requestsByEvent[occurrence.id]?.removeAll { $0.id == request.id }
+            await reloadRoster(occurrence.id)
+            return result == .cancelled ? String(localized: "هذا الموعد متخطى.") : nil
+        } catch {
+            return ServerErrorMessage.arabic(for: error)
+        }
+    }
+
+    func withdrawRequest(from occurrence: FeedOccurrence) async -> String? {
+        let previous = myRequestByEvent[occurrence.id]
+        myRequestByEvent[occurrence.id] = nil
+        guard !isPreview, !isDebugMemberFixtureEvent(occurrence.id) else { return nil }
+        do {
+            try await RegistrationSettingsService.shared.withdraw(eventID: occurrence.id)
+            return nil
+        } catch {
+            myRequestByEvent[occurrence.id] = previous
+            return ServerErrorMessage.arabic(for: error)
+        }
+    }
+
+    /// Mirrors update_event_registration_settings for the paths with no
+    /// server: every exercise of the group that has not finished takes the
+    /// settings, and going back to automatic seats whoever was waiting.
+    private func applyRegistrationSettingsLocally(
+        _ settings: RegistrationSettings,
+        teamID: UUID,
+        seatsRequests: Bool = true
+    ) {
+        let now = Date.now
+        guard let events = occurrencesByTeam[teamID] else { return }
+        for event in events where !event.isPast(relativeTo: now) {
+            updateOccurrence(event.id) {
+                $0.registrationSettings = settings
+                $0.registrationOpensAt = settings.opening?.opensAt(for: $0.startAt)
+            }
+            guard seatsRequests, settings.approvalMode == .auto,
+                  let pending = requestsByEvent[event.id], !pending.isEmpty else { continue }
+            // Member by member in no particular order, each before their guests.
+            let byRequester = Dictionary(grouping: pending, by: \.requestedBy)
+            for group in byRequester.values.shuffled() {
+                for request in group.sorted(by: { !$0.isGuest && $1.isGuest }) {
+                    _ = seatRequestLocally(request, in: event)
+                }
+            }
+            requestsByEvent[event.id] = []
+        }
+    }
+
+    @discardableResult
+    private func seatRequestLocally(_ request: FeedRegistrationRequest, in occurrence: FeedOccurrence) -> Bool {
+        var list = rosterCache[occurrence.id] ?? []
+        let seated = list.filter { $0.status != .waitlisted }.count
+        if occurrence.capacity > 0, seated + 1 > occurrence.capacity { return false }
+        let status: FeedRegStatus = occurrence.price > 0 ? .awaitingPayment : .registered
+        list.append(FeedMember(
+            id: request.userId ?? request.id,
+            name: request.name,
+            status: status,
+            userId: request.userId,
+            addedBy: request.isGuest ? request.requestedBy : nil,
+            joinedAt: .now,
+            avatarUrl: request.avatarUrl,
+            position: request.position
+        ))
+        rosterCache[occurrence.id] = list
+        return true
     }
 
     /// Withdraw through the server operation that matches the current state,
@@ -2672,7 +3122,7 @@ final class HomeStore {
         list.append(
             FeedMember(
                 id: currentUserID ?? UUID(),
-                name: profileName.isEmpty ? "أنا" : profileName,
+                name: profileName.isEmpty ? String(localized: "أنا") : profileName,
                 status: status,
                 userId: currentUserID
             )
@@ -2725,7 +3175,7 @@ final class HomeStore {
     private func removeMe(from occurrence: FeedOccurrence) {
         myEventStatus[occurrence.id] = nil
         if var list = rosterCache[occurrence.id] {
-            let myDisplayName = profileName.isEmpty ? "أنا" : profileName
+            let myDisplayName = profileName.isEmpty ? String(localized: "أنا") : profileName
             if let idx = list.firstIndex(where: {
                 ($0.userId != nil && $0.userId == currentUserID) || $0.name == myDisplayName
             }) {
@@ -2924,7 +3374,7 @@ final class HomeStore {
     }
 
     private func mapMember(_ m: WorkspaceMemberRecord) -> FeedTeamMember {
-        FeedTeamMember(id: m.userId, displayName: m.displayName ?? "عضو",
+        FeedTeamMember(id: m.userId, displayName: m.displayName ?? String(localized: "عضو"),
                        role: m.isOwner ? .admin : .member, isPending: false,
                        avatarUrl: m.avatarUrl, position: m.position ?? "")
     }
@@ -2948,7 +3398,24 @@ final class HomeStore {
                               paymentReminderSentAt: ev.paymentReminderSentAt,
                               memberResponse: ev.myResponseStatus.flatMap(FeedMemberResponse.init(rawValue:)),
                               requiresPaymentAction: ev.requiresPaymentAction,
-                              capacityPolicy: ev.capacityPolicy ?? .waitlist)
+                              capacityPolicy: ev.capacityPolicy ?? .waitlist,
+                              registrationLocked: ev.registrationLocked ?? false,
+                              registrationOpensAt: ev.registrationOpensAt,
+                              registrationSettings: Self.registrationSettings(from: ev))
+    }
+
+    static func registrationSettings(from ev: EventRecord) -> RegistrationSettings {
+        let opening: RegistrationOpeningRule? = if let days = ev.registrationOpenDaysBefore,
+                                                   let minute = ev.registrationOpenMinute {
+            RegistrationOpeningRule(daysBefore: days, minuteOfDay: minute)
+        } else {
+            nil
+        }
+        return RegistrationSettings(
+            opening: opening,
+            approvalMode: ev.approvalMode ?? .auto,
+            guestsAllowed: ev.guestsAllowed ?? true
+        )
     }
 
     /// Gap: there is no per-workspace template list, so the team-detail "session"
@@ -2966,7 +3433,7 @@ final class HomeStore {
         return FeedPlan(id: ev.templateId ?? ev.id, name: ev.name, weekdays: [weekday],
                         startTime: ev.startDate, endTime: end, startDate: ev.startDate, endDate: nil,
                         price: ev.pricePerPerson ?? Double(ev.totalPrice ?? 0),
-                        totalVenueCost: Double(ev.totalPrice ?? 0), currency: "ر.س",
+                        totalVenueCost: Double(ev.totalPrice ?? 0), currency: String(localized: "ر.س"),
                         capacity: ev.maxParticipants ?? 0,
                         capacityPolicy: ev.capacityPolicy ?? .waitlist,
                         latitude: ev.latitude ?? 24.7136, longitude: ev.longitude ?? 46.6753,
@@ -3018,7 +3485,7 @@ final class HomeStore {
             teamA.id: [FeedPlan(id: UUID(), name: "تمرين الأسبوع", weekdays: [3, 6],
                                 startTime: at(0, 20), endTime: at(0, 22),
                                 startDate: at(-30, 20), endDate: nil,
-                                price: 25, totalVenueCost: 350, currency: "ر.س", capacity: 14, capacityPolicy: .waitlist,
+                                price: 25, totalVenueCost: 350, currency: String(localized: "ر.س"), capacity: 14, capacityPolicy: .waitlist,
                                 latitude: 24.7743, longitude: 46.7386,
                                 locationName: "ملعب النخيل", locationAddress: "حي النخيل، الرياض")],
             teamB.id: [],

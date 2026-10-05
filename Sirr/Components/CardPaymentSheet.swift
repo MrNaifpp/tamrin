@@ -52,14 +52,14 @@ struct CardPaymentSheet: View {
                         ProgressView().tint(.white).padding(.top, 60)
                     }
                 case .processing:
-                    statusView(icon: "hourglass", title: "نتحقق من الدفع…", tint: .white, spinning: true)
+                    statusView(icon: "hourglass", title: String(localized: "نتحقق من الدفع…"), tint: .white, spinning: true)
                 case .success:
-                    statusView(icon: "checkmark.circle.fill", title: "تم الدفع وتأكد مقعدك", tint: .green)
+                    statusView(icon: "checkmark.circle.fill", title: String(localized: "تم الدفع وتأكد مقعدك"), tint: .green)
                 case .failed(let message):
                     statusView(icon: "xmark.circle.fill", title: message, tint: .red)
                     retryButton
                 case .cancelled:
-                    statusView(icon: "arrow.uturn.backward.circle", title: "ألغيت عملية الدفع", tint: .white.opacity(0.7))
+                    statusView(icon: "arrow.uturn.backward.circle", title: String(localized: "ألغيت عملية الدفع"), tint: .white.opacity(0.7))
                     retryButton
                 }
                 Spacer()
@@ -94,7 +94,7 @@ struct CardPaymentSheet: View {
             Text(eventName)
                 .font(TamrinFont.font(size: 15))
                 .foregroundStyle(Color(white: 0.7))
-            Text(quote.amountInRiyals.formatted(.number.precision(.fractionLength(0...2))) + " ريال")
+            Text("\(quote.amountInRiyals.formatted(.number.precision(.fractionLength(0...2)).locale(.tamrin))) ريال")
                 .font(TamrinFont.font(size: 28, weight: .bold))
                 .foregroundStyle(.white)
                 .padding(.top, 8)
@@ -149,11 +149,11 @@ struct CardPaymentSheet: View {
             case .alreadyPaid:
                 state = .success
             case .freeEvent, .nothingDue:
-                loadError = "لا يوجد مبلغ مستحق على هذا الموعد."
+                loadError = String(localized: "لا يوجد مبلغ مستحق على هذا الموعد.")
             case .recipientNotOnboarded:
-                loadError = "الدفع بالبطاقة غير متاح لهذه المجموعة بعد."
+                loadError = String(localized: "الدفع بالبطاقة غير متاح لهذه المجموعة بعد.")
             case .eventClosed:
-                loadError = "أُغلق التسجيل لهذا الموعد."
+                loadError = String(localized: "أُغلق التسجيل لهذا الموعد.")
             }
         } catch {
             loadError = ServerErrorMessage.arabic(for: error)
@@ -183,13 +183,13 @@ struct CardPaymentSheet: View {
         case .failed(let error):
             Haptics.error()
             state = .failed(error.localizedDescription.isEmpty
-                            ? "لم تنجح عملية الدفع. تحقق من البطاقة وحاول مرة أخرى."
+                            ? String(localized: "لم تنجح عملية الدفع. تحقق من البطاقة وحاول مرة أخرى.")
                             : error.localizedDescription)
         case .canceled:
             state = .cancelled
         case .saveOnlyToken:
             // Not requested (createSaveOnlyToken is false); nothing was charged.
-            state = .failed("لم تنجح عملية الدفع.")
+            state = .failed(String(localized: "لم تنجح عملية الدفع."))
         }
     }
 
@@ -203,12 +203,12 @@ struct CardPaymentSheet: View {
                 state = .success
                 onSettled()
             case .processing:
-                state = .failed("تأخر التحقق من الدفع. سيتأكد مقعدك تلقائيًا عند وصول التأكيد.")
+                state = .failed(String(localized: "تأخر التحقق من الدفع. سيتأكد مقعدك تلقائيًا عند وصول التأكيد."))
             case .failed(let reason):
                 Haptics.error()
                 state = .failed(reason == "amount" || reason == "recipient"
-                                ? "تعذر التحقق من الدفع. لم يُخصم أي مبلغ."
-                                : "لم تنجح عملية الدفع.")
+                                ? String(localized: "تعذر التحقق من الدفع. لم يُخصم أي مبلغ.")
+                                : String(localized: "لم تنجح عملية الدفع."))
             }
         } catch {
             state = .failed(ServerErrorMessage.arabic(for: error))

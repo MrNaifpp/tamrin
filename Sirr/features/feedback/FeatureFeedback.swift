@@ -25,7 +25,7 @@ enum TamrinFeature: String, CaseIterable, Identifiable {
     /// The name the sheet puts the question to.
     var title: String {
         switch self {
-        case .lineup: return "التشكيلة"
+        case .lineup: return String(localized: "التشكيلة")
         }
     }
 
@@ -33,7 +33,7 @@ enum TamrinFeature: String, CaseIterable, Identifiable {
     /// rather than asking about a menu item in the abstract.
     var prompt: String {
         switch self {
-        case .lineup: return "قسّمت الفريقين. كيف كانت التجربة؟"
+        case .lineup: return String(localized: "قسّمت الفريقين. كيف كانت التجربة؟")
         }
     }
 }
@@ -156,7 +156,7 @@ struct FeatureFeedbackSheet: View {
             .sheetContentHeight()
             .frame(maxHeight: .infinity, alignment: .top)
             .background(TamrinTheme.sheet)
-            .sheetTitle("قيّم \(feature.title)", subtitle: feature.prompt)
+            .sheetTitle(String(localized: "قيّم \(feature.title)"), subtitle: feature.prompt)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("لاحقًا", role: .cancel) { dismiss() }
@@ -168,7 +168,7 @@ struct FeatureFeedbackSheet: View {
                 }
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .fittedSheet(minHeight: 260, includesNavigationBar: true)
         .onAppear { FeatureFeedbackStore.markAsked(feature) }
     }
@@ -186,7 +186,7 @@ struct FeatureFeedbackSheet: View {
                 } label: {
                     Image(systemName: value <= stars ? "star.fill" : "star")
                         .font(.system(size: 30))
-                        .foregroundStyle(value <= stars ? TamrinTheme.lime : Color.secondary.opacity(0.4))
+                        .foregroundStyle(value <= stars ? TamrinTheme.success : Color.secondary.opacity(0.4))
                         .frame(maxWidth: .infinity, minHeight: TamrinControlMetrics.touchTarget)
                         .contentTransition(.symbolEffect(.replace))
                 }
@@ -197,7 +197,7 @@ struct FeatureFeedbackSheet: View {
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("تقييم \(feature.title)")
-        .accessibilityValue(stars == 0 ? "بلا تقييم" : "\(stars) من 5")
+        .accessibilityValue(stars == 0 ? String(localized: "بلا تقييم") : String(localized: "\(stars) من 5"))
     }
 
     private func submit() {

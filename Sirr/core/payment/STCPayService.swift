@@ -107,17 +107,16 @@ final class STCPayService {
         stcPayLogger.info("confirm_payment ok (eventId: \(eventId), joinerId: \(joinerId))")
     }
 
-    /// Creator rejects a pending payment. Returns waitlist user ids to push.
-    func rejectPayment(eventId: UUID, joinerId: UUID, creatorId: UUID) async throws -> SeatFreedResult {
+    /// Reset the declaration while preserving every reserved seat.
+    /// A dedicated RPC fails safely on servers that still use destructive rejection.
+    func resetPaymentDeclaration(eventId: UUID, joinerId: UUID, creatorId: UUID) async throws {
         let params: [String: String] = [
             "p_event_id": eventId.uuidString,
             "p_user_id": joinerId.uuidString,
             "p_creator_id": creatorId.uuidString
         ]
-        let response = try await client.rpc("reject_payment", params: params).execute()
-        let waiters = try Self.extractWaiterIds(from: response.data)
-        stcPayLogger.info("reject_payment ok (eventId: \(eventId), waiters: \(waiters.count))")
-        return SeatFreedResult(waiterIds: waiters)
+        try await client.rpc("reset_payment_declaration", params: params).execute()
+        stcPayLogger.info("reset_payment_declaration ok (eventId: \(eventId))")
     }
 
     /// Joiner cancels their own pending payment. Returns waitlist user ids to push.

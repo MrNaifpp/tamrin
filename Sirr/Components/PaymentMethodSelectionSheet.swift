@@ -56,8 +56,8 @@ struct PaymentMethodSelectionSheet: View {
                     .disabled(selections.isEmpty)
                     .accessibilityHint(
                         selections.isEmpty
-                            ? "اختر وسيلة دفع واحدة على الأقل أولًا"
-                            : "يعتمد وسائل الدفع المحددة ويغلق الصفحة"
+                            ? String(localized: "اختر وسيلة دفع واحدة على الأقل أولًا")
+                            : String(localized: "يعتمد وسائل الدفع المحددة ويغلق الصفحة")
                     )
                 }
             }
@@ -73,14 +73,14 @@ struct PaymentMethodSelectionSheet: View {
                         upsert(method)
                         isEditorPresented = false
                         showToast(
-                            wasExisting ? "حُفظت تعديلات \(provider.displayName)" : "أضفت \(provider.displayName)",
+                            wasExisting ? String(localized: "حُفظت تعديلات \(provider.displayName)") : String(localized: "أضفت \(provider.displayName)"),
                             symbol: "checkmark.circle.fill"
                         )
                     },
                     onRemove: {
                         remove(provider)
                         isEditorPresented = false
-                        showToast("أزلت \(provider.displayName)", symbol: "trash.fill")
+                        showToast(String(localized: "أزلت \(provider.displayName)"), symbol: "trash.fill")
                     }
                 )
             }
@@ -94,7 +94,7 @@ struct PaymentMethodSelectionSheet: View {
                 }
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .presentationDragIndicator(.visible)
     }
 
@@ -107,12 +107,12 @@ struct PaymentMethodSelectionSheet: View {
                 Spacer(minLength: 12)
 
                 if !selections.isEmpty {
-                    Text("\(selections.count.formatted()) محددة")
+                    Text("\(selections.count.formatted(.number.locale(.tamrin))) محددة")
                         .font(TamrinFont.font(size: 12, weight: .medium))
-                        .foregroundStyle(TamrinTheme.ink)
+                        .foregroundStyle(.white)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
-                        .background(TamrinTheme.lime.opacity(0.72), in: .capsule)
+                        .background(TamrinTheme.success, in: .capsule)
                         .contentTransition(.numericText())
                 }
             }
@@ -133,10 +133,10 @@ struct PaymentMethodSelectionSheet: View {
             Haptics.selection()
             if isSelected {
                 remove(.cash)
-                showToast("أزلت الدفع كاش", symbol: "trash.fill")
+                showToast(String(localized: "أزلت الدفع كاش"), symbol: "trash.fill")
             } else {
                 upsert(PaymentMethodDraft(provider: .cash))
-                showToast("أضفت الدفع كاش", symbol: "checkmark.circle.fill")
+                showToast(String(localized: "أضفت الدفع كاش"), symbol: "checkmark.circle.fill")
             }
         } label: {
             HStack(spacing: 14) {
@@ -176,8 +176,8 @@ struct PaymentMethodSelectionSheet: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("الدفع كاش في الملعب")
-        .accessibilityHint(isSelected ? "إزالة الدفع كاش من الخيارات" : "إضافة الدفع كاش إلى الخيارات")
-        .accessibilityValue(isSelected ? "محدد" : "غير محدد")
+        .accessibilityHint(isSelected ? String(localized: "إزالة الدفع كاش من الخيارات") : String(localized: "إضافة الدفع كاش إلى الخيارات"))
+        .accessibilityValue(isSelected ? String(localized: "محدد") : String(localized: "غير محدد"))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
@@ -239,8 +239,8 @@ struct PaymentMethodSelectionSheet: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(provider.displayName)
-        .accessibilityHint(isSelected ? "فتح بيانات وسيلة الدفع للتعديل أو الإزالة" : "فتح نموذج إضافة بيانات وسيلة الدفع")
-        .accessibilityValue(isSelected ? "محدد" : "غير محدد")
+        .accessibilityHint(isSelected ? String(localized: "فتح بيانات وسيلة الدفع للتعديل أو الإزالة") : String(localized: "فتح نموذج إضافة بيانات وسيلة الدفع"))
+        .accessibilityValue(isSelected ? String(localized: "محدد") : String(localized: "غير محدد"))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
@@ -297,13 +297,13 @@ private extension PaymentProvider {
     /// الاسم المختصر داخل شبكة الاختيار، مطابق لإيقاع المرجع البصري.
     var selectionTitle: String {
         switch self {
-        case .cash: "كاش"
+        case .cash: String(localized: "كاش")
         case .stcBank: "stc bank"
-        case .barq: "برق"
-        case .alRajhi: "الراجحي"
-        case .snb: "الأهلي"
-        case .alinma: "الإنماء"
-        case .riyad: "الرياض"
+        case .barq: String(localized: "برق")
+        case .alRajhi: String(localized: "الراجحي")
+        case .snb: String(localized: "الأهلي")
+        case .alinma: String(localized: "الإنماء")
+        case .riyad: String(localized: "الرياض")
         }
     }
 }
@@ -386,7 +386,7 @@ private struct PaymentMethodDetailsEditor: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .background(TamrinTheme.sheet)
-        .navigationTitle(existing == nil ? "إضافة وسيلة الدفع" : "تعديل وسيلة الدفع")
+        .navigationTitle(existing == nil ? String(localized: "إضافة وسيلة الدفع") : String(localized: "تعديل وسيلة الدفع"))
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
             bottomActions
@@ -414,8 +414,8 @@ private struct PaymentMethodDetailsEditor: View {
             Text(provider.displayName)
                 .font(TamrinFont.title2)
             Text(provider.requiresPhone
-                 ? "أدخل رقم الجوال المرتبط بالحساب"
-                 : "أدخل البيانات التي يحتاجها اللاعب للتحويل")
+                 ? String(localized: "أدخل رقم الجوال المرتبط بالحساب")
+                 : String(localized: "أدخل البيانات التي يحتاجها اللاعب للتحويل"))
                 .font(TamrinFont.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -455,8 +455,8 @@ private struct PaymentMethodDetailsEditor: View {
                 .focused($focusedField, equals: .iban)
 
                 PaymentEditorField(
-                    title: "رقم الحساب",
-                    placeholder: "اختياري",
+                    title: String(localized: "رقم الحساب"),
+                    placeholder: String(localized: "اختياري"),
                     text: $accountNumber,
                     keyboardType: .numberPad
                 )
@@ -471,7 +471,7 @@ private struct PaymentMethodDetailsEditor: View {
 
             if existing != nil {
                 TamrinActionButton(
-                    title: "إزالة وسيلة الدفع",
+                    title: String(localized: "إزالة وسيلة الدفع"),
                     systemImage: "trash",
                     role: .destructive,
                     prominent: false
@@ -488,14 +488,14 @@ private struct PaymentMethodDetailsEditor: View {
 
     private var saveButton: some View {
         TamrinActionButton(
-            title: existing == nil ? "إضافة وسيلة الدفع" : "حفظ التعديلات",
+            title: existing == nil ? String(localized: "إضافة وسيلة الدفع") : String(localized: "حفظ التعديلات"),
             tint: provider.brandColor
         ) {
             Haptics.impact(.medium)
             onSave(currentDraft)
         }
         .disabled(!isValid)
-        .accessibilityHint(isValid ? "يحفظ بيانات وسيلة الدفع" : "أكمل البيانات المطلوبة أولاً")
+        .accessibilityHint(isValid ? String(localized: "يحفظ بيانات وسيلة الدفع") : String(localized: "أكمل البيانات المطلوبة أولاً"))
     }
 
     private var isValid: Bool {

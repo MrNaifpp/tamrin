@@ -111,7 +111,7 @@ struct LineupFlowView: View {
             }
             .ignoresSafeArea()
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .colorScheme(.dark)
         .task { await load() }
         .confirmationDialog(
@@ -297,15 +297,15 @@ struct LineupFlowView: View {
         if isLoading {
             EmptyView()
         } else if candidates.count < 2 {
-            TamrinActionButton(title: "إغلاق", prominent: false) {
+            TamrinActionButton(title: String(localized: "إغلاق"), prominent: false) {
                 dismiss()
             }
         } else if let selectedPlayer, let source = selectedPlayerSide {
             HStack(spacing: 10) {
                 TamrinActionButton(
                     title: source.other == .first
-                        ? "نقل للفريق الأول"
-                        : "نقل للفريق الثاني",
+                        ? String(localized: "نقل للفريق الأول")
+                        : String(localized: "نقل للفريق الثاني"),
                     // The team cards are stacked, so the arrow should point at
                     // the destination the player will move to.
                     systemImage: source == .first ? "arrow.down" : "arrow.up"
@@ -319,7 +319,7 @@ struct LineupFlowView: View {
                 )
                 .accessibilityHint("ينقله بدون تبديل لاعب آخر")
 
-                TamrinActionButton(title: "إلغاء", prominent: false) {
+                TamrinActionButton(title: String(localized: "إلغاء"), prominent: false) {
                     tradeCandidateID = nil
                 }
                 .frame(maxWidth: 110)
@@ -328,13 +328,13 @@ struct LineupFlowView: View {
         } else {
             HStack(spacing: 10) {
                 TamrinActionButton(
-                    title: "إعادة التوزيع",
+                    title: String(localized: "إعادة التوزيع"),
                     systemImage: "arrow.trianglehead.2.clockwise",
                     prominent: false,
                     action: splitTeams
                 )
 
-                TamrinActionButton(title: "نشر", action: publishLineup)
+                TamrinActionButton(title: String(localized: "نشر"), action: publishLineup)
             }
         }
     }
@@ -348,8 +348,8 @@ struct LineupFlowView: View {
                 ProgressView()
                 Text(
                     usesFootballFeatures
-                        ? "يجهّز التشكيلة ويوازن الفريقين…"
-                        : "يجهّز التشكيلة ويوزّع اللاعبين…"
+                        ? String(localized: "يجهّز التشكيلة ويوازن الفريقين…")
+                        : String(localized: "يجهّز التشكيلة ويوزّع اللاعبين…")
                 )
                     .font(TamrinFont.subheadline)
                     .foregroundStyle(.white.opacity(0.7))
@@ -379,8 +379,8 @@ struct LineupFlowView: View {
 
             Text(
                 usesFootballFeatures
-                    ? "حدّد لاعبًا ثم انقله بالزر أو اختر لاعبًا من الفريق الآخر للتبديل. اضغط مطولًا لتغيير مركزه."
-                    : "حدّد لاعبًا ثم انقله بالزر أو اختر لاعبًا من الفريق الآخر للتبديل."
+                    ? String(localized: "حدّد لاعبًا ثم انقله بالزر أو اختر لاعبًا من الفريق الآخر للتبديل. اسحب اللاعب مباشرة لتغيير مركزه، واسحب أرضية الملعب للتمرير.")
+                    : String(localized: "حدّد لاعبًا ثم انقله بالزر أو اختر لاعبًا من الفريق الآخر للتبديل.")
             )
                 .font(TamrinFont.font(size: 11, weight: .regular))
                 .foregroundStyle(.white.opacity(0.45))
@@ -425,8 +425,7 @@ struct LineupFlowView: View {
                     .foregroundStyle(.white)
 
                 Text(
-                    "\(teams.first.count.counted(.player)) مقابل "
-                        + teams.second.count.counted(.player)
+                    "\(teams.first.count.counted(.player)) مقابل \(teams.second.count.counted(.player))"
                 )
                 .font(TamrinFont.font(size: 11, weight: .regular))
                 .foregroundStyle(.white.opacity(0.5))
@@ -444,12 +443,12 @@ struct LineupFlowView: View {
     }
 
     private var strengthComparisonLabel: String {
-        guard strengthGap > 3 else { return "الفريقان متكافئان تقريبًا" }
+        guard strengthGap > 3 else { return String(localized: "الفريقان متكافئان تقريبًا") }
         let stronger: LineupSide = strengthScores.first > strengthScores.second ? .first : .second
         switch strengthGap {
-        case 4...7: return "\(stronger.title) أقوى قليلًا"
-        case 8...14: return "\(stronger.title) أقوى"
-        default: return "\(stronger.title) أقوى بوضوح"
+        case 4...7: return String(localized: "\(stronger.title) أقوى قليلًا")
+        case 8...14: return String(localized: "\(stronger.title) أقوى")
+        default: return String(localized: "\(stronger.title) أقوى بوضوح")
         }
     }
 
@@ -492,8 +491,8 @@ struct LineupFlowView: View {
 
             Text(
                 unplaced.count == 1
-                    ? "لاعب واحد سجّل بعد آخر تقسيم وما دخل التشكيلة."
-                    : "\(unplaced.count.counted(.player)) سجّلوا بعد آخر تقسيم وما دخلوا التشكيلة."
+                    ? String(localized: "لاعب واحد سجّل بعد آخر تقسيم وما دخل التشكيلة.")
+                    : String(localized: "\(unplaced.count.counted(.player)) سجّلوا بعد آخر تقسيم وما دخلوا التشكيلة.")
             )
                 .font(TamrinFont.font(size: 13, weight: .medium))
                 .foregroundStyle(.white)
@@ -663,7 +662,7 @@ struct LineupRowTag: View {
                         onChoose(position)
                     } label: {
                         Label(
-                            position.rawValue,
+                            position.title,
                             systemImage: row == LineupRow(position) ? "checkmark" : ""
                         )
                     }

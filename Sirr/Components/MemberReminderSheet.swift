@@ -19,14 +19,14 @@ struct MemberReminderSheet: View {
             VStack(spacing: 10) {
                 option(
                     .register,
-                    title: "تذكير الأعضاء بالتسجيل",
-                    detail: "يوصل للأعضاء اللي ما حجزوا مقاعدهم بعد",
+                    title: String(localized: "تذكير الأعضاء بالتسجيل"),
+                    detail: String(localized: "يوصل للأعضاء اللي ما حجزوا مقاعدهم بعد"),
                     symbol: "person.badge.plus"
                 )
                 option(
                     .payment,
-                    title: "تذكير الأعضاء بدفع القطة",
-                    detail: "يوصل للمسجلين في الموعد",
+                    title: String(localized: "تذكير الأعضاء بدفع القطة"),
+                    detail: String(localized: "يوصل للمسجلين في الموعد"),
                     symbol: "banknote.fill"
                 )
 
@@ -48,7 +48,7 @@ struct MemberReminderSheet: View {
                 // the whole screen as its height. In a content-fitted sheet the
                 // end of this stack is the bottom edge.
                 TamrinActionButton(
-                    title: "إرسال الإشعار",
+                    title: String(localized: "إرسال الإشعار"),
                     isLoading: isSending
                 ) {
                     Task { await send() }
@@ -74,7 +74,7 @@ struct MemberReminderSheet: View {
                 }
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .fittedSheet(minHeight: 300, includesNavigationBar: true)
         .interactiveDismissDisabled(isSending)
     }
@@ -128,7 +128,7 @@ struct MemberReminderSheet: View {
         .disabled(isSending)
         .accessibilityLabel(title)
         .accessibilityHint(detail)
-        .accessibilityValue(isSelected ? "محدد" : "غير محدد")
+        .accessibilityValue(isSelected ? String(localized: "محدد") : String(localized: "غير محدد"))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
@@ -145,7 +145,7 @@ struct MemberReminderSheet: View {
         } catch {
             Haptics.error()
             let description = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-            errorMessage = description.isEmpty ? "تعذر إرسال الإشعار. حاول مرة أخرى." : description
+            errorMessage = description.isEmpty ? String(localized: "تعذر إرسال الإشعار. حاول مرة أخرى.") : description
             isSending = false
         }
     }

@@ -179,7 +179,7 @@ struct SharedEventView: View {
                         HStack(spacing: 6) {
                             Image(systemName: "creditcard.fill")
                                 .foregroundStyle(.white.opacity(0.8))
-                            Text(String(format: "%.0f ر.س / شخص", event.pricePerPerson))
+                            Text("\(String(format: "%.0f", event.pricePerPerson)) ر.س / شخص")
                                 .font(.appBody)
                                 .foregroundStyle(.white.opacity(0.9))
                         }
@@ -258,7 +258,7 @@ struct SharedEventView: View {
                                 } else {
                                     Image(systemName: event.pricePerPerson > 0 ? "creditcard.fill" : "plus")
                                         .foregroundStyle(.black)
-                                    Text(event.pricePerPerson > 0 ? "ادفع عبر STC Pay" : "انضم للتمرين")
+                                    Text(event.pricePerPerson > 0 ? String(localized: "ادفع عبر STC Pay") : String(localized: "انضم للتمرين"))
                                         .font(.appBody)
                                         .foregroundStyle(.black)
                                 }
@@ -322,7 +322,7 @@ struct SharedEventView: View {
             let record = try await EventService.shared.getEventById(eventId)
             event = EventData.from(record: record)
         } catch {
-            errorMessage = "هذا الموعد في تمرين خاص.\nاطلب دعوة من صاحب التمرين للانضمام."
+            errorMessage = String(localized: "هذا الموعد في تمرين خاص.\nاطلب دعوة من صاحب التمرين للانضمام.")
         }
     }
 
@@ -341,9 +341,9 @@ struct SharedEventView: View {
                 } catch {
                     let msg = error.localizedDescription
                     if msg.contains("closed") || msg.contains("locked") {
-                        joinError = "التسجيل مغلق لهذه الفعالية"
+                        joinError = String(localized: "التسجيل مغلق لهذه الفعالية")
                     } else {
-                        joinError = "فشل في الانضمام: \(msg)"
+                        joinError = String(localized: "فشل في الانضمام: \(msg)")
                     }
                 }
             }
@@ -362,20 +362,20 @@ struct SharedEventView: View {
             case .seatsFull:
                 showWaitlistSheet = true
             case .closedAtCapacity:
-                joinError = "اكتمل العدد، وهذا الموعد يقفل التسجيل عند الاكتمال"
+                joinError = String(localized: "اكتمل العدد، وهذا الموعد يقفل التسجيل عند الاكتمال")
             case .alreadyJoined(let status):
                 if status == .confirmed { joinSuccess = true }
                 else if status == .pending { hasPendingPayment = true }
-                else { joinError = "أنت مسجل بالفعل في هذه الفعالية" }
+                else { joinError = String(localized: "أنت مسجل بالفعل في هذه الفعالية") }
             case .pendingGuestRequest:
-                joinError = "لديك طلب ضيوف بانتظار التأكيد. انتظر حسمه قبل تسجيل نفسك."
+                joinError = String(localized: "لديك طلب ضيوف بانتظار التأكيد. انتظر حسمه قبل تسجيل نفسك.")
             case .creatorMissingNumber:
-                joinError = "صاحب الفعالية لم يضف رقم STC Pay بعد"
+                joinError = String(localized: "صاحب الفعالية لم يضف رقم STC Pay بعد")
             case .registrationClosed:
-                joinError = "التسجيل مغلق لهذه الفعالية"
+                joinError = String(localized: "التسجيل مغلق لهذه الفعالية")
             }
         } catch {
-            joinError = "فشل في الانضمام: \(error.localizedDescription)"
+            joinError = String(localized: "فشل في الانضمام: \(error.localizedDescription)")
         }
     }
 
@@ -389,7 +389,7 @@ struct SharedEventView: View {
                 _ = try await STCPayService.shared.cancelPending(eventId: event.id, userId: session.user.id)
                 hasPendingPayment = false
             } catch {
-                joinError = "تعذر إلغاء الطلب"
+                joinError = String(localized: "تعذر إلغاء الطلب")
             }
         }
     }
@@ -399,7 +399,7 @@ struct SharedEventView: View {
             let session = try await SupabaseClientManager.shared.client.auth.session
             try await STCPayService.shared.joinWaitlist(eventId: event.id, userId: session.user.id)
         } catch {
-            joinError = "تعذر الانضمام لقائمة الانتظار"
+            joinError = String(localized: "تعذر الانضمام لقائمة الانتظار")
         }
     }
 

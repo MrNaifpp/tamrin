@@ -59,6 +59,13 @@ struct EventRecord: Codable {
     /// the column; callers treat that as `.waitlist`, which is how the client
     /// behaved back when it hardcoded the value.
     let capacityPolicy: CapacityPolicy?
+    /// Registration settings. Nil on a server that predates them, which is
+    /// the same as registration open on sight with guests allowed.
+    let registrationOpensAt: Date?
+    let registrationOpenDaysBefore: Int?
+    let registrationOpenMinute: Int?
+    let approvalMode: RegistrationApprovalMode?
+    let guestsAllowed: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -89,6 +96,11 @@ struct EventRecord: Codable {
         case myResponseStatus = "my_response_status"
         case requiresPaymentAction = "requires_payment_action"
         case capacityPolicy = "capacity_policy"
+        case registrationOpensAt = "registration_opens_at"
+        case registrationOpenDaysBefore = "registration_open_days_before"
+        case registrationOpenMinute = "registration_open_minute"
+        case approvalMode = "approval_mode"
+        case guestsAllowed = "guests_allowed"
     }
 
     init(from decoder: Decoder) throws {
@@ -123,6 +135,11 @@ struct EventRecord: Codable {
         myResponseStatus = try container.decodeIfPresent(String.self, forKey: .myResponseStatus)
         requiresPaymentAction = try container.decodeIfPresent(Bool.self, forKey: .requiresPaymentAction) ?? false
         capacityPolicy = try container.decodeIfPresent(CapacityPolicy.self, forKey: .capacityPolicy)
+        registrationOpensAt = try container.decodeIfPresent(Date.self, forKey: .registrationOpensAt)
+        registrationOpenDaysBefore = try container.decodeIfPresent(Int.self, forKey: .registrationOpenDaysBefore)
+        registrationOpenMinute = try container.decodeIfPresent(Int.self, forKey: .registrationOpenMinute)
+        approvalMode = try container.decodeIfPresent(RegistrationApprovalMode.self, forKey: .approvalMode)
+        guestsAllowed = try container.decodeIfPresent(Bool.self, forKey: .guestsAllowed)
     }
 }
 
@@ -512,7 +529,7 @@ final class EventService {
             session = try await client.auth.session
         } catch {
             eventLogger.error("API createEvent: no session — \(error.localizedDescription)")
-            throw NSError(domain: "EventService", code: -2, userInfo: [NSLocalizedDescriptionKey: "يجب تسجيل الدخول أولاً"])
+            throw NSError(domain: "EventService", code: -2, userInfo: [NSLocalizedDescriptionKey: String(localized: "يجب تسجيل الدخول أولاً")])
         }
         let userId = session.user.id
 
@@ -908,7 +925,7 @@ final class EventService {
             throw NSError(
                 domain: "EventService",
                 code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "تعذر قراءة رد الخادم."]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "تعذر قراءة رد الخادم.")]
             )
         }
         eventLogger.info("API registerEventSeat -> \(status)")
@@ -938,7 +955,7 @@ final class EventService {
             throw NSError(
                 domain: "EventService",
                 code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "تعذر قراءة رد الخادم."]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "تعذر قراءة رد الخادم.")]
             )
         }
         eventLogger.info("API declareEventPayment -> \(status)")
@@ -965,7 +982,7 @@ final class EventService {
             throw NSError(
                 domain: "EventService",
                 code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "تعذر قراءة رد الخادم."]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "تعذر قراءة رد الخادم.")]
             )
         }
 
@@ -978,7 +995,7 @@ final class EventService {
                 throw NSError(
                     domain: "EventService",
                     code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "تعذر قراءة رد الخادم."]
+                    userInfo: [NSLocalizedDescriptionKey: String(localized: "تعذر قراءة رد الخادم.")]
                 )
             }
             let storedName = (payload["name"] as? String) ?? name
@@ -994,7 +1011,7 @@ final class EventService {
             throw NSError(
                 domain: "EventService",
                 code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "رد غير متوقع من الخادم: \(status)"]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "رد غير متوقع من الخادم: \(status)")]
             )
         }
     }
@@ -1021,7 +1038,7 @@ final class EventService {
             throw NSError(
                 domain: "EventService",
                 code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "تعذر قراءة رد الخادم."]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "تعذر قراءة رد الخادم.")]
             )
         }
 
@@ -1043,7 +1060,7 @@ final class EventService {
             throw NSError(
                 domain: "EventService",
                 code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "رد غير متوقع من الخادم: \(status)"]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "رد غير متوقع من الخادم: \(status)")]
             )
         }
     }
@@ -1070,7 +1087,7 @@ final class EventService {
             throw NSError(
                 domain: "EventService",
                 code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "تعذر قراءة رد الخادم."]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "تعذر قراءة رد الخادم.")]
             )
         }
 
@@ -1090,7 +1107,7 @@ final class EventService {
             throw NSError(
                 domain: "EventService",
                 code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "رد غير متوقع من الخادم: \(status)"]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "رد غير متوقع من الخادم: \(status)")]
             )
         }
     }
@@ -1123,7 +1140,7 @@ final class EventService {
             throw NSError(
                 domain: "EventService",
                 code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "تعذر قراءة رد الخادم."]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "تعذر قراءة رد الخادم.")]
             )
         }
 
@@ -1136,7 +1153,7 @@ final class EventService {
             throw NSError(
                 domain: "EventService",
                 code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "رد غير متوقع من الخادم: \(status)"]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "رد غير متوقع من الخادم: \(status)")]
             )
         }
     }
@@ -1158,7 +1175,7 @@ final class EventService {
             throw NSError(
                 domain: "EventService",
                 code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "تعذر قراءة رد الخادم."]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "تعذر قراءة رد الخادم.")]
             )
         }
 
@@ -1170,7 +1187,7 @@ final class EventService {
             throw NSError(
                 domain: "EventService",
                 code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "رد غير متوقع من الخادم: \(status)"]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "رد غير متوقع من الخادم: \(status)")]
             )
         }
     }
@@ -1290,7 +1307,7 @@ final class EventService {
             .execute()
 
         guard let newValue = try? JSONDecoder().decode(Bool.self, from: response.data) else {
-            throw NSError(domain: "EventService", code: -1, userInfo: [NSLocalizedDescriptionKey: "فشل في تحديث حالة التسجيل"])
+            throw NSError(domain: "EventService", code: -1, userInfo: [NSLocalizedDescriptionKey: String(localized: "فشل في تحديث حالة التسجيل")])
         }
 
         eventLogger.info("API toggleRegistrationLock succeeded (eventId: \(eventId), locked: \(newValue))")

@@ -27,26 +27,26 @@ enum PaymentProvider: String, Codable, CaseIterable, Identifiable, Hashable {
 
     var displayName: String {
         switch self {
-        case .cash: "الدفع كاش في الملعب"
+        case .cash: String(localized: "الدفع كاش في الملعب")
         case .stcBank: "STC Bank"
-        case .barq: "برق"
-        case .alRajhi: "مصرف الراجحي"
-        case .snb: "البنك الأهلي السعودي"
-        case .alinma: "مصرف الإنماء"
-        case .riyad: "بنك الرياض"
+        case .barq: String(localized: "برق")
+        case .alRajhi: String(localized: "مصرف الراجحي")
+        case .snb: String(localized: "البنك الأهلي السعودي")
+        case .alinma: String(localized: "مصرف الإنماء")
+        case .riyad: String(localized: "بنك الرياض")
         }
     }
 
     /// Short label used inside the code-native provider mark.
     var logoName: String {
         switch self {
-        case .cash: "كاش"
+        case .cash: String(localized: "كاش")
         case .stcBank: "stc"
-        case .barq: "برق"
-        case .alRajhi: "الراجحي"
+        case .barq: String(localized: "برق")
+        case .alRajhi: String(localized: "الراجحي")
         case .snb: "SNB"
-        case .alinma: "الإنماء"
-        case .riyad: "الرياض"
+        case .alinma: String(localized: "الإنماء")
+        case .riyad: String(localized: "الرياض")
         }
     }
 
@@ -111,12 +111,12 @@ enum PaymentProvider: String, Codable, CaseIterable, Identifiable, Hashable {
     var openAppTitle: String? {
         switch self {
         case .cash: nil
-        case .stcBank: "افتح تطبيق STC Bank"
-        case .barq: "افتح تطبيق برق"
-        case .alRajhi: "افتح تطبيق الراجحي"
-        case .snb: "افتح تطبيق الأهلي"
-        case .alinma: "افتح تطبيق الإنماء"
-        case .riyad: "افتح تطبيق بنك الرياض"
+        case .stcBank: String(localized: "افتح تطبيق STC Bank")
+        case .barq: String(localized: "افتح تطبيق برق")
+        case .alRajhi: String(localized: "افتح تطبيق الراجحي")
+        case .snb: String(localized: "افتح تطبيق الأهلي")
+        case .alinma: String(localized: "افتح تطبيق الإنماء")
+        case .riyad: String(localized: "افتح تطبيق بنك الرياض")
         }
     }
 }
@@ -131,15 +131,15 @@ enum PaymentMethodValidationIssue: Error, Equatable, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingMobileNumber:
-            "أدخل رقم الجوال المرتبط بوسيلة الدفع."
+            String(localized: "أدخل رقم الجوال المرتبط بوسيلة الدفع.")
         case .invalidSaudiMobile:
-            "أدخل رقم جوال سعودي صحيح."
+            String(localized: "أدخل رقم جوال سعودي صحيح.")
         case .missingIBAN:
-            "أدخل رقم الآيبان."
+            String(localized: "أدخل رقم الآيبان.")
         case .invalidSaudiIBAN:
-            "أدخل آيبان سعودي صحيح يبدأ بـ SA ويتبعه 22 رقمًا."
+            String(localized: "أدخل آيبان سعودي صحيح يبدأ بـ SA ويتبعه 22 رقمًا.")
         case .invalidAccountNumber:
-            "رقم الحساب اختياري، وإذا أضفته يجب أن يتكوّن من 6 إلى 24 رقمًا."
+            String(localized: "رقم الحساب اختياري، وإذا أضفته يجب أن يتكوّن من 6 إلى 24 رقمًا.")
         }
     }
 }
@@ -266,10 +266,10 @@ struct PaymentMethodRecord: Codable, Identifiable, Hashable {
     var maskedSummary: String {
         switch provider.methodType {
         case .cash:
-            return "الدفع عند الحضور"
+            return String(localized: "الدفع عند الحضور")
         case .mobileWallet:
             guard let mobileNumber else { return provider.displayName }
-            return "رقم الجوال •••• \(mobileNumber.suffix(4))"
+            return String(localized: "رقم الجوال •••• \(mobileNumber.suffix(4))")
         case .bankAccount:
             guard let iban else { return provider.displayName }
             return "IBAN •••• \(iban.suffix(4))"

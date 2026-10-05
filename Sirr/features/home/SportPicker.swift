@@ -39,17 +39,17 @@ extension Sport {
     /// draws nothing for a name the system does not know, and a card with a
     /// hole where its icon should be is worse than a missing card.
     static let all: [Sport] = [
-        Sport(symbol: "figure.soccer", name: "كرة القدم"),
-        Sport(symbol: "figure.basketball", name: "كرة السلة"),
-        Sport(symbol: "figure.volleyball", name: "الكرة الطائرة"),
+        Sport(symbol: "figure.soccer", name: String(localized: "كرة القدم")),
+        Sport(symbol: "figure.basketball", name: String(localized: "كرة السلة")),
+        Sport(symbol: "figure.volleyball", name: String(localized: "الكرة الطائرة")),
         // SF Symbols has no padel figure. Pickleball's is the same shape of
         // game — a solid paddle, mid-swing — so it stands in, rather than
         // dropping the sport half the courts in the country are booked for.
-        Sport(symbol: "figure.pickleball", name: "البادل"),
-        Sport(symbol: "figure.tennis", name: "التنس"),
-        Sport(symbol: "figure.cricket", name: "الكريكيت"),
-        Sport(symbol: "figure.run", name: "الجري"),
-        Sport(symbol: "figure.outdoor.cycle", name: "الدراجات")
+        Sport(symbol: "figure.pickleball", name: String(localized: "البادل")),
+        Sport(symbol: "figure.tennis", name: String(localized: "التنس")),
+        Sport(symbol: "figure.cricket", name: String(localized: "الكريكيت")),
+        Sport(symbol: "figure.run", name: String(localized: "الجري")),
+        Sport(symbol: "figure.outdoor.cycle", name: String(localized: "الدراجات"))
     ].filter { UIImage(systemName: $0.symbol) != nil }
 
     /// The sport a symbol stands for, when it stands for one. An exercise
@@ -108,7 +108,7 @@ struct SportPickerRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("نوع الرياضة")
-        .accessibilityValue(sport?.name ?? "غير محدد")
+        .accessibilityValue(sport?.name ?? String(localized: "غير محدد"))
         .accessibilityHint("يفتح قائمة الرياضات")
     }
 }
@@ -159,7 +159,7 @@ struct SportPickerSheet: View {
             // list settled part-way down as the layout shifted under it.
             .defaultScrollAnchor(.top)
             .scrollDismissesKeyboard(.immediately)
-            .sheetTitle("نوع الرياضة")
+            .sheetTitle(String(localized: "نوع الرياضة"))
             // Native search: results narrow as the letters land, with no button
             // to press and nothing hand-built to keep in step.
             .searchable(
@@ -173,7 +173,7 @@ struct SportPickerSheet: View {
                 }
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
     }
 
     private func card(for sport: Sport) -> some View {
@@ -216,8 +216,8 @@ struct SportPickerSheet: View {
         .sheet(isPresented: .constant(true)) {
             SportPickerSheet(
                 selectedSymbol: "figure.soccer",
-                tint: TamrinTheme.lime,
-                symbolColor: TamrinTheme.ink
+                tint: TamrinTheme.success,
+                symbolColor: .white
             ) { _ in }
         }
 }

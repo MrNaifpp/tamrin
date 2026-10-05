@@ -8,8 +8,8 @@
 import SwiftUI
 
 struct NewActivtyCardView: View {
-    var eventName: String = "اسم الفعالية"
-    var eventDate: String = "يوم الثلاثاء، الساعة 6:00 م"
+    var eventName: String = String(localized: "اسم الفعالية")
+    var eventDate: String = String(localized: "يوم الثلاثاء، الساعة 6:00 م")
     /// When non-nil, load image from URL; otherwise use imageName.
     var imageURL: String? = nil
     var imageName: ImageResource = .card1

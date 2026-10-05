@@ -78,14 +78,14 @@ struct JoinWorkspaceView: View {
                 ProgressView().tint(.white)
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .task { await loadPreview() }
     }
 
     private func previewSubtitle(_ p: WorkspaceInvitePreview) -> String {
-        if p.isMember { return "أنت عضو في هذا التمرين" }
-        if let owner = p.ownerName, !owner.isEmpty { return "دعاك \(owner) للانضمام" }
-        return "دُعيت للانضمام"
+        if p.isMember { return String(localized: "أنت عضو في هذا التمرين") }
+        if let owner = p.ownerName, !owner.isEmpty { return String(localized: "دعاك \(owner) للانضمام") }
+        return String(localized: "دُعيت للانضمام")
     }
 
     @ViewBuilder
@@ -97,7 +97,7 @@ struct JoinWorkspaceView: View {
                 if isJoining {
                     ProgressView().tint(.black)
                 } else {
-                    Text(p.isMember ? "فتح التمرين" : (isLoggedIn ? "انضمام" : "سجّل الدخول للانضمام"))
+                    Text(p.isMember ? String(localized: "فتح التمرين") : (isLoggedIn ? String(localized: "انضمام") : String(localized: "سجّل الدخول للانضمام")))
                         .font(TamrinFont.font(size: 17, weight: .bold))
                         .foregroundStyle(.black)
                 }
@@ -116,13 +116,13 @@ struct JoinWorkspaceView: View {
             // generic invite card prompting login instead of failing.
             loadError = nil
             // Minimal logged-out experience: straight to the login CTA.
-            preview = WorkspaceInvitePreview(id: UUID(uuidString: "00000000-0000-0000-0000-000000000000")!, name: "دعوة إلى تمرين", ownerName: nil, memberCount: 0, isMember: false)
+            preview = WorkspaceInvitePreview(id: UUID(uuidString: "00000000-0000-0000-0000-000000000000")!, name: String(localized: "دعوة إلى تمرين"), ownerName: nil, memberCount: 0, isMember: false)
             return
         }
         do {
             preview = try await WorkspaceService.shared.getInvitePreview(code: code)
         } catch {
-            loadError = "رابط الدعوة غير صالح أو مُبطَل.\nاطلب رابطًا جديدًا من صاحب التمرين."
+            loadError = String(localized: "رابط الدعوة غير صالح أو مُبطَل.\nاطلب رابطًا جديدًا من صاحب التمرين.")
         }
     }
 
@@ -137,7 +137,7 @@ struct JoinWorkspaceView: View {
                 onJoined(wsId)
                 onDismiss()
             } catch {
-                joinError = "تعذر الانضمام. حاول مرة أخرى."
+                joinError = String(localized: "تعذر الانضمام. حاول مرة أخرى.")
             }
         }
     }
