@@ -9,14 +9,16 @@ struct EventDirectionsDestination {
     let name: String
 
     var coordinate: (latitude: Double, longitude: Double)? {
-        guard let latitude, let longitude else { return nil }
+        guard let latitude, let longitude,
+              latitude.isFinite, longitude.isFinite,
+              (-90...90).contains(latitude), (-180...180).contains(longitude) else { return nil }
         return (latitude, longitude)
     }
 
     var query: String? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        return trimmed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
+        return trimmed
     }
 }
 
@@ -25,16 +27,15 @@ enum EventDirectionsProvider {
     case hudhud
     case googleMaps
 
-    /// Falls back to the web when the app itself is not installed, so the tap
-    /// always lands somewhere useful.
+    /// Every route lands somewhere useful whether or not the app is installed.
     func url(for destination: EventDirectionsDestination) -> URL? {
         switch self {
         case .hudhud:
-            if let appURL = hudhudAppURL(destination),
-               UIApplication.shared.canOpenURL(appURL) {
-                return appURL
-            }
-            return URL(string: "https://apps.apple.com/app/id6477774492")
+            // Hudhud's own link: iOS hands it straight to the Hudhud app when
+            // it is installed, and to Hudhud's web map otherwise. A venue known
+            // only by name still opens Hudhud, just without a pin, because the
+            // person chose Hudhud and not another map.
+            return hudhudURL(destination)
 
         case .googleMaps:
             if let appURL = googleMapsAppURL(destination),
@@ -45,31 +46,62 @@ enum EventDirectionsProvider {
         }
     }
 
-    /// NOTE: Hudhud does not publish a URL-scheme reference, so this is the
-    /// conventional `scheme://?lat=&lon=` shape rather than a documented one.
-    /// `canOpenURL` gates it: if the scheme is wrong — or the app simply is not
-    /// installed — the caller falls through to the App Store instead.
-    private func hudhudAppURL(_ destination: EventDirectionsDestination) -> URL? {
-        if let coordinate = destination.coordinate {
-            return URL(string: "hudhud://?lat=\(coordinate.latitude)&lon=\(coordinate.longitude)")
+    /// `https://l.hudhud.sa/directions/{lat},{lon}`: the link the Hudhud app
+    /// itself claims (apple-app-site-association on l.hudhud.sa, every path).
+    func hudhudURL(_ destination: EventDirectionsDestination) -> URL? {
+        guard let coordinate = destination.coordinate else {
+            return URL(string: "https://l.hudhud.sa/")
         }
-        guard let query = destination.query else { return nil }
-        return URL(string: "hudhud://?q=\(query)")
+        return URL(string: "https://l.hudhud.sa/directions/\(coordinate.latitude),\(coordinate.longitude)")
     }
 
     private func googleMapsAppURL(_ destination: EventDirectionsDestination) -> URL? {
+        let destinationValue: String
         if let coordinate = destination.coordinate {
-            return URL(string: "comgooglemaps://?daddr=\(coordinate.latitude),\(coordinate.longitude)&directionsmode=driving")
+            destinationValue = "\(coordinate.latitude),\(coordinate.longitude)"
+        } else if let query = destination.query {
+            destinationValue = query
+        } else {
+            return nil
         }
-        guard let query = destination.query else { return nil }
-        return URL(string: "comgooglemaps://?daddr=\(query)&directionsmode=driving")
+        return customSchemeURL(
+            scheme: "comgooglemaps",
+            queryItems: [
+                URLQueryItem(name: "daddr", value: destinationValue),
+                URLQueryItem(name: "directionsmode", value: "driving")
+            ]
+        )
     }
 
     private func googleMapsWebURL(_ destination: EventDirectionsDestination) -> URL? {
+        let destinationValue: String
         if let coordinate = destination.coordinate {
-            return URL(string: "https://www.google.com/maps/dir/?api=1&destination=\(coordinate.latitude),\(coordinate.longitude)")
+            destinationValue = "\(coordinate.latitude),\(coordinate.longitude)"
+        } else if let query = destination.query {
+            destinationValue = query
+        } else {
+            return nil
         }
-        guard let query = destination.query else { return nil }
-        return URL(string: "https://www.google.com/maps/dir/?api=1&destination=\(query)")
+
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "www.google.com"
+        components.path = "/maps/dir/"
+        components.queryItems = [
+            URLQueryItem(name: "api", value: "1"),
+            URLQueryItem(name: "destination", value: destinationValue)
+        ]
+        return components.url
+    }
+
+    private func customSchemeURL(
+        scheme: String,
+        queryItems: [URLQueryItem]
+    ) -> URL? {
+        var components = URLComponents()
+        components.scheme = scheme
+        components.host = ""
+        components.queryItems = queryItems
+        return components.url
     }
 }

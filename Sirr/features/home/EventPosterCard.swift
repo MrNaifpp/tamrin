@@ -68,7 +68,7 @@ struct EventPosterCard: View {
         .buttonStyle(.plain)
         .accessibilityLabel("\(occurrence.title)، \(occurrence.startAt.arabicDay)، الساعة \(occurrence.startAt.arabicTime)")
         .accessibilityValue("\(registeredCount) من \(occurrence.capacity) مسجلين")
-        .accessibilityHint("يفتح تفاصيل الموعد")
+        .accessibilityHint(String(localized: "يفتح تفاصيل الموعد"))
         .clipShape(.rect(cornerRadius: 36, style: .continuous))
         // The reference uses a wide, barely-there elevation shadow. Cast it
         // from one simple shape behind the opaque poster instead of shadowing
@@ -156,7 +156,7 @@ struct EventPosterCard: View {
                     .foregroundStyle(.white.opacity(0.84))
                     .lineLimit(1)
                     .minimumScaleFactor(0.76)
-                    .environment(\.layoutDirection, .rightToLeft)
+                    .environment(\.layoutDirection, .tamrin)
 
                 if !occurrence.locationName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(occurrence.locationName)
@@ -290,7 +290,7 @@ struct EmptyScheduleCard: View {
         action: {}
     )
         .frame(height: 420).padding()
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
 }
 
 @MainActor

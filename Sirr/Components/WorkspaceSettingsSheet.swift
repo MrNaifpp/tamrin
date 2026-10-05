@@ -32,6 +32,7 @@ struct WorkspaceSettingsSheet: View {
 
     private var isOwner: Bool { currentUserId == workspace.ownerId }
     private var inviteCode: String? { detail?.workspace.inviteCode ?? workspace.inviteCode }
+    private var removingName: String { memberToRemove?.displayName ?? String(localized: "العضو") }
 
     var body: some View {
         ZStack {
@@ -54,7 +55,7 @@ struct WorkspaceSettingsSheet: View {
                 }
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .sheetPresentationHaptic()
         .task { await loadDetail() }
         .alert("إعادة تسمية التمرين", isPresented: $showRename) {
@@ -63,16 +64,16 @@ struct WorkspaceSettingsSheet: View {
             Button("إلغاء", role: .cancel) {}
         }
         .confirmationDialog(
-            isOwner ? "حذف التمرين" : "مغادرة التمرين",
+            isOwner ? String(localized: "حذف التمرين") : String(localized: "مغادرة التمرين"),
             isPresented: $showDestructiveConfirm,
             titleVisibility: .visible
         ) {
-            Button(isOwner ? "حذف" : "مغادرة", role: .destructive) { handleLeaveOrDelete() }
+            Button(isOwner ? String(localized: "حذف") : String(localized: "مغادرة"), role: .destructive) { handleLeaveOrDelete() }
             Button("إلغاء", role: .cancel) {}
         } message: {
             Text(isOwner
-                 ? "يُحذف التمرين وجميع مواعيده ومشاركيه نهائيًا. لا يمكن التراجع."
-                 : "ستفقد الوصول إلى مواعيد هذا التمرين وستُزال من المواعيد القادمة.")
+                 ? String(localized: "يُحذف التمرين وجميع مواعيده ومشاركيه نهائيًا. لا يمكن التراجع.")
+                 : String(localized: "ستفقد الوصول إلى مواعيد هذا التمرين وستُزال من المواعيد القادمة."))
         }
         .confirmationDialog(
             "إزالة العضو",
@@ -90,7 +91,7 @@ struct WorkspaceSettingsSheet: View {
             }
             Button("إلغاء", role: .cancel) { memberToRemove = nil }
         } message: {
-            Text("سيفقد \(memberToRemove?.displayName ?? "العضو") الوصول إلى التمرين وسيُزال من المواعيد القادمة.")
+            Text("سيفقد \(removingName) الوصول إلى التمرين وسيُزال من المواعيد القادمة.")
         }
     }
 
@@ -123,7 +124,7 @@ struct WorkspaceSettingsSheet: View {
             Text(detail?.workspace.name ?? workspace.name)
                 .font(.appSubheadline)
                 .foregroundStyle(.white)
-            Text((detail?.members.count ?? workspace.memberCount ?? 0).counted(.member) + (isOwner ? " · أنت المالك" : ""))
+            Text((detail?.members.count ?? workspace.memberCount ?? 0).counted(.member) + (isOwner ? " · " + String(localized: "أنت المالك") : ""))
                 .font(.appCaption)
                 .foregroundStyle(Color(white: 0.55))
             if isOwner {
@@ -187,11 +188,11 @@ struct WorkspaceSettingsSheet: View {
                             .fill(.white.opacity(0.12))
                             .frame(width: 30, height: 30)
                             .overlay(
-                                Text(String((member.displayName ?? "؟").prefix(1)))
+                                Text(String((member.displayName ?? String(localized: "؟")).prefix(1)))
                                     .font(.appCaption)
                                     .foregroundStyle(.white)
                             )
-                        Text(member.displayName ?? "عضو")
+                        Text(member.displayName ?? String(localized: "عضو"))
                             .font(.appBody)
                             .foregroundStyle(.white)
                         Spacer()
@@ -229,7 +230,7 @@ struct WorkspaceSettingsSheet: View {
                     if isWorking {
                         ProgressView().tint(.red)
                     } else {
-                        Text(isOwner ? "حذف التمرين" : "مغادرة التمرين")
+                        Text(isOwner ? String(localized: "حذف التمرين") : String(localized: "مغادرة التمرين"))
                             .font(.appBody)
                             .foregroundStyle(.red)
                     }
@@ -279,7 +280,7 @@ struct WorkspaceSettingsSheet: View {
         do {
             detail = try await WorkspaceService.shared.getWorkspace(id: workspace.id)
         } catch {
-            loadError = "تعذر تحميل الأعضاء."
+            loadError = String(localized: "تعذر تحميل الأعضاء.")
         }
     }
 
@@ -328,7 +329,7 @@ struct WorkspaceSettingsSheet: View {
         Task { @MainActor in
             defer { isWorking = false }
             do { try await work() }
-            catch { actionError = "تعذر تنفيذ العملية. حاول مرة أخرى." }
+            catch { actionError = String(localized: "تعذر تنفيذ العملية. حاول مرة أخرى.") }
         }
     }
 }

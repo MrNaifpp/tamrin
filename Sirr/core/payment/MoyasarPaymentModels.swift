@@ -81,8 +81,8 @@ enum MoyasarPaymentServiceError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .malformedResponse: "تعذر قراءة رد الخادم."
-        case .http(401, _): "انتهت الجلسة. سجّل الدخول مرة أخرى."
+        case .malformedResponse: String(localized: "تعذر قراءة رد الخادم.")
+        case .http(401, _): String(localized: "انتهت الجلسة. سجّل الدخول مرة أخرى.")
         case .http: ServerErrorMessage.general
         }
     }

@@ -40,7 +40,7 @@ final class LocationSearchService {
         guard let response else { return }
         results = response.mapItems.prefix(6).map {
             let coordinate = $0.location.coordinate
-            let address = $0.addressRepresentations?.fullAddress(includingRegion: true, singleLine: true) ?? "الرياض"
+            let address = $0.addressRepresentations?.fullAddress(includingRegion: true, singleLine: true) ?? String(localized: "الرياض")
             return Result(title: $0.name ?? query, subtitle: address, latitude: coordinate.latitude, longitude: coordinate.longitude)
         }
     }
@@ -51,24 +51,26 @@ private enum CreationStep: Int, CaseIterable {
 
     var title: String {
         switch self {
-        case .sport: "نوع التمرين"
-        case .identity: "اسم التمرين"
-        case .details: "تفاصيل التمرين"
-        case .invite: "دعوة الأعضاء"
+        case .sport: String(localized: "نوع التمرين")
+        case .identity: String(localized: "اسم التمرين")
+        case .details: String(localized: "تفاصيل التمرين")
+        case .invite: String(localized: "دعوة الأعضاء")
         }
     }
 
     var counter: String {
-        switch self {
-        case .sport: "1 من 4"
-        case .identity: "2 من 4"
-        case .details: "3 من 4"
-        case .invite: "4 من 4"
-        }
+        let position = rawValue + 1
+        let total = CreationStep.allCases.count
+        return String(localized: "\(position) من \(total)")
     }
 }
 
-private let weekdayNames: [Int: String] = [1: "الأحد", 2: "الاثنين", 3: "الثلاثاء", 4: "الأربعاء", 5: "الخميس", 6: "الجمعة", 7: "السبت"]
+private let weekdayNames: [Int: String] = [
+    1: String(localized: "الأحد"), 2: String(localized: "الاثنين"),
+    3: String(localized: "الثلاثاء"), 4: String(localized: "الأربعاء"),
+    5: String(localized: "الخميس"), 6: String(localized: "الجمعة"),
+    7: String(localized: "السبت")
+]
 
 private extension Int {
     /// Western digits in Arabic copy — see `Locale.tamrin`.
@@ -78,9 +80,9 @@ private extension Int {
 private extension PlanDraft {
     var daysSummary: String {
         if scheduleKind == .oneOff { return oneOffDate.arabicDate }
-        if weekdays.count == 7 { return "كل يوم" }
+        if weekdays.count == 7 { return String(localized: "كل يوم") }
         if weekdays.isEmpty { return "" }
-        return weekdays.sorted().compactMap { weekdayNames[$0] }.joined(separator: "، ")
+        return weekdays.sorted().compactMap { weekdayNames[$0] }.joined(separator: AppLanguage.isArabic ? "، " : ", ")
     }
 
     var timeSummary: String { "\(startTime.arabicTime) – \(endTime.arabicTime)" }
@@ -142,7 +144,7 @@ struct CreateTeamFlow: View {
                         TemplateComposerPage(
                             plan: $plan,
                             showsNameField: false,
-                            actionTitle: "أنشئ التمرين",
+                            actionTitle: String(localized: "أنشئ التمرين"),
                             isSaving: isCreating,
                             save: create
                         )
@@ -161,7 +163,7 @@ struct CreateTeamFlow: View {
                 .animation(reduceMotion ? nil : .spring(response: 0.46, dampingFraction: 0.9), value: step)
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .interactiveDismissDisabled()
         .alert("تعذر إنشاء التمرين", isPresented: Binding(
             get: { failureMessage != nil },
@@ -251,13 +253,13 @@ private struct FlowHeader: View {
                         Color.clear
                     } else {
                         Button(action: back) {
-                            Image(systemName: step == .sport ? "xmark" : "chevron.right")
+                            Image(systemName: step == .sport ? "xmark" : "chevron.backward")
                                 .font(.system(size: TamrinControlMetrics.symbolSize, weight: .semibold))
                                 .frame(width: TamrinControlMetrics.touchTarget, height: TamrinControlMetrics.touchTarget)
                         }
                         .buttonStyle(.plain)
                         .background(TamrinTheme.glass, in: .circle)
-                        .accessibilityLabel(step == .sport ? "إغلاق" : "رجوع")
+                        .accessibilityLabel(step == .sport ? String(localized: "إغلاق") : String(localized: "رجوع"))
                     }
                 }
                 .frame(width: 58, height: TamrinControlMetrics.touchTarget)
@@ -317,7 +319,7 @@ private struct SportStepPage: View {
             .padding(.bottom, 24)
         }
         .safeAreaInset(edge: .bottom) {
-            TamrinActionButton(title: "متابعة", action: advance)
+            TamrinActionButton(title: String(localized: "متابعة"), action: advance)
                 .disabled(selectedSymbol == nil)
                 .padding(.horizontal, 22)
                 .padding(.bottom, 10)
@@ -392,7 +394,7 @@ private struct IdentityStepPage: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .bottom) {
-            TamrinActionButton(title: "متابعة", action: advance)
+            TamrinActionButton(title: String(localized: "متابعة"), action: advance)
                 .disabled(draft.teamName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .padding(.horizontal, 22)
                 .padding(.bottom, 10)
@@ -459,7 +461,7 @@ private struct TemplateComposerPage: View {
     /// it hides this field rather than asking for the same thing twice. The
     /// standalone session composer still needs it.
     var showsNameField = true
-    var actionTitle = "احفظ الموعد"
+    var actionTitle = String(localized: "احفظ الموعد")
     var isSaving = false
     /// Present only in the main-template editor. Creation already chose the
     /// sport on its first step, while a standalone occurrence never owns it.
@@ -477,31 +479,36 @@ private struct TemplateComposerPage: View {
     let save: () -> Void
 
     @State private var activeSheet: ComposerSheet?
+    @State private var reviewedFields: Set<ComposerSheet> = []
     @State private var showsSportPicker = false
     @State private var didOpenPaymentEditor = false
     @State private var locationSearch = LocationSearchService()
     @FocusState private var nameFocused: Bool
 
-    private let nameSuggestions = ["كورة الأسبوع", "تمرين اللياقة", "شوط الخميس"]
+    private let nameSuggestions = [
+        String(localized: "كورة الأسبوع"),
+        String(localized: "تمرين اللياقة"),
+        String(localized: "شوط الخميس")
+    ]
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(editsExerciseTemplate
-                         ? "عدّل قالب التمرين"
-                         : (showsNameField ? "صمّم الموعد" : "صمّم التمرين"))
+                         ? String(localized: "عدّل قالب التمرين")
+                         : (showsNameField ? String(localized: "صمّم الموعد") : String(localized: "صمّم التمرين")))
                         .font(TamrinFont.largeTitle)
                         .tracking(-0.8)
                     // With the name already settled, the subtitle says whose
                     // details these are instead of asking for one.
                     Text(editsExerciseTemplate
                          ? (editsRecurringTemplate
-                            ? "الاسم والرياضة وكل تفاصيل المواعيد القادمة في مكان واحد."
-                            : "الاسم والرياضة وكل تفاصيل هذا الموعد في مكان واحد.")
+                            ? String(localized: "الاسم والرياضة وكل تفاصيل المواعيد القادمة في مكان واحد.")
+                            : String(localized: "الاسم والرياضة وكل تفاصيل هذا الموعد في مكان واحد."))
                          : (showsNameField
-                            ? "سمّه، وحدد تفاصيله بلمسة على كل بطاقة."
-                            : "حدد تفاصيل «\(plan.name)» بلمسة على كل بطاقة."))
+                            ? String(localized: "سمّه، وحدد تفاصيله بلمسة على كل بطاقة.")
+                            : String(localized: "حدد تفاصيل «\(plan.name)» بلمسة على كل بطاقة.")))
                         .font(TamrinFont.body)
                         .foregroundStyle(.secondary)
                 }
@@ -509,7 +516,7 @@ private struct TemplateComposerPage: View {
 
                 if showsNameField {
                     VStack(alignment: .leading, spacing: 10) {
-                        TextField(editsExerciseTemplate ? "اسم التمرين" : "اسم الموعد", text: $plan.name)
+                        TextField(editsExerciseTemplate ? String(localized: "اسم التمرين") : String(localized: "اسم الموعد"), text: $plan.name)
                             .font(TamrinFont.title2)
                             .focused($nameFocused)
                             .submitLabel(.done)
@@ -575,16 +582,14 @@ private struct TemplateComposerPage: View {
                     ComposerTile(
                         symbol: "person.2.fill",
                         title: "عدد اللاعبين",
-                        value: editsExerciseTemplate
-                            ? "حتى \(plan.capacity.appDigits)"
-                            : "حتى \(plan.capacity.appDigits)\n\(plan.capacityPolicy == .waitlist ? "مع قائمة انتظار" : "يقفل عند الاكتمال")"
+                        value: capacitySummary
                     ) { activeSheet = .capacity }
                     ComposerTile(
                         symbol: "banknote.fill",
                         title: "قيمة الملعب",
                         value: plan.totalVenueCost == 0
-                            ? "مجاني"
-                            : "\(plan.totalVenueCost.cleanAmount) ر.س\nالقطة \(plan.pricePerPerson.cleanAmount) ر.س"
+                            ? String(localized: "مجاني")
+                            : String(localized: "\(plan.totalVenueCost.cleanAmount) ر.س\nالقطة \(plan.pricePerPerson.cleanAmount) ر.س")
                     ) { activeSheet = .venueCost }
                 }
 
@@ -595,25 +600,30 @@ private struct TemplateComposerPage: View {
                     symbol: "creditcard.fill",
                     title: "وسائل الدفع",
                     value: plan.totalVenueCost == 0
-                        ? "غير مطلوب\nالتمرين مجاني"
+                        ? String(localized: "غير مطلوب\nالتمرين مجاني")
                         : (plan.paymentMethods.isEmpty
                            ? (canUsePersistedPaymentMethods
-                              ? "وسائل الموعد الحالية\nمحفوظة"
+                              ? String(localized: "وسائل الموعد الحالية\nمحفوظة")
                               : nil)
                            : (plan.paymentMethods.count == 1
                               ? plan.paymentMethods[0].provider.displayName
-                              : "\(plan.paymentMethods.count.appDigits) وسائل دفع")),
+                              : String(localized: "\(plan.paymentMethods.count.appDigits) وسائل دفع"))),
                     isEnabled: plan.totalVenueCost > 0
                 ) {
                     didOpenPaymentEditor = true
                     activeSheet = .payment
                 }
 
+                if reviewedFields.contains(.schedule),
+                   let message = plan.newSessionValidationError(),
+                   !plan.locationName.isEmpty {
+                    Text(message).font(TamrinFont.footnote).foregroundStyle(.red)
+                }
                 Text(editsExerciseTemplate
                      ? (editsRecurringTemplate
-                        ? "سيظهر الاسم والرياضة والتفاصيل الجديدة في المواعيد القادمة."
-                        : "ستُحفظ التغييرات على هذا الموعد.")
-                     : "تقدر تعدّل أي موعد لحاله لاحقًا بدون تغيير القالب.")
+                        ? String(localized: "سيظهر الاسم والرياضة والتفاصيل الجديدة في المواعيد القادمة.")
+                        : String(localized: "ستُحفظ التغييرات على هذا الموعد."))
+                     : String(localized: "تقدر تعدّل أي موعد لحاله لاحقًا بدون تغيير القالب."))
                     .font(TamrinFont.footnote)
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity)
@@ -663,6 +673,9 @@ private struct TemplateComposerPage: View {
                 }
             }
         }
+        .onChange(of: activeSheet) { previous, current in
+            if current == nil, let previous { reviewedFields.insert(previous) }
+        }
         .onAppear {
             if showsNameField, plan.name.isEmpty { nameFocused = true }
         }
@@ -671,6 +684,15 @@ private struct TemplateComposerPage: View {
                 didOpenPaymentEditor = true
             }
         }
+    }
+
+    private var capacitySummary: String {
+        let limit = String(localized: "حتى \(plan.capacity.appDigits)")
+        guard !editsExerciseTemplate else { return limit }
+        let policy = plan.capacityPolicy == .waitlist
+            ? String(localized: "مع قائمة انتظار")
+            : String(localized: "يقفل عند الاكتمال")
+        return "\(limit)\n\(policy)"
     }
 
     private var canUsePersistedPaymentMethods: Bool {
@@ -682,7 +704,9 @@ private struct TemplateComposerPage: View {
     }
 
     private var canSave: Bool {
-        if plan.isComplete { return true }
+        if plan.isComplete {
+            return plan.scheduleKind != .oneOff || plan.newSessionValidationError() == nil
+        }
         guard canUsePersistedPaymentMethods else { return false }
         return !plan.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
             (plan.scheduleKind == .oneOff || !plan.weekdays.isEmpty) &&
@@ -693,7 +717,7 @@ private struct TemplateComposerPage: View {
 
 private struct ComposerTile: View {
     let symbol: String
-    let title: String
+    let title: LocalizedStringKey
     let value: String?
     var isEnabled = true
     let action: () -> Void
@@ -718,7 +742,7 @@ private struct ComposerTile: View {
                 Text(title)
                     .font(TamrinFont.font(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
-                Text(value ?? "اضغط للتحديد")
+                Text(value ?? String(localized: "اضغط للتحديد"))
                     .font(TamrinFont.font(size: 15, weight: .medium))
                     .foregroundStyle(isSet ? .primary : .tertiary)
                     .lineLimit(2)
@@ -743,7 +767,11 @@ private struct ScheduleSheet: View {
     var locksScheduleKind = false
     var singleWeekdaySelection = false
     @Environment(\.dismiss) private var dismiss
-    private let days = [(7, "س"), (1, "ح"), (2, "ن"), (3, "ث"), (4, "ر"), (5, "خ"), (6, "ج")]
+    /// One letter per weekday, Saturday first. English has no single-letter
+    /// convention that stays unique, so it takes the usual initials instead.
+    private let days = AppLanguage.isArabic
+        ? [(7, "س"), (1, "ح"), (2, "ن"), (3, "ث"), (4, "ر"), (5, "خ"), (6, "ج")]
+        : [(7, "S"), (1, "S"), (2, "M"), (3, "T"), (4, "W"), (5, "T"), (6, "F")]
 
     private var canConfirm: Bool {
         plan.scheduleKind == .oneOff || !plan.weekdays.isEmpty
@@ -770,7 +798,7 @@ private struct ScheduleSheet: View {
                             }
                         }
 
-                        Text(plan.weekdays.isEmpty ? "اختر يومًا واحدًا على الأقل" : "كل \(plan.daysSummary)")
+                        Text(plan.weekdays.isEmpty ? String(localized: "اختر يومًا واحدًا على الأقل") : (plan.weekdays.count == 7 ? plan.daysSummary : String(localized: "كل \(plan.daysSummary)")))
                             .font(TamrinFont.footnote)
                             .foregroundStyle(plan.weekdays.isEmpty ? .tertiary : .secondary)
                             .contentTransition(.numericText())
@@ -800,8 +828,10 @@ private struct ScheduleSheet: View {
             .animation(.smooth(duration: 0.3), value: plan.scheduleKind)
             .animation(.smooth(duration: 0.25), value: plan.weekdays)
             .sheetTitle(
-                "متى تتمرنون؟",
-                subtitle: locksScheduleKind ? "حدد يوم القالب ووقته" : "حدد نوع الموعد ووقته"
+                String(localized: "متى تتمرنون؟"),
+                subtitle: locksScheduleKind
+                    ? String(localized: "حدد يوم القالب ووقته")
+                    : String(localized: "حدد نوع الموعد ووقته")
             )
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -811,7 +841,7 @@ private struct ScheduleSheet: View {
                 }
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .fittedSheet(includesNavigationBar: true)
     }
 
@@ -861,7 +891,7 @@ private struct WeekdayToggleStyle: ViewModifier {
 }
 
 private struct TimeTile: View {
-    let title: String
+    let title: LocalizedStringKey
     @Binding var selection: Date
 
     var body: some View {
@@ -927,8 +957,8 @@ private struct CapacitySheet: View {
                         .pickerStyle(.segmented)
 
                         Text(plan.capacityPolicy == .waitlist
-                             ? "ينضم من قائمة الانتظار تلقائيًا عند تحرر مكان."
-                             : "يتوقف التسجيل نهائيًا عند اكتمال العدد.")
+                             ? String(localized: "ينضم من قائمة الانتظار تلقائيًا عند تحرر مكان.")
+                             : String(localized: "يتوقف التسجيل نهائيًا عند اكتمال العدد."))
                             .font(TamrinFont.footnote)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -943,14 +973,14 @@ private struct CapacitySheet: View {
             // detent follows the content rather than the NavigationStack.
             .sheetContentHeight()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .sheetTitle("كم لاعب يكفيكم؟", subtitle: "حدد سعة كل موعد")
+            .sheetTitle(String(localized: "كم لاعب يكفيكم؟"), subtitle: String(localized: "حدد سعة كل موعد"))
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("تم") { dismiss() }.fontWeight(.semibold)
                 }
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .fittedSheet(includesNavigationBar: true)
     }
 }
@@ -1015,7 +1045,7 @@ private struct PersistedLocationSheet: View {
     var body: some View {
         NavigationStack {
             content
-                .sheetTitle("الملعب", subtitle: "اختر نتيجة لحفظ الاسم والموقع على الخريطة")
+                .sheetTitle(String(localized: "الملعب"), subtitle: String(localized: "اختر نتيجة لحفظ الاسم والموقع على الخريطة"))
                 .searchable(
                     text: $query,
                     placement: .navigationBarDrawer(displayMode: .always),
@@ -1037,7 +1067,7 @@ private struct PersistedLocationSheet: View {
                     }
                 }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .presentationBackground(TamrinTheme.sheet)
@@ -1051,8 +1081,8 @@ private struct PersistedLocationSheet: View {
                 Label("ابحث عن الملعب", systemImage: "sportscourt")
             } description: {
                 Text(trimmedQuery.count > 2 && !search.isSearching
-                     ? "ما لقينا موقعًا بهذا الاسم. جرّب اسمًا أقصر."
-                     : "تظهر نتائج الخريطة وأنت تكتب، ثم نحفظ الاسم والموقع اللذين اخترتهما.")
+                     ? String(localized: "ما لقينا موقعًا بهذا الاسم. جرّب اسمًا أقصر.")
+                     : String(localized: "تظهر نتائج الخريطة وأنت تكتب، ثم نحفظ الاسم والموقع اللذين اخترتهما."))
             }
             .frame(maxHeight: .infinity)
         } else {
@@ -1081,7 +1111,7 @@ private struct PersistedLocationSheet: View {
 
                             Spacer(minLength: 6)
 
-                            Image(systemName: "chevron.left")
+                            Image(systemName: "chevron.forward")
                                 .font(.caption.bold())
                                 .foregroundStyle(.tertiary)
                         }
@@ -1116,7 +1146,7 @@ private struct LocationSheet: View {
             VenueKindPicker(selected: plan.locationName.isEmpty ? nil : plan.venueKind) { kind in
                 path = [kind]
             }
-            .sheetTitle("وين تلعبون؟", subtitle: "اختر نوع الملعب")
+            .sheetTitle(String(localized: "وين تلعبون؟"), subtitle: String(localized: "اختر نوع الملعب"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("إلغاء", role: .cancel) { dismiss() }
@@ -1131,7 +1161,7 @@ private struct LocationSheet: View {
                 }
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .presentationDetents([.medium, .large], selection: $detent)
         .presentationDragIndicator(.visible)
         .presentationBackground(TamrinTheme.sheet)
@@ -1178,7 +1208,7 @@ private struct VenueKindPicker: View {
 
                         Spacer(minLength: 6)
 
-                        Image(systemName: selected == kind ? "checkmark.circle.fill" : "chevron.left")
+                        Image(systemName: selected == kind ? "checkmark.circle.fill" : "chevron.forward")
                             .font(.footnote.bold())
                             .foregroundStyle(selected == kind ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.tertiary))
                     }
@@ -1211,7 +1241,11 @@ private struct CustomVenueForm: View {
     @FocusState private var nameFocused: Bool
 
     /// The map apps people around here actually share a pin from.
-    private static let linkSources = ["هدهد", "خرائط قوقل", "بلدي"]
+    private static let linkSources = [
+        String(localized: "هدهد"),
+        String(localized: "خرائط قوقل"),
+        String(localized: "بلدي")
+    ]
     private static let linkSourceInterval: TimeInterval = 2
 
     private let linkSourceTimer = Timer
@@ -1235,7 +1269,7 @@ private struct CustomVenueForm: View {
                         .submitLabel(.next)
                 }
 
-                VenueField(title: "موقعه", caption: "وصف يوصّل الأعضاء للمكان.") {
+                VenueField(title: "موقعه", caption: String(localized: "وصف يوصّل الأعضاء للمكان.")) {
                     TextField("مثلًا: حي النرجس، خلف مسجد الفرقان", text: $address, axis: .vertical)
                         .font(TamrinFont.body)
                         .lineLimit(1...3)
@@ -1256,19 +1290,20 @@ private struct CustomVenueForm: View {
                         // animate between values.
                         .overlay {
                             if trimmedLink.isEmpty {
-                                // Pinned right the explicit way: the field runs
-                                // left-to-right for the URL, so a `.trailing`
-                                // alignment here would resolve against the
-                                // wrong direction. The spacer settles it.
+                                // Pinned to the app language's leading edge
+                                // (right in Arabic, left in English), not the
+                                // field's: the field runs left-to-right for
+                                // the URL, so the placeholder sets its own
+                                // direction back to the page's.
                                 HStack(spacing: 0) {
-                                    Spacer(minLength: 0)
                                     Text(Self.linkSources[linkSourceIndex])
                                         .font(TamrinFont.body)
                                         .foregroundStyle(.tertiary)
                                         .id(linkSourceIndex)
                                         .transition(.blurReplace)
+                                    Spacer(minLength: 0)
                                 }
-                                .environment(\.layoutDirection, .leftToRight)
+                                .environment(\.layoutDirection, .tamrin)
                                 .allowsHitTesting(false)
                                 .accessibilityHidden(true)
                             }
@@ -1285,7 +1320,7 @@ private struct CustomVenueForm: View {
         // the fields, not to what they sit on.
         .background(TamrinTheme.sheet)
         .scrollDismissesKeyboard(.interactively)
-        .sheetTitle("ملعب مخصص", subtitle: "عرّف أعضاءك على ملعبكم")
+        .sheetTitle(String(localized: "ملعب مخصص"), subtitle: String(localized: "عرّف أعضاءك على ملعبكم"))
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("تم", action: save)
@@ -1309,7 +1344,9 @@ private struct CustomVenueForm: View {
     }
 
     private var mapsCaption: String {
-        isLinkValid ? "إن كان لكم موقع على الخريطة، الصقه هنا." : "الرابط غير صحيح. الصق رابطًا يبدأ بـ https."
+        isLinkValid
+            ? String(localized: "إن كان لكم موقع على الخريطة، الصقه هنا.")
+            : String(localized: "الرابط غير صحيح. الصق رابطًا يبدأ بـ https.")
     }
 
     private func save() {
@@ -1348,7 +1385,7 @@ private struct CustomVenueForm: View {
 }
 
 private struct VenueField<Content: View>: View {
-    let title: String
+    let title: LocalizedStringKey
     let caption: String?
     @ViewBuilder let content: Content
 
@@ -1389,7 +1426,7 @@ private struct RentedVenueSearch: View {
 
     var body: some View {
         results
-            .sheetTitle("ملعب مؤجر", subtitle: "سيظهر العنوان لكل الأعضاء")
+            .sheetTitle(String(localized: "ملعب مؤجر"), subtitle: String(localized: "سيظهر العنوان لكل الأعضاء"))
             // Pinned under the bar, not auto-presented: presenting it takes
             // the bar over and hides both the title and the back button.
             .searchable(
@@ -1423,8 +1460,8 @@ private struct RentedVenueSearch: View {
                 // No "use what I typed" escape hatch here: a venue that isn't on
                 // the map is a custom venue, and that is the other step.
                 Text(trimmedQuery.count > 2 && !search.isSearching
-                     ? "ما لقينا ملعبًا بهذا الاسم. جرّب اسمًا أقصر، أو ارجع واختر «ملعب مخصص»."
-                     : "اكتب اسم الملعب أو الحي وتظهر النتائج وأنت تكتب.")
+                     ? String(localized: "ما لقينا ملعبًا بهذا الاسم. جرّب اسمًا أقصر، أو ارجع واختر «ملعب مخصص».")
+                     : String(localized: "اكتب اسم الملعب أو الحي وتظهر النتائج وأنت تكتب."))
             }
             .frame(maxHeight: .infinity)
         } else {
@@ -1456,7 +1493,7 @@ private struct RentedVenueSearch: View {
 
                             Spacer(minLength: 6)
 
-                            Image(systemName: "chevron.left")
+                            Image(systemName: "chevron.forward")
                                 .font(.caption.bold())
                                 .foregroundStyle(.tertiary)
                         }
@@ -1572,7 +1609,7 @@ private struct VenueCostSheet: View {
             // detent follows the content rather than the NavigationStack.
             .sheetContentHeight()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .sheetTitle("كم قيمة الملعب؟", subtitle: "أدخل إجمالي الإيجار ونحسب القطة تلقائيًا")
+            .sheetTitle(String(localized: "كم قيمة الملعب؟"), subtitle: String(localized: "أدخل إجمالي الإيجار ونحسب القطة تلقائيًا"))
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("اعتماد") {
@@ -1584,7 +1621,7 @@ private struct VenueCostSheet: View {
                 }
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .fittedSheet(includesNavigationBar: true)
         .onAppear { amountFocused = plan.totalVenueCost == 0 }
     }
@@ -1612,8 +1649,8 @@ private struct InviteStepPage: View {
 
     private var shareMessage: String {
         team.inviteURL == nil
-            ? "انضم إلى «\(team.name)» في تمرين برمز الدعوة: \(team.inviteCode)"
-            : "انضم إلى «\(team.name)» في تمرين:\n\(shareValue)"
+            ? String(localized: "انضم إلى «\(team.name)» في تمرين برمز الدعوة: \(team.inviteCode)")
+            : String(localized: "انضم إلى «\(team.name)» في تمرين:\n\(shareValue)")
     }
 
     private var whatsAppURL: URL? {
@@ -1659,7 +1696,7 @@ private struct InviteStepPage: View {
             .frame(maxWidth: .infinity)
         }
         .safeAreaInset(edge: .bottom) {
-            TamrinActionButton(title: "ادخل إلى التمرين", prominent: false, action: done)
+            TamrinActionButton(title: String(localized: "ادخل إلى التمرين"), prominent: false, action: done)
                 .padding(.horizontal, 22)
                 .padding(.bottom, 10)
         }
@@ -1743,7 +1780,7 @@ private struct InviteStepPage: View {
                 withAnimation(.snappy) { didCopy = false }
             }
         } label: {
-            Label(didCopy ? "نُسخ الرابط" : "انسخ الرابط",
+            Label(didCopy ? String(localized: "نُسخ الرابط") : String(localized: "انسخ الرابط"),
                   systemImage: didCopy ? "checkmark" : "doc.on.doc")
                 .contentTransition(.symbolEffect(.replace))
                 .frame(maxWidth: .infinity)
@@ -1796,7 +1833,7 @@ private struct InviteStepPage: View {
 /// One share destination — a tinted glyph over its name, sized so two or three
 /// of them fill the row evenly.
 private struct ShareChannelLabel: View {
-    let title: String
+    let title: LocalizedStringKey
     let symbol: String
     let tint: Color
 
@@ -1889,7 +1926,7 @@ struct AddSessionSheet: View {
                 }
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .sheetPresentationHaptic()
         .interactiveDismissDisabled(saving)
         .confirmationDialog(
@@ -1993,7 +2030,7 @@ struct EditExerciseTemplateSheet: View {
                 TemplateComposerPage(
                     plan: $plan,
                     showsNameField: true,
-                    actionTitle: "حفظ التعديلات",
+                    actionTitle: String(localized: "حفظ التعديلات"),
                     isSaving: saving,
                     sportSymbol: $sportSymbol,
                     sportTint: teamColor.color,
@@ -2022,7 +2059,7 @@ struct EditExerciseTemplateSheet: View {
                 }
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .interactiveDismissDisabled(saving)
         .alert("تعذر حفظ قالب التمرين", isPresented: Binding(
             get: { failureMessage != nil },
@@ -2055,5 +2092,27 @@ struct EditExerciseTemplateSheet: View {
                 Haptics.error()
             }
         }
+    }
+}
+
+extension PlanDraft {
+    /// Why this plan cannot be saved yet, worded for the person composing it.
+    /// Nil when it is ready. A one-off date must still be ahead.
+    func newSessionValidationError(now: Date = .now) -> String? {
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !locationName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return String(localized: "حدد اسم التمرين والملعب.")
+        }
+        guard capacity > 0, totalVenueCost >= 0 else { return String(localized: "راجع عدد اللاعبين وقيمة الملعب.") }
+        if scheduleKind == .oneOff {
+            let calendar = Calendar.current
+            let time = calendar.dateComponents([.hour, .minute], from: startTime)
+            guard let start = calendar.date(bySettingHour: time.hour ?? 0,
+                                            minute: time.minute ?? 0, second: 0, of: oneOffDate),
+                  start > now else { return String(localized: "اختر وقتًا قادمًا للموعد.") }
+        } else if weekdays.isEmpty {
+            return String(localized: "اختر يومًا واحدًا على الأقل.")
+        }
+        return nil
     }
 }

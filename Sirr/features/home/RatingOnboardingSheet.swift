@@ -33,18 +33,18 @@ struct RatingOnboardingSheet: View {
 
     private static let steps: [RatingOnboardingStep] = [
         RatingOnboardingStep(
-            title: "ميزة جديدة، تقييم اللاعبين ✨",
-            body: "الآن يمديك تقييم اللاعبين اللي معك في التمرين.",
+            title: String(localized: "ميزة جديدة، تقييم اللاعبين ✨"),
+            body: String(localized: "الآن يمديك تقييم اللاعبين اللي معك في التمرين."),
             art: .film
         ),
         RatingOnboardingStep(
-            title: "تقييمك مستور 👀",
-            body: "ما يظهر لك من اللي قيّموك، ولا يظهر لهم من قيّمهم.",
+            title: String(localized: "تقييمك مستور 👀"),
+            body: String(localized: "ما يظهر لك من اللي قيّموك، ولا يظهر لهم من قيّمهم."),
             art: .symbol("eye.slash.fill")
         ),
         RatingOnboardingStep(
-            title: "المقياس تمرينكم",
-            body: "لا تقارن باللاعبين العالميين، قارن بتمرينكم.",
+            title: String(localized: "المقياس تمرينكم"),
+            body: String(localized: "لا تقارن باللاعبين العالميين، قارن بتمرينكم."),
             art: .symbol("figure.soccer")
         )
     ]
@@ -113,7 +113,7 @@ struct RatingOnboardingSheet: View {
                 // «تم», not «ابدأ التقييم»: this now opens on launch rather
                 // than from a rate button, so the last card ends the
                 // announcement instead of handing over to anything.
-                Text(isLast ? "تم" : "التالي")
+                Text(isLast ? String(localized: "تم") : String(localized: "التالي"))
                     .font(TamrinFont.font(size: 17, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
@@ -137,7 +137,7 @@ struct RatingOnboardingSheet: View {
             }
         }
         .background(TamrinTheme.page.ignoresSafeArea())
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .environment(\.colorScheme, .dark)
     }
 

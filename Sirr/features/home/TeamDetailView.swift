@@ -42,7 +42,7 @@ struct TeamDetailView: View {
 
     private var dayText: String {
         guard let plan else { return "" }
-        return plan.weekdays.compactMap { weekdayName($0) }.joined(separator: "، ")
+        return plan.weekdays.compactMap { weekdayName($0) }.joined(separator: AppLanguage.isArabic ? "، " : ", ")
     }
 
     /// A neutral surface rather than Home's blurred photograph. The artwork is
@@ -111,9 +111,9 @@ struct TeamDetailView: View {
                 }
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .colorScheme(.dark)
-        .navigationTitle(team?.name ?? "التمرين")
+        .navigationTitle(team?.name ?? String(localized: "التمرين"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .toolbarBackground(.hidden, for: .navigationBar)
@@ -138,7 +138,7 @@ struct TeamDetailView: View {
                         }
                     }
                     // Owner deletes the exercise; a member leaves it.
-                    Button(feed.isCurrentTeamOwner ? "حذف التمرين" : "مغادرة التمرين",
+                    Button(feed.isCurrentTeamOwner ? String(localized: "حذف التمرين") : String(localized: "مغادرة التمرين"),
                            systemImage: feed.isCurrentTeamOwner ? "trash" : "rectangle.portrait.and.arrow.right",
                            role: .destructive) {
                         showDeleteConfirm = true
@@ -152,17 +152,17 @@ struct TeamDetailView: View {
                 .accessibilityLabel("خيارات التمرين")
             }
         }
-        .alert(feed.isCurrentTeamOwner ? "حذف «\(team?.name ?? "التمرين")»؟" : "مغادرة «\(team?.name ?? "التمرين")»؟",
+        .alert(feed.isCurrentTeamOwner ? String(localized: "حذف «\(teamName)»؟") : String(localized: "مغادرة «\(teamName)»؟"),
                isPresented: $showDeleteConfirm) {
-            Button(feed.isCurrentTeamOwner ? "حذف التمرين" : "مغادرة التمرين", role: .destructive) {
+            Button(feed.isCurrentTeamOwner ? String(localized: "حذف التمرين") : String(localized: "مغادرة التمرين"), role: .destructive) {
                 if let id = team?.id { feed.deleteTeam(id) }
                 dismiss()
             }
             Button("تراجع", role: .cancel) {}
         } message: {
             Text(feed.isCurrentTeamOwner
-                 ? "بيُحذف التمرين وكل مواعيده وأعضائه وطرق الدفع من عندك. تقدر تنشئ تمرينًا جديدًا أي وقت."
-                 : "بتغادر التمرين وتختفي مواعيده من عندك. تقدر ترجع أي وقت برمز الدعوة.")
+                 ? String(localized: "بيُحذف التمرين وكل مواعيده وأعضائه وطرق الدفع من عندك. تقدر تنشئ تمرينًا جديدًا أي وقت.")
+                 : String(localized: "بتغادر التمرين وتختفي مواعيده من عندك. تقدر ترجع أي وقت برمز الدعوة."))
         }
         .sheet(item: $memberInDetails) { member in
             let shape = rosterShape(of: member)
@@ -176,7 +176,7 @@ struct TeamDetailView: View {
                 submitRating: usesFootballFeatures && feed.canRate(shape)
                     ? { try await feed.submitPlayerRating($0, for: shape) }
                     : nil,
-                removeTitle: "إزالة من المجموعة",
+                removeTitle: String(localized: "إزالة من المجموعة"),
                 onRemove: feed.isCurrentTeamOwner && member.id != feed.currentUserID
                     ? { memberAwaitingRemoval = member }
                     : nil
@@ -192,7 +192,7 @@ struct TeamDetailView: View {
             }
             Button("تراجع", role: .cancel) { memberAwaitingRemoval = nil }
         } message: {
-            Text("سيُزال \(memberAwaitingRemoval?.displayName ?? "العضو") من المجموعة وتختفي مواعيدها من عنده.")
+            Text("سيُزال \(removalName) من المجموعة وتختفي مواعيدها من عنده.")
         }
         .sheet(isPresented: $showAddSession) {
             AddSessionSheet(feed: feed,
@@ -202,6 +202,9 @@ struct TeamDetailView: View {
                             initialPlan: plan.map(draft(from:)) ?? PlanDraft())
         }
     }
+
+    private var teamName: String { team?.name ?? String(localized: "التمرين") }
+    private var removalName: String { memberAwaitingRemoval?.displayName ?? String(localized: "العضو") }
 
     /// Prefills the composer from the displayed session (edit mode). Presented
     /// as a one-off on the event's actual date; the weekday stays selected in
@@ -240,7 +243,7 @@ struct TeamDetailView: View {
             .shadow(color: teamColor.color.opacity(0.3), radius: 24, y: 10)
 
             VStack(spacing: 4) {
-                Text(team?.name ?? "التمرين")
+                Text(teamName)
                     .font(TamrinFont.font(size: 26, weight: .bold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
@@ -297,23 +300,23 @@ struct TeamDetailView: View {
                     ) {
                         PlanGlassStat(
                             symbol: "calendar",
-                            value: dayText.isEmpty ? "بدون تكرار" : dayText,
-                            title: "يوم التمرين"
+                            value: dayText.isEmpty ? String(localized: "بدون تكرار") : dayText,
+                            title: String(localized: "يوم التمرين")
                         )
                         PlanGlassStat(
                             symbol: "clock.fill",
                             value: "\(plan.startTime.arabicTime) – \(plan.endTime.arabicTime)",
-                            title: "وقت التمرين"
+                            title: String(localized: "وقت التمرين")
                         )
                         PlanGlassStat(
                             symbol: "banknote.fill",
-                            value: venueTotal(plan) == 0 ? "بدون تكلفة" : "\(venueTotal(plan).cleanAmount) \(plan.currency)",
-                            title: "قيمة الملعب"
+                            value: venueTotal(plan) == 0 ? String(localized: "بدون تكلفة") : "\(venueTotal(plan).cleanAmount) \(plan.currency)",
+                            title: String(localized: "قيمة الملعب")
                         )
                         PlanGlassStat(
                             symbol: "person.fill",
-                            value: plan.price == 0 ? "مجاني" : "\(plan.price.cleanAmount) \(plan.currency)",
-                            title: "قطة كل لاعب",
+                            value: plan.price == 0 ? String(localized: "مجاني") : "\(plan.price.cleanAmount) \(plan.currency)",
+                            title: String(localized: "قطة كل لاعب"),
                             emphasised: true
                         )
                     }
@@ -330,7 +333,7 @@ struct TeamDetailView: View {
 
                     PlanInfoRow(
                         symbol: "person.2.fill",
-                        title: "سعة الموعد",
+                        title: String(localized: "سعة الموعد"),
                         value: plan.capacity.counted(.player)
                     )
                 }
@@ -348,10 +351,10 @@ struct TeamDetailView: View {
                         } label: {
                             Label("أضف موعد التمرين", systemImage: "calendar.badge.plus")
                                 .font(TamrinFont.font(size: 15, weight: .bold))
-                                .foregroundStyle(TamrinTheme.ink)
+                                .foregroundStyle(.white)
                                 .frame(maxWidth: .infinity)
                                 .frame(minHeight: TamrinControlMetrics.actionHeight)
-                                .background(TamrinTheme.lime, in: .capsule)
+                                .background(TamrinTheme.success, in: .capsule)
                         }
                         .buttonStyle(SpringCardPressStyle())
                     }
@@ -381,10 +384,10 @@ struct TeamDetailView: View {
         } label: {
             EventActionTile(
                 symbol: "arrow.triangle.turn.up.right.diamond.fill",
-                title: plan.locationName.isEmpty ? "الاتجاهات" : plan.locationName
+                title: plan.locationName.isEmpty ? String(localized: "الاتجاهات") : plan.locationName
             )
         }
-        .accessibilityLabel(plan.locationName.isEmpty ? "الاتجاهات" : "الاتجاهات إلى \(plan.locationName)")
+        .accessibilityLabel(plan.locationName.isEmpty ? String(localized: "الاتجاهات") : String(localized: "الاتجاهات إلى \(plan.locationName)"))
         .accessibilityHint("يفتح قائمة تطبيقات الخرائط")
     }
 
@@ -426,8 +429,8 @@ struct TeamDetailView: View {
         ) {
             if members.isEmpty {
                 Text(rosterUnavailable
-                     ? "تعذر تحميل قائمة الأعضاء. اسحب لتحديث الصفحة."
-                     : "ما انضم أحد بعد. شارك رابط الدعوة عشان يدخلون.")
+                     ? String(localized: "تعذر تحميل قائمة الأعضاء. اسحب لتحديث الصفحة.")
+                     : String(localized: "ما انضم أحد بعد. شارك رابط الدعوة عشان يدخلون."))
                     .font(TamrinFont.subheadline)
                     .foregroundStyle(.white.opacity(0.55))
                     .fixedSize(horizontal: false, vertical: true)
@@ -440,21 +443,21 @@ struct TeamDetailView: View {
                         MemberRowCard(
                             name: member.displayName,
                             subtitle: member.isPending
-                                ? "بانتظار الانضمام"
-                                : (member.role == .admin ? "مشرف التمرين" : "عضو"),
+                                ? String(localized: "بانتظار الانضمام")
+                                : (member.role == .admin ? String(localized: "مشرف التمرين") : String(localized: "عضو")),
                             avatarImageData: member.id == feed.currentUserID
                                 ? feed.avatarData
                                 : nil,
                             avatarImageUrl: member.avatarUrl,
                             avatarTint: member.role == .admin
-                                ? TamrinTheme.lime
+                                ? TamrinTheme.success
                                 : .white.opacity(0.28),
-                            avatarForeground: member.role == .admin ? TamrinTheme.ink : .white
+                            avatarForeground: .white
                         ) {
                             if member.role == .admin {
                                 Image(systemName: "crown.fill")
                                     .font(.system(size: 13))
-                                    .foregroundStyle(TamrinTheme.lime)
+                                    .foregroundStyle(TamrinTheme.success)
                             } else if member.isPending {
                                 Image(systemName: "clock")
                                     .font(.system(size: 13))
@@ -489,16 +492,16 @@ struct TeamDetailView: View {
                         item: team.inviteURL?.absoluteString ?? team.inviteCode,
                         subject: Text("انضم إلى \(team.name)"),
                         message: Text(team.inviteURL == nil
-                                      ? "انضم لتمريننا برمز الدعوة: \(team.inviteCode)"
-                                      : "هذا رابط الانضمام لتمريننا")
+                                      ? String(localized: "انضم لتمريننا برمز الدعوة: \(team.inviteCode)")
+                                      : String(localized: "هذا رابط الانضمام لتمريننا"))
                     ) {
-                        Label(team.inviteURL == nil ? "شارك رمز الدعوة" : "شارك رابط الانضمام",
+                        Label(team.inviteURL == nil ? String(localized: "شارك رمز الدعوة") : String(localized: "شارك رابط الانضمام"),
                               systemImage: "square.and.arrow.up")
                             .font(TamrinFont.font(size: 16, weight: .bold))
-                            .foregroundStyle(TamrinTheme.ink)
+                            .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
                             .frame(minHeight: TamrinControlMetrics.actionHeight)
-                            .background(TamrinTheme.lime, in: .capsule)
+                            .background(TamrinTheme.success, in: .capsule)
                     }
                     .buttonStyle(SpringCardPressStyle())
 
@@ -525,9 +528,9 @@ struct TeamDetailView: View {
                                 withAnimation(.snappy) { didCopyCode = false }
                             }
                         } label: {
-                            Label(didCopyCode ? "نُسخ" : "نسخ", systemImage: didCopyCode ? "checkmark" : "doc.on.doc")
+                            Label(didCopyCode ? String(localized: "نُسخ") : String(localized: "نسخ"), systemImage: didCopyCode ? "checkmark" : "doc.on.doc")
                                 .font(TamrinFont.font(size: 13, weight: .medium))
-                                .foregroundStyle(didCopyCode ? TamrinTheme.lime : .white)
+                                .foregroundStyle(didCopyCode ? TamrinTheme.success : .white)
                                 .padding(.horizontal, 14)
                                 .frame(height: 36)
                                 .background(.white.opacity(0.13), in: .capsule)
@@ -560,7 +563,7 @@ struct TeamDetailView: View {
                         TamrinRowCard(
                             title: method.provider.displayName,
                             subtitle: method.provider == .cash
-                                ? "الدفع في الملعب"
+                                ? String(localized: "الدفع في الملعب")
                                 : method.maskedSummary
                         ) {
                             PaymentProviderLogo(
@@ -576,7 +579,8 @@ struct TeamDetailView: View {
     }
 
     private func weekdayName(_ value: Int) -> String? {
-        [1: "الأحد", 2: "الاثنين", 3: "الثلاثاء", 4: "الأربعاء", 5: "الخميس", 6: "الجمعة", 7: "السبت"][value]
+        [1: String(localized: "الأحد"), 2: String(localized: "الاثنين"), 3: String(localized: "الثلاثاء"), 4: String(localized: "الأربعاء"),
+         5: String(localized: "الخميس"), 6: String(localized: "الجمعة"), 7: String(localized: "السبت")][value]
     }
 }
 
@@ -589,7 +593,7 @@ private struct PlanInfoRow: View {
         HStack(spacing: 12) {
             Image(systemName: symbol)
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(TamrinTheme.lime)
+                .foregroundStyle(TamrinTheme.success)
                 .frame(width: 34, height: 34)
                 .background(.white.opacity(0.1), in: .circle)
 
@@ -612,7 +616,7 @@ private struct PlanInfoRow: View {
 }
 
 private struct PlanGlassSection<Content: View>: View {
-    let title: String
+    let title: LocalizedStringKey
     var caption: String?
     @ViewBuilder var content: Content
 

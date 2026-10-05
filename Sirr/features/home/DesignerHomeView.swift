@@ -7,6 +7,11 @@ private enum HomeQuickAddDestination {
     case joinTeam
 }
 
+private struct LiveActivitySyncKey: Hashable {
+    let isReady: Bool
+    let event: WorkoutActivityEvent?
+}
+
 /// Home: one stack of every exercise this person is part of — the ones they run
 /// and the ones they only play in — nearest date at the top, each card a screen
 /// tall so the edge of the next one shows beneath it and says the stack goes on.
@@ -35,6 +40,15 @@ struct DesignerHomeView: View {
     @State private var activePastMonth: PastEventsArchiveMonth?
     @State private var selected: FeedOccurrence?
     @State private var registrationEntryEventID: UUID?
+    // Freeze the visible shelf while details are open: the payment refresh
+    // must not remove the zoom source before the cover has returned to it.
+    @State private var heldPaymentShelf: [FeedOccurrence]?
+    @State private var archivingOccurrence: FeedOccurrence?
+    @State private var archiveReturned = false
+    @State private var archiveFlying = false
+    @State private var archiveLanded = false
+    @State private var archiveLoadingNext = false
+    @State private var archiveFrames: [String: CGRect] = [:]
     @Namespace private var cardZoom
 
     @State private var showPlanDetails = false
@@ -58,7 +72,7 @@ struct DesignerHomeView: View {
     /// it names what is on the shelf and swaps it.
     @State private var showsPast = false
 
-    private var sectionTitle: String { showsPast ? "الماضية" : "القادمة" }
+    private var sectionTitle: String { showsPast ? HomeSectionTitle.past : HomeSectionTitle.upcoming }
 
     /// Every exercise this person is part of, whichever group runs it — the
     /// shelf Home scrolls through.
@@ -68,10 +82,60 @@ struct DesignerHomeView: View {
     /// end of the list a person wants is the end nearest today, and that is a
     /// different end for each half.
     private var upcomingShelf: [FeedOccurrence] {
-        let now = Date.now
-        return feed.allOccurrences.filter {
-            !$0.isPast(relativeTo: now) || $0.requiresPaymentAction
+        if let heldPaymentShelf { return heldPaymentShelf }
+        return liveUpcomingShelf
+    }
+
+    /// Re-read every 30 seconds and on return to the app, so a workout that
+    /// has just ended leaves the shelf without a manual refresh.
+    @State private var scheduleClock = Date.now
+    private var upcomingIDs: [UUID] { upcomingShelf.map(\.id) }
+    private var hasVisibleCards: Bool { !shelf.isEmpty }
+
+    private var liveUpcomingShelf: [FeedOccurrence] {
+        feed.allOccurrences.filter {
+            !$0.isPast(relativeTo: scheduleClock) || $0.requiresPaymentAction
         }
+    }
+
+    /// A group event is not automatically this person's workout. Only a held
+    /// seat earns a lock-screen countdown; invitations, declines, and waiting
+    /// lists stay out of the Live Activity.
+    private var nextLiveActivityEvent: WorkoutActivityEvent? {
+        let now = Date.now
+        let eligible = feed.allOccurrences.filter { occurrence in
+            guard occurrence.startAt > now,
+                  occurrence.isPublished,
+                  !occurrence.isCancelled else { return false }
+            switch feed.participationState(for: occurrence) {
+            case .registered, .awaitingPayment, .paymentPending:
+                return true
+            default:
+                return false
+            }
+        }
+        guard let occurrence = eligible.min(by: { lhs, rhs in
+            if lhs.startAt != rhs.startAt { return lhs.startAt < rhs.startAt }
+            return lhs.id.uuidString < rhs.id.uuidString
+        }) else { return nil }
+
+        return WorkoutActivityEvent(
+            id: occurrence.id,
+            title: occurrence.title,
+            startAt: occurrence.startAt,
+            locationName: occurrence.locationName,
+            latitude: occurrence.latitude,
+            longitude: occurrence.longitude
+        )
+    }
+
+    private var liveActivitySyncKey: LiveActivitySyncKey {
+        LiveActivitySyncKey(
+            isReady: booted
+                && feed.hasAuthoritativeUpcomingSnapshot
+                && feed.currentUserID != nil,
+            event: nextLiveActivityEvent
+        )
     }
 
     private var pastShelf: [FeedOccurrence] {
@@ -96,7 +160,7 @@ struct DesignerHomeView: View {
 
     private var currentIndex: Int {
         guard let id = settledID ?? scrolledID,
-              let idx = upcomingShelf.firstIndex(where: { $0.id == id }) else { return 0 }
+              let idx = upcomingIDs.firstIndex(of: id) else { return 0 }
         return idx
     }
 
@@ -106,7 +170,7 @@ struct DesignerHomeView: View {
     /// throughout long deceleration.
     private var visualCurrentIndex: Int {
         guard let id = scrolledID ?? settledID,
-              let idx = upcomingShelf.firstIndex(where: { $0.id == id }) else { return 0 }
+              let idx = upcomingIDs.firstIndex(of: id) else { return 0 }
         return idx
     }
 
@@ -184,10 +248,15 @@ struct DesignerHomeView: View {
                 WelcomeView(feed: feed)
             } else {
                 mainContent
-                    .environment(\.layoutDirection, .rightToLeft)
+                    .environment(\.layoutDirection, .tamrin)
             }
         }
-        .preferredColorScheme(.dark)
+        .task(id: liveActivitySyncKey) {
+            guard liveActivitySyncKey.isReady else { return }
+            await WorkoutLiveActivityManager.shared.synchronize(
+                next: nextLiveActivityEvent
+            )
+        }
         // Presented from out here, not from inside the NavigationStack. Three
         // `fullScreenCover`s stacked on the same view is one more than SwiftUI
         // reliably honours — the third simply never opened.
@@ -221,10 +290,14 @@ struct DesignerHomeView: View {
                 await requestPushAuthorization()
             }
         }
+        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { now in
+            scheduleClock = now
+        }
         .onChange(of: scenePhase) { _, phase in
             // Returning from background: re-sync so changes made elsewhere
             // (new sessions, registrations) show up without a manual pull.
             if phase == .active, booted {
+                scheduleClock = .now
                 Task {
                     await feed.refresh()
                     if showsPast {
@@ -270,6 +343,97 @@ struct DesignerHomeView: View {
         }
     }
 
+    private var paymentArchiveOverlay: some View {
+        GeometryReader { proxy in
+            if archiveReturned, let occurrence = archivingOccurrence,
+               let source = archiveFrames[occurrence.id.uuidString],
+               let target = archiveFrames["archive"] {
+                let origin = proxy.frame(in: .global)
+                EventPosterCard(
+                    occurrence: occurrence,
+                    registeredCount: feed.registeredCount(for: occurrence),
+                    showsSupervisorTag: feed.isOwner(of: occurrence),
+                    profileName: feed.profileName,
+                    profileImageData: feed.avatarData,
+                    profileImageUrl: feed.avatarUrl,
+                    attendees: feed.roster(for: occurrence).filter { $0.status != .waitlisted },
+                    currentUserID: feed.currentUserID,
+                    art: art(for: occurrence)
+                ) {}
+                .environment(\.layoutDirection, .tamrin)
+                .frame(width: source.width, height: source.height)
+                .scaleEffect(archiveFlying && !reduceMotion ? 0.06 : 1)
+                .rotationEffect(.degrees(archiveFlying && !reduceMotion ? -7 : 0))
+                .opacity(archiveFlying ? 0 : 1)
+                .position(
+                    x: (archiveFlying && !reduceMotion ? target.midX : source.midX) - origin.minX,
+                    y: (archiveFlying && !reduceMotion ? target.midY : source.midY) - origin.minY
+                )
+            }
+            if archiveLoadingNext {
+                VStack(spacing: 12) {
+                    ProgressView().tint(.white)
+                    Text("جارٍ تحديث التمرين القادم")
+                        .font(TamrinFont.font(size: 15, weight: .medium))
+                        .foregroundStyle(.white)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        // Global frames use physical left-to-right coordinates. Keep the
+        // positioning layer LTR so SwiftUI does not mirror the destination;
+        // the poster itself retains its Arabic layout above.
+        .environment(\.layoutDirection, .leftToRight)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    @MainActor
+    private func animatePaymentArchive() async {
+        guard let completed = archivingOccurrence else { return }
+        defer {
+            heldPaymentShelf = nil
+            archivingOccurrence = nil
+            archiveFlying = false
+            archiveLanded = false
+            archiveLoadingNext = false
+            archiveReturned = false
+        }
+        do {
+            // The cover's onDismiss starts this beat, after the native zoom.
+            try await Task.sleep(for: .milliseconds(100))
+            withAnimation(.easeInOut(duration: reduceMotion ? 0.18 : 0.42)) {
+                archiveFlying = true
+            }
+            try await Task.sleep(for: .milliseconds(reduceMotion ? 180 : 420))
+            Haptics.impact(.light)
+            withAnimation(.smooth(duration: 0.18)) { archiveLanded = true }
+            try await Task.sleep(for: .milliseconds(180))
+            if let templateID = completed.templateId,
+               !liveUpcomingShelf.contains(where: { $0.templateId == templateID }) {
+                archiveLoadingNext = true
+                await feed.refresh()
+                try Task.checkCancellation()
+                archiveLoadingNext = false
+            }
+            let next = liveUpcomingShelf.first {
+                completed.templateId != nil && $0.templateId == completed.templateId
+            } ?? liveUpcomingShelf.first
+            withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.32)) {
+                heldPaymentShelf = nil
+                scrolledID = next?.id
+                settledID = scrolledID
+                archiveLanded = false
+            }
+            if let next { feed.focusTeam(for: next) }
+            showActionToast(String(localized: "انتقل التمرين إلى الماضية"))
+            // Refresh history off the animation path; the backend remains the
+            // source of truth for the newly unlocked recurring occurrence.
+            Task { await feed.loadPastOccurrencesIfNeeded(force: true) }
+            try await Task.sleep(for: .milliseconds(340))
+        } catch { /* View cancellation releases the frozen shelf in defer. */ }
+    }
+
     private var loadingView: some View {
         ZStack {
             TamrinTheme.page.ignoresSafeArea()
@@ -288,12 +452,12 @@ struct DesignerHomeView: View {
             // tappable, and the page backdrop fills the system-space strips.
             NavigationStack {
                 ZStack(alignment: .topTrailing) {
-                    HomeArtBackdrop(artName: currentArtName, hasArt: !shelf.isEmpty)
+                    HomeArtBackdrop(artName: currentArtName, hasArt: hasVisibleCards)
 
                     Group {
                         if showsPast {
                             pastArchiveContent
-                        } else if upcomingShelf.isEmpty {
+                        } else if upcomingIDs.isEmpty {
                             GeometryReader { contentProxy in
                                 EmptyScheduleCard(
                                     profileName: feed.profileName,
@@ -312,12 +476,15 @@ struct DesignerHomeView: View {
                         } else {
                             GeometryReader { contentProxy in
                                 let activeIndex = visualCurrentIndex
-                                let indexedOccurrences = Array(upcomingShelf.enumerated())
+                                let indexedOccurrences = upcomingShelf.enumerated().map {
+                                    (index: $0.offset, id: $0.element.id, occurrence: $0.element)
+                                }
 
                                 ScrollView(.vertical, showsIndicators: false) {
                                     LazyVStack(spacing: Self.shelfSpacing) {
-                                        ForEach(indexedOccurrences, id: \.element.id) { index, occurrence in
-                                            let isBelowActiveCard = index > activeIndex
+                                        ForEach(indexedOccurrences, id: \.id) { item in
+                                            let occurrence = item.occurrence
+                                            let isBelowActiveCard = item.index > activeIndex
 
                                             EventPosterCard(
                                                 occurrence: occurrence,
@@ -355,7 +522,18 @@ struct DesignerHomeView: View {
                                                 reduceMotion ? nil : .easeOut(duration: 0.14),
                                                 value: isBelowActiveCard
                                             )
-                                            .matchedTransitionSource(id: occurrence.id, in: cardZoom)
+                                            .background {
+                                                GeometryReader { proxy in
+                                                    Color.clear.preference(
+                                                        key: PaymentArchiveFrames.self,
+                                                        value: [occurrence.id.uuidString: proxy.frame(in: .global)]
+                                                    )
+                                                }
+                                            }
+                                            .opacity(archiveReturned && archivingOccurrence?.id == occurrence.id ? 0 : 1)
+                                            .transition(.opacity.combined(with: .scale(scale: reduceMotion ? 1 : 0.94)))
+                                            .id(item.id)
+                                            .matchedTransitionSource(id: item.id, in: cardZoom)
                                         }
                                     }
                                     .scrollTargetLayout()
@@ -384,7 +562,9 @@ struct DesignerHomeView: View {
                                         settleVisibleOccurrence()
                                     }
                                 }
-                                .refreshable { await feed.refresh() }
+                                .refreshable {
+                                    await feed.refresh()
+                                }
                             }
                         }
                     }
@@ -393,7 +573,7 @@ struct DesignerHomeView: View {
                     // card progressively near the header's lower edge. This is
                     // a fixed alpha mask, not a live full-screen blur.
                     .mask {
-                        if shelf.isEmpty {
+                        if !hasVisibleCards {
                             Rectangle().fill(.white)
                         } else {
                             ShelfHeaderRevealMask(depth: Self.headerScrimDepth)
@@ -403,7 +583,7 @@ struct DesignerHomeView: View {
                     // header reveal: the hint stays crisp rather than entering
                     // the progressive mask with the posters.
                     .overlay(alignment: .bottom) {
-                        if !showsPast, upcomingShelf.count > 1, currentIndex == 0 {
+                        if !showsPast, upcomingIDs.count > 1, currentIndex == 0 {
                             ScrollHintChevron()
                                 .padding(.bottom, 2)
                                 .transition(.opacity)
@@ -427,7 +607,7 @@ struct DesignerHomeView: View {
                             profileImageData: feed.avatarData,
                             profileImageUrl: feed.avatarUrl,
                             isOnArtwork: true,
-                            sectionTitle: sectionTitle,
+                            sectionTitle: archiveLanded ? HomeSectionTitle.past : sectionTitle,
                             openAdd: {
                                 Haptics.impact(.light)
                                 showQuickAdd = true
@@ -455,19 +635,41 @@ struct DesignerHomeView: View {
                         )
                     }
                 }
-                .environment(\.layoutDirection, .rightToLeft)
+                .environment(\.layoutDirection, .tamrin)
                 .toolbar(.hidden, for: .navigationBar)
-                .fullScreenCover(item: $selected) { occ in
+                .overlay { paymentArchiveOverlay }
+                .onPreferenceChange(PaymentArchiveFrames.self) { archiveFrames = $0 }
+                .allowsHitTesting(!archiveReturned)
+                .task(id: archiveReturned) {
+                    guard archiveReturned else { return }
+                    await animatePaymentArchive()
+                }
+                .fullScreenCover(item: $selected, onDismiss: {
+                    if archivingOccurrence != nil {
+                        archiveReturned = true
+                    } else {
+                        heldPaymentShelf = nil
+                    }
+                }) { occ in
                     EventDetailView(
                         feed: feed,
                         occurrence: occ,
                         artName: art(for: occ),
+                        onOverduePaymentCompleted: { completed in
+                            guard !showsPast else { return }
+                            archivingOccurrence = completed
+                            scrolledID = completed.id
+                            settledID = completed.id
+                        },
                         initiallyShowsRegistration: registrationEntryEventID == occ.id
                     )
                         .navigationTransition(.zoom(sourceID: occ.id, in: cardZoom))
                 }
                 .onChange(of: selected?.id) { _, newValue in
                     if newValue == nil { registrationEntryEventID = nil }
+                    if let selected, !showsPast, selected.isPast() {
+                        heldPaymentShelf = liveUpcomingShelf
+                    }
                 }
                 // A refused registration asks for the unpaid workout. Setting
                 // the cover's item to a different workout replaces the one on
@@ -500,34 +702,20 @@ struct DesignerHomeView: View {
                     guard showsPast else { return }
                     await feed.loadPastOccurrencesIfNeeded()
                 }
-                .onChange(of: upcomingShelf.map(\.id), initial: true) { _, ids in
-                    guard let first = upcomingShelf.first else {
+                .onChange(of: upcomingIDs, initial: true) { _, ids in
+                    guard let first = ids.first else {
                         scrolledID = nil
                         settledID = nil
                         return
                     }
-                    if settledID == nil {
-                        scrolledID = first.id
-                        settledID = first.id
-                        feed.focusTeam(for: first)
-                        return
-                    }
                     if let settledID, ids.contains(settledID) {
-                        if scrolledID.map({ ids.contains($0) }) != true {
-                            scrolledID = settledID
-                        }
-                        return
+                        if scrolledID.map({ ids.contains($0) }) != true { scrolledID = settledID }
+                    } else {
+                        let next = scrolledID.flatMap { ids.contains($0) ? $0 : nil } ?? first
+                        scrolledID = next
+                        settledID = next
+                        focusShelfItem(next)
                     }
-                    if let scrolledID, ids.contains(scrolledID) {
-                        self.settledID = scrolledID
-                        if let occurrence = upcomingShelf.first(where: { $0.id == scrolledID }) {
-                            feed.focusTeam(for: occurrence)
-                        }
-                        return
-                    }
-                    scrolledID = first.id
-                    settledID = first.id
-                    feed.focusTeam(for: first)
                 }
                 .sheet(item: $declineOccurrence) { occurrence in
                     MemberDeclineSheet { reasonCode, reasonText in
@@ -538,7 +726,7 @@ struct DesignerHomeView: View {
                                 reasonText: reasonText
                             )
                         )
-                        showActionToast("سُجّل اعتذارك عن الموعد")
+                        showActionToast(String(localized: "سُجّل اعتذارك عن الموعد"))
                     }
                 }
                 .navigationDestination(isPresented: $showPlanDetails) {
@@ -681,13 +869,13 @@ struct DesignerHomeView: View {
                 selected = occurrence
                 if appState.deepLinkEventId == eventID { appState.deepLinkEventId = nil }
             } else {
-                actionError = "هذا الموعد غير متاح لك أو لم تعد عضوًا في تمرينه."
+                actionError = String(localized: "هذا الموعد غير متاح لك أو لم تعد عضوًا في تمرينه.")
                 if appState.deepLinkEventId == eventID { appState.deepLinkEventId = nil }
             }
         } catch {
             // Retain the pending ID after a transient network/server failure so
             // a later delivery or app re-entry can retry the same destination.
-            actionError = "تعذر فتح الموعد الآن. تحقق من اتصالك وحاول مرة أخرى."
+            actionError = String(localized: "تعذر فتح الموعد الآن. تحقق من اتصالك وحاول مرة أخرى.")
         }
     }
 
@@ -697,12 +885,16 @@ struct DesignerHomeView: View {
         await PushManager.shared.requestAuthorizationAndRegister()
     }
 
+    private func focusShelfItem(_ id: UUID) {
+        if let occurrence = upcomingShelf.first(where: { $0.id == id }) {
+            feed.focusTeam(for: occurrence)
+        }
+    }
+
     private func settleVisibleOccurrence() {
-        guard let scrolledID,
-              settledID != scrolledID,
-              let occurrence = upcomingShelf.first(where: { $0.id == scrolledID }) else { return }
+        guard let scrolledID, settledID != scrolledID else { return }
         settledID = scrolledID
-        feed.focusTeam(for: occurrence)
+        focusShelfItem(scrolledID)
     }
 
 }
@@ -882,6 +1074,12 @@ private struct ScrollHintChevron: View {
     }
 }
 
+/// The two names the Home title swaps between.
+private enum HomeSectionTitle {
+    static let upcoming = String(localized: "القادمة")
+    static let past = String(localized: "الماضية")
+}
+
 private struct StickyHomeHeader: View {
     let team: FeedTeam?
     let profileName: String
@@ -936,10 +1134,69 @@ private struct HomeTopBar: View {
     private static let controlDiameter: CGFloat = 52
 
     var body: some View {
-        // A physical LTR row keeps the avatar and add control on the left and
-        // the Arabic section title on the right, exactly as in the reference.
+        // The section title sits on the leading edge (the right in Arabic,
+        // the left in English) and the avatar with the add control on the
+        // trailing edge, so the row mirrors with the app language.
         // Both controls are `controlDiameter` across.
         HStack(alignment: .center, spacing: 14) {
+            Button(action: openPlan) {
+                HStack(alignment: .center, spacing: 10) {
+                    Text(sectionTitle)
+                        .font(TamrinFont.font(size: 34, weight: .bold))
+                        .foregroundStyle(Color(white: 0.98))
+                        .multilineTextAlignment(.trailing)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.78)
+                        // Identified by its own text, so the two words are
+                        // separate views and one can blur out while the other
+                        // blurs in. Without the id SwiftUI edits the string in
+                        // place and there is nothing to transition.
+                        .id(sectionTitle)
+                        .transition(.blurReplace)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .environment(\.layoutDirection, .tamrin)
+
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.52))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .background {
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: PaymentArchiveFrames.self,
+                        value: ["archive": proxy.frame(in: .global)]
+                    )
+                }
+            }
+            .accessibilityLabel(sectionTitle)
+            .accessibilityHint(
+                sectionTitle == HomeSectionTitle.upcoming
+                    ? String(localized: "يعرض التمارين الماضية")
+                    : String(localized: "يعرض التمارين القادمة")
+            )
+
+            Spacer(minLength: 12)
+
+            // The system's own glass, not a tinted disc with a hairline drawn
+            // round it: it picks up what is behind it, and `interactive` gives
+            // it the platform's press response rather than a spring of ours.
+            //
+            // The material applied to a fixed frame, not `buttonStyle(.glass)`:
+            // that style pads its own label, so the control came out 57pt
+            // against the avatar's 44 and the two stopped reading as a pair.
+            Button(action: openAdd) {
+                Image(systemName: "plus")
+                    .font(.system(size: 22, weight: .semibold))
+                    .frame(width: Self.controlDiameter, height: Self.controlDiameter)
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .contentShape(.circle)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("إضافة تمرين")
+
             Button(action: openProfile) {
                 Group {
                     if profileImageData != nil || profileImageUrl != nil {
@@ -973,58 +1230,8 @@ private struct HomeTopBar: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("الملف الشخصي والإعدادات")
-
-            // The system's own glass, not a tinted disc with a hairline drawn
-            // round it: it picks up what is behind it, and `interactive` gives
-            // it the platform's press response rather than a spring of ours.
-            //
-            // The material applied to a fixed frame, not `buttonStyle(.glass)`:
-            // that style pads its own label, so the control came out 57pt
-            // against the avatar's 44 and the two stopped reading as a pair.
-            Button(action: openAdd) {
-                Image(systemName: "plus")
-                    .font(.system(size: 22, weight: .semibold))
-                    .frame(width: Self.controlDiameter, height: Self.controlDiameter)
-                    .glassEffect(.regular.interactive(), in: .circle)
-                    .contentShape(.circle)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("إضافة تمرين")
-
-            Spacer(minLength: 12)
-
-            Button(action: openPlan) {
-                HStack(alignment: .center, spacing: 10) {
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.52))
-
-                    Text(sectionTitle)
-                        .font(TamrinFont.font(size: 34, weight: .bold))
-                        .foregroundStyle(Color(white: 0.98))
-                        .multilineTextAlignment(.trailing)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.78)
-                        // Identified by its own text, so the two words are
-                        // separate views and one can blur out while the other
-                        // blurs in. Without the id SwiftUI edits the string in
-                        // place and there is nothing to transition.
-                        .id(sectionTitle)
-                        .transition(.blurReplace)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .environment(\.layoutDirection, .rightToLeft)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(sectionTitle)
-            .accessibilityHint(
-                sectionTitle == "القادمة"
-                    ? "يعرض التمارين الماضية"
-                    : "يعرض التمارين القادمة"
-            )
         }
-        .environment(\.layoutDirection, .leftToRight)
+        .environment(\.layoutDirection, .tamrin)
         .contentTransition(.opacity)
         .animation(.easeInOut(duration: 0.25), value: sectionTitle)
     }
@@ -1072,13 +1279,13 @@ private struct HomeQuickAddSheet: View {
                 }
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .fittedSheet(minHeight: 240, includesNavigationBar: true)
     }
 
     private func optionCard(
-        title: String,
-        subtitle: String,
+        title: LocalizedStringKey,
+        subtitle: LocalizedStringKey,
         systemImage: String,
         isPrimary: Bool,
         destination: HomeQuickAddDestination
@@ -1112,7 +1319,7 @@ private struct HomeQuickAddSheet: View {
 
                 Spacer(minLength: 6)
 
-                Image(systemName: "chevron.left")
+                Image(systemName: "chevron.forward")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(.tertiary)
             }
@@ -1129,4 +1336,11 @@ private struct HomeQuickAddSheet: View {
 
 #Preview {
     DesignerHomeView(appState: AppState(), feed: .preview)
+}
+
+private struct PaymentArchiveFrames: PreferenceKey {
+    static var defaultValue: [String: CGRect] { [:] }
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
 }

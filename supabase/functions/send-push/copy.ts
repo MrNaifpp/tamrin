@@ -25,8 +25,8 @@ export function copyFor(
       };
     case "payment_rejected":
       return {
-        title: "تحديث بخصوص قطتك",
-        body: `ما قدر المشرف يأكد قطتك لـ ${eventName}. تواصل معه لمعرفة التفاصيل.`,
+        title: "القطة ما وصلت",
+        body: `المشرف ما استلم قطتك لـ ${eventName}. مكانك محفوظ، افتح التمرين لدفع القطة مجددًا.`,
       };
     case "payment_paid":
       return {
@@ -57,6 +57,16 @@ export function copyFor(
       return {
         title: "انفتح التسجيل ⚽",
         body: `انفتح التسجيل لتمرين ${eventName}. احجز مكانك.`,
+      };
+    case "registration_requested":
+      return {
+        title: "طلب تسجيل جديد 🙋",
+        body: `وصلك طلب تسجيل في ${eventName}. افتح التمرين وراجع الطلبات.`,
+      };
+    case "registration_accepted":
+      return {
+        title: "قُبل طلبك ✅",
+        body: `أنت الآن في قائمة ${eventName}. نشوفك في الملعب 🏃‍♂️`,
       };
     case "event_invited":
       return {

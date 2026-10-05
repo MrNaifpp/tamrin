@@ -68,7 +68,7 @@ struct ApplePayButton: View {
         onResult: @escaping (CardPaymentOutcome) -> Void
     ) {
         guard let merchant = merchantIdentifier else {
-            onResult(.failed("الدفع عبر Apple Pay غير مهيأ في هذه النسخة."))
+            onResult(.failed(String(localized: "الدفع عبر Apple Pay غير مهيأ في هذه النسخة.")))
             return
         }
 
@@ -76,7 +76,7 @@ struct ApplePayButton: View {
         do {
             request = try quote.paymentRequest()
         } catch {
-            onResult(.failed("تعذر تجهيز الدفع. حاول مرة أخرى."))
+            onResult(.failed(String(localized: "تعذر تجهيز الدفع. حاول مرة أخرى.")))
             return
         }
 
@@ -97,7 +97,7 @@ struct ApplePayButton: View {
                 amount: total,
                 type: .final
             ),
-            PKPaymentSummaryItem(label: "تمرين", amount: total, type: .final)
+            PKPaymentSummaryItem(label: String(localized: "تمرين"), amount: total, type: .final)
         ]
 
         let controller = PKPaymentAuthorizationController(paymentRequest: pk)
@@ -110,7 +110,7 @@ struct ApplePayButton: View {
             // tap that appears to do nothing.
             Delegate.retained = nil
             DispatchQueue.main.async {
-                onResult(.failed("تعذر فتح Apple Pay. تأكد من إضافة بطاقة في Wallet."))
+                onResult(.failed(String(localized: "تعذر فتح Apple Pay. تأكد من إضافة بطاقة في Wallet.")))
             }
         }
     }
@@ -143,11 +143,11 @@ struct ApplePayButton: View {
                         settled = .authorized(moyasarPaymentId: api.id)
                         completion(PKPaymentAuthorizationResult(status: .success, errors: nil))
                     default:
-                        settled = .failed("لم تنجح عملية الدفع. حاول مرة أخرى.")
+                        settled = .failed(String(localized: "لم تنجح عملية الدفع. حاول مرة أخرى."))
                         completion(PKPaymentAuthorizationResult(status: .failure, errors: nil))
                     }
                 } catch {
-                    settled = .failed("لم تنجح عملية الدفع. حاول مرة أخرى.")
+                    settled = .failed(String(localized: "لم تنجح عملية الدفع. حاول مرة أخرى."))
                     completion(PKPaymentAuthorizationResult(status: .failure, errors: [error]))
                 }
             }

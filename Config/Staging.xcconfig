@@ -16,6 +16,7 @@
 // whatever that gitignored file sets, so staging is the same app on every
 // machine and nobody has to edit their local copy to build it.
 PRODUCT_BUNDLE_IDENTIFIER = com.businessech.tmrin.staging
+TAMRIN_LIVE_ACTIVITY_BUNDLE_IDENTIFIER = com.businessech.tmrin.staging.liveactivity
 
 // Deliberately no SUPABASE_HOST or SUPABASE_ANON_KEY. The sandbox endpoint is
 // compiled into SupabaseEnvironment under `#if STAGING` instead, so a staging

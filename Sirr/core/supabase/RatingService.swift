@@ -38,6 +38,7 @@ struct PlayerRatingSummary {
     let averageOverall: Int?
     /// The Overall of the caller's own rating.
     let myOverall: Int?
+    var change: PlayerRatingChange? = nil
 
     var resolvedPosition: PlayerPosition { PlayerPosition.resolved(from: position) }
 
@@ -105,7 +106,7 @@ final class RatingService {
             throw NSError(
                 domain: "RatingService",
                 code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "تعذر قراءة رد الخادم."]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "تعذر قراءة رد الخادم.")]
             )
         }
 
@@ -117,7 +118,7 @@ final class RatingService {
                 throw NSError(
                     domain: "RatingService",
                     code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "تعذر قراءة التقييم بعد حفظه."]
+                    userInfo: [NSLocalizedDescriptionKey: String(localized: "تعذر قراءة التقييم بعد حفظه.")]
                 )
             }
             return .saved(Self.summary(from: rating))
@@ -129,7 +130,7 @@ final class RatingService {
             throw NSError(
                 domain: "RatingService",
                 code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "رد غير متوقع من الخادم: \(status)"]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "رد غير متوقع من الخادم: \(status)")]
             )
         }
     }
@@ -141,7 +142,7 @@ final class RatingService {
             throw NSError(
                 domain: "RatingService",
                 code: -1,
-                userInfo: [NSLocalizedDescriptionKey: "تعذر قراءة التقييم."]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "تعذر قراءة التقييم.")]
             )
         }
         return summary(from: payload)
@@ -155,8 +156,23 @@ final class RatingService {
             mine: scores(from: payload["mine"]),
             average: scores(from: payload["average"]),
             averageOverall: overall(from: payload["average"]),
-            myOverall: overall(from: payload["mine"])
+            myOverall: overall(from: payload["mine"]),
+            change: change(from: payload["trend"])
         )
+    }
+
+    private static func change(from raw: Any?) -> PlayerRatingChange? {
+        guard let values = raw as? [String: Any],
+              let previous = values["previous_overall"] as? Int,
+              let current = values["current_overall"] as? Int,
+              previous != current,
+              let timestamp = values["changed_at"] as? String else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let fractional = formatter.date(from: timestamp)
+        formatter.formatOptions = [.withInternetDateTime]
+        guard let date = fractional ?? formatter.date(from: timestamp) else { return nil }
+        return PlayerRatingChange(previousOverall: previous, currentOverall: current, changedAt: date)
     }
 
     private static func overall(from raw: Any?) -> Int? {

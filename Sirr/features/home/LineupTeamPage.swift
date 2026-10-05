@@ -153,7 +153,7 @@ struct LineupTeamPage: View {
             .opacity(usesWalletTransition ? (backdropVisible ? 1 : 0) : 1)
             .ignoresSafeArea()
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .colorScheme(.dark)
         .allowsHitTesting(interactionEnabled)
         .task {

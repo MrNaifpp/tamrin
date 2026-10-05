@@ -69,7 +69,7 @@ struct LoginOTPView: View {
             }
             // Next: verify OTP with API, then app shows signup (new user) or home
             .safeAreaInset(edge: .bottom) {
-                TamrinActionButton(title: "التالي", isLoading: vm.isLoading, tint: .black) {
+                TamrinActionButton(title: String(localized: "التالي"), isLoading: vm.isLoading, tint: .black) {
                     Task {
                         await vm.verifyOTP(email: email, token: otpCode)
                     }
@@ -79,7 +79,7 @@ struct LoginOTPView: View {
                 .padding(.bottom, 10)
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {

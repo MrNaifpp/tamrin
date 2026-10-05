@@ -20,8 +20,8 @@ Deno.test("payment_confirmed copy interpolates the event name", () => {
 Deno.test("payment_rejected copy interpolates the event name", () => {
   const c = copyFor("payment_rejected", "تمرين كرة قدم");
   assertEquals(c, {
-    title: "تحديث بخصوص قطتك",
-    body: "ما قدر المشرف يأكد قطتك لـ تمرين كرة قدم. تواصل معه لمعرفة التفاصيل.",
+    title: "القطة ما وصلت",
+    body: "المشرف ما استلم قطتك لـ تمرين كرة قدم. مكانك محفوظ، افتح التمرين لدفع القطة مجددًا.",
   });
 });
 

@@ -15,6 +15,17 @@ private enum PreferredPosition: String, CaseIterable {
     case defense = "دفاع"
     case midfield = "وسط"
     case attack = "هجوم"
+
+    /// The raw value is what gets stored on the profile; this is what the
+    /// picker shows.
+    var displayName: String {
+        switch self {
+        case .goalkeeper: String(localized: "حارس")
+        case .defense: String(localized: "دفاع")
+        case .midfield: String(localized: "وسط")
+        case .attack: String(localized: "هجوم")
+        }
+    }
 }
 
 struct SignupView: View {
@@ -88,7 +99,7 @@ struct SignupView: View {
                 .padding(.bottom, 48)
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
     }
 
     private var signupFormView: some View {
@@ -157,13 +168,13 @@ struct SignupView: View {
                             .foregroundStyle(Color(white: 0.5))
                         Menu {
                             ForEach(PreferredPosition.allCases, id: \.self) { position in
-                                Button(position.rawValue) {
+                                Button(position.displayName) {
                                     preferredPosition = position
                                 }
                             }
                         } label: {
                             HStack {
-                                Text(preferredPosition.rawValue)
+                                Text(preferredPosition.displayName)
                                     .font(.appBody)
                                     .foregroundStyle(Color(white: 0.2))
                                 Spacer(minLength: 12)
@@ -223,7 +234,7 @@ struct SignupView: View {
             }
             // Next: create user record (auth + profile) then app shows main page
             .safeAreaInset(edge: .bottom) {
-                TamrinActionButton(title: "التالي", isLoading: vm.isLoading, tint: .black) {
+                TamrinActionButton(title: String(localized: "التالي"), isLoading: vm.isLoading, tint: .black) {
                     Task {
                         await vm.completeProfile(
                             fullName: fullName.trimmingCharacters(in: .whitespaces),
@@ -237,7 +248,7 @@ struct SignupView: View {
                 .padding(.bottom, 10)
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .scrollDismissesKeyboard(.interactively)
         .navigationBarBackButtonHidden(true)
         .onAppear {
