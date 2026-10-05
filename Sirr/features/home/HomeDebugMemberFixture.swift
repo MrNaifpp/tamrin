@@ -10,7 +10,7 @@ enum HomeDebugMemberFixture {
     /// The dedicated `.local` bundle is the installable QA copy, so it also
     /// enables the fixture when opened directly from the iPhone home screen.
     /// Neither path exists in a Release build because this whole file is DEBUG-only.
-    static let isEnabled = ProcessInfo.processInfo.arguments.contains("-demoMemberFixture")
+    static let isEnabled = CommunityScheduleFixture.isEnabled || ProcessInfo.processInfo.arguments.contains("-demoMemberFixture")
         || Bundle.main.bundleIdentifier?.hasSuffix(".tamrin.local") == true
     /// Starts the member already registered after the organizer requested the
     /// contribution, so the persistent T-40 entry point can be checked on a
@@ -822,7 +822,8 @@ enum HomeDebugMemberFixture {
 
     static func isFixturePlayer(_ id: UUID) -> Bool {
         guard isEnabled else { return false }
-        return (0..<rosterSeed.count).contains { playerID(at: $0) == id }
+        return CommunityScheduleFixture.isPlayer(id)
+            || (0..<rosterSeed.count).contains { playerID(at: $0) == id }
             || (0..<ownerAccountSeed.count).contains { ownerPlayerID(at: $0) == id }
     }
 
@@ -844,6 +845,9 @@ enum HomeDebugMemberFixture {
     /// crowd's rather than an echo of the one rating just submitted. Two per
     /// player, deterministic, spread wide enough that the six bars differ.
     static func seededRatings(for player: UUID) -> [PlayerRatingScores] {
+        if CommunityScheduleFixture.isPlayer(player) {
+            return [CommunityScheduleFixture.scores(70), CommunityScheduleFixture.scores(70)]
+        }
         // Nobody in the organizer group has been rated yet: that group is for
         // running an exercise end to end, and a lineup built from unrated
         // players is the ordinary case it has to handle.

@@ -8,6 +8,12 @@ export function copyFor(
   details: CopyDetails = {},
 ): { title: string; body: string } | null {
   switch (type) {
+    case "match_award_nominate":
+      return { title: "من كان نجمها؟ 🏆", body: `انتهى ${eventName}. رشّح ثلاثة لاعبين لرجل المباراة وخلّ الفريق يختار.` };
+    case "match_award_vote":
+      return { title: "صوّت لرجل المباراة 🏆", body: `وصلت ترشيحات ${eventName}. اختر نجمك؛ صوتك سرّي والتصويت مفتوح ٢٤ ساعة.` };
+    case "match_award_result":
+      return { title: "نتيجة رجل المباراة جاهزة 🏆", body: `انتهى تصويت ${eventName}. افتح وشوف النتيجة.` };
     case "payment_submitted":
       return {
         title: "طلب انضمام جديد 🎉",

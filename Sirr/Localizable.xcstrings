@@ -470,6 +470,9 @@
         }
       }
     },
+    "•" : {
+
+    },
     "⚽" : {
 
     },
@@ -3892,6 +3895,7 @@
       }
     },
     "المتابعة عبر Apple" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {

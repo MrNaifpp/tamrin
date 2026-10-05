@@ -548,6 +548,9 @@ enum LineupStore {
     /// this reader is not entitled to yet.
     @discardableResult
     static func load(eventID: UUID) async -> LineupPlan? {
+        #if DEBUG
+        if eventID == HomeDebugMemberFixture.matchAwardEventID { return plans[eventID] }
+        #endif
         let fetched: LineupRecord?
         do {
             fetched = try await LineupService.shared.get(eventID: eventID)
@@ -582,6 +585,12 @@ enum LineupStore {
     static func save(_ plan: LineupPlan, positions: LineupPositions, eventID: UUID) {
         plans[eventID] = plan
         positionsByEvent[eventID] = positions
+        #if DEBUG
+        if eventID == HomeDebugMemberFixture.matchAwardEventID {
+            published.insert(eventID)
+            return
+        }
+        #endif
         Task {
             _ = try? await LineupService.shared.save(
                 eventID: eventID,

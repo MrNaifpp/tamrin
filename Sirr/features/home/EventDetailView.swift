@@ -13,6 +13,7 @@ struct EventDetailView: View {
     private let initialOccurrence: FeedOccurrence
     private let initialArtName: String
     var onOverduePaymentCompleted: ((FeedOccurrence) -> Void)? = nil
+    var schedulePresentation: EventSchedulePresentation? = nil
     @State private var completedOverduePayment = false
     var initiallyShowsRegistration = false
     #if DEBUG
@@ -42,6 +43,7 @@ struct EventDetailView: View {
     @State private var actionErrorMessage: String?
     @State private var handledInitialRegistration = false
     @State private var showManualAdd = false
+    @State private var showCreateSession = false
     @State private var scheduleClock = Date.now
     @State private var showMemberReminder = false
     @State private var reminderToast: String?
@@ -87,6 +89,8 @@ struct EventDetailView: View {
     /// artwork is revealed from here down, so the frost follows the panel
     /// through every scroll and every added row.
     @State private var frostPosition = EventDetailFrostPosition()
+    @State private var detailScrollPosition = ScrollPosition(edge: .top)
+    @State private var scheduleScrollSession = ScheduleScrollSession()
 
     #if DEBUG
     init(
@@ -95,6 +99,7 @@ struct EventDetailView: View {
         artName: String = "ExerciseArt1",
         onOverduePaymentCompleted: ((FeedOccurrence) -> Void)? = nil,
         initiallyShowsRegistration: Bool = false,
+        schedulePresentation: EventSchedulePresentation? = nil,
         initiallyShowsGuestRegistration: Bool = false,
         initiallyShowsGuestOnlyRegistration: Bool = false
     ) {
@@ -103,6 +108,7 @@ struct EventDetailView: View {
         self.initialArtName = artName
         self.onOverduePaymentCompleted = onOverduePaymentCompleted
         self.initiallyShowsRegistration = initiallyShowsRegistration
+        self.schedulePresentation = schedulePresentation
         self.initiallyShowsGuestRegistration = initiallyShowsGuestRegistration
         self.initiallyShowsGuestOnlyRegistration = initiallyShowsGuestOnlyRegistration
     }
@@ -112,13 +118,15 @@ struct EventDetailView: View {
         occurrence: FeedOccurrence,
         artName: String = "ExerciseArt1",
         onOverduePaymentCompleted: ((FeedOccurrence) -> Void)? = nil,
-        initiallyShowsRegistration: Bool = false
+        initiallyShowsRegistration: Bool = false,
+        schedulePresentation: EventSchedulePresentation? = nil
     ) {
         self.feed = feed
         self.initialOccurrence = occurrence
         self.initialArtName = artName
         self.onOverduePaymentCompleted = onOverduePaymentCompleted
         self.initiallyShowsRegistration = initiallyShowsRegistration
+        self.schedulePresentation = schedulePresentation
     }
     #endif
 
@@ -135,12 +143,8 @@ struct EventDetailView: View {
     /// falls back to the event's deterministic generic artwork; a missing team
     /// keeps the caller-provided image so loading never flashes another asset.
     private var artName: String {
-        guard let team = feed.team(for: occurrence),
-              let sportKey = Sport.named(team.symbol)?.key else {
-            return initialArtName
-        }
-        return SportArtLibrary.photo(for: occurrence.id, sportKey: sportKey)
-            ?? "ExerciseArt\((occurrence.artIndex % 3) + 1)"
+        guard feed.team(for: occurrence) != nil else { return initialArtName }
+        return feed.scheduleArt(for: occurrence)
     }
 
     private var roster: [FeedMember] { feed.roster(for: occurrence) }
@@ -224,7 +228,8 @@ struct EventDetailView: View {
                 // edge dissolves as a change in focus rather than a veil
                 // laid over the picture — and the mask is measured from the
                 // panel's live position, so the frost travels with it.
-                EventDetailFrostArtwork(artName: artName, size: proxy.size)
+                EventDetailFrostArtwork(artName: artName,
+                    size: schedulePresentation?.artworkSize ?? proxy.size)
                     .frame(width: proxy.size.width, height: proxy.size.height).clipped()
                     .mask(alignment: .top) {
                         EventDetailFrostMask(position: frostPosition,
@@ -244,14 +249,27 @@ struct EventDetailView: View {
                         // after it travels with the panel.
                         Color.clear
                             .frame(height: Self.artworkWindow)
+                            .contentShape(.rect)
+                            .onTapGesture { schedulePresentation?.expand() }
 
                         contentPanel
+                            .simultaneousGesture(TapGesture().onEnded { schedulePresentation?.expand() })
                             .frame(
                                 minHeight: proxy.size.height - Self.artworkWindow,
                                 alignment: .top
                             )
                     }
+                    .padding(.bottom, schedulePresentation?.bottomInset ?? 0)
                 }
+                .scrollPosition($detailScrollPosition)
+                // A compact date is a preview, never an independently
+                // scrollable page. Its vertical gesture only opens it.
+                .scrollDisabled(schedulePresentation.map { !$0.allowsContentScrolling } ?? false)
+                .gesture(ScheduleCardOpeningGesture(
+                    isEnabled: schedulePresentation?.isExpanded == false,
+                    open: { schedulePresentation?.expand() }
+                ))
+                .scrollBounceBehavior(.always, axes: .vertical)
                 .onScrollGeometryChange(for: CGFloat.self) { geometry in
                     // The card's global frame animates during expansion. Derive
                     // the panel edge solely from its local content offset so
@@ -265,6 +283,41 @@ struct EventDetailView: View {
                     update.disablesAnimations = true
                     withTransaction(update) { frostPosition.top = top }
                 }
+                .onChange(of: schedulePresentation?.isExpanded) { _, isExpanded in
+                    if isExpanded == false {
+                        var reset = Transaction()
+                        reset.disablesAnimations = true
+                        withTransaction(reset) { detailScrollPosition.scrollTo(edge: .top) }
+                    }
+                }
+                .onScrollPhaseChange { oldPhase, phase, context in
+                    guard let presentation = schedulePresentation else { return }
+                    let offset = context.geometry.contentOffset.y + context.geometry.contentInsets.top
+                    switch phase {
+                    case .tracking:
+                        scheduleScrollSession.begin(expanded: presentation.isExpanded, offset: offset)
+                    case .interacting:
+                        // A short touch can go straight from idle to
+                        // interacting without a separate tracking update.
+                        if oldPhase != .tracking {
+                            scheduleScrollSession.begin(expanded: presentation.isExpanded, offset: offset)
+                        }
+                        scheduleScrollSession.isDragging = true
+                        if scheduleScrollSession.consumeCollapse(offset: offset) {
+                            presentation.collapse()
+                        }
+                    case .idle, .decelerating, .animating:
+                        scheduleScrollSession.isDragging = false
+                    @unknown default: break
+                    }
+                }
+                .onScrollGeometryChange(for: Bool.self) { geometry in
+                    geometry.contentOffset.y + geometry.contentInsets.top < -18
+                } action: { _, pulledPastTop in
+                    guard pulledPastTop,
+                          scheduleScrollSession.consumeCollapse(offset: -19) else { return }
+                    schedulePresentation?.collapse()
+                }
             }
         }
     }
@@ -276,17 +329,18 @@ struct EventDetailView: View {
         }
         .overlay(alignment: .topLeading) {
             Button {
-                dismiss()
+                if let schedulePresentation { schedulePresentation.back() }
+                else { dismiss() }
             } label: {
-                Label(String(localized: "إغلاق"), systemImage: "chevron.backward")
+                Label(schedulePresentation?.isExpanded == true ? String(localized: "المواعيد") : String(localized: "إغلاق"), systemImage: "chevron.backward")
                     .labelStyle(.iconOnly)
                     .font(.system(size: 17, weight: .semibold))
                     .frame(width: TamrinControlMetrics.roundButton, height: TamrinControlMetrics.roundButton)
             }
             .buttonStyle(ExerciseChromeButtonStyle())
             .padding(.horizontal, 20)
-            .padding(.top, 6)
-            .accessibilityLabel(String(localized: "إغلاق"))
+            .padding(.top, 6 + (schedulePresentation?.topInset ?? 0))
+            .accessibilityLabel(schedulePresentation?.isExpanded == true ? String(localized: "العودة للمواعيد") : String(localized: "إغلاق"))
         }
         .overlay(alignment: .topTrailing) {
             Button {
@@ -295,6 +349,7 @@ struct EventDetailView: View {
                     return
                 }
                 feed.focusTeam(for: occurrence)
+                schedulePresentation?.expand()
                 Haptics.impact(.light)
                 withAnimation(reduceMotion ? .easeOut(duration: 0.18) : .smooth(duration: 0.36)) {
                     exerciseDetailsTeamID = teamID
@@ -318,7 +373,7 @@ struct EventDetailView: View {
             }
             .buttonStyle(ExerciseChromeButtonStyle())
             .padding(.horizontal, 20)
-            .padding(.top, 6)
+            .padding(.top, 6 + (schedulePresentation?.topInset ?? 0))
             .accessibilityLabel("تفاصيل التمرين")
             .accessibilityHint("يفتح قالب التمرين وأعضاءه وطرق الدفع")
             .disabled(feed.teamID(for: occurrence) == nil)
@@ -438,6 +493,9 @@ struct EventDetailView: View {
             }
         }
         .environment(\.layoutDirection, .tamrin)
+        .onChange(of: exerciseDetailsTeamID != nil || lineupCardPresentation != nil) { _, hidden in
+            schedulePresentation?.setChromeHidden(hidden)
+        }
         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { now in
             scheduleClock = now
         }
@@ -641,6 +699,19 @@ struct EventDetailView: View {
                 }
             }
         }
+        .fullScreenCover(isPresented: $showCreateSession) {
+            if let teamID = feed.teamID(for: occurrence) {
+                AddSessionSheet(feed: feed, isPresented: $showCreateSession,
+                                workspaceID: teamID,
+                                initialPlan: feed.newSessionDraft(for: teamID)) { _ in
+                    reminderToast = String(localized: "أُنشئ موعد جديد")
+                    Task {
+                        try? await Task.sleep(for: .seconds(3))
+                        reminderToast = nil
+                    }
+                }
+            }
+        }
         .sheet(isPresented: $showManualAdd) {
             ManualParticipantSheet(isPaid: occurrence.price > 0) { name in
                 let outcome = await feed.addManualParticipant(named: name, to: occurrence)
@@ -720,6 +791,10 @@ struct EventDetailView: View {
             heroTitle
                 .padding(.bottom, 6)
 
+            if schedulePresentation == nil, feed.isOwner(of: occurrence), !isHistorical {
+                CreateSessionButton { showCreateSession = true }
+            }
+
             if occurrence.isCancelled {
                 cancellationPanel
             } else if showsOverduePaymentAction {
@@ -752,6 +827,10 @@ struct EventDetailView: View {
             // Nobody can register yet, so a member has no count to read.
             if pendingOpening == nil || feed.isCurrentTeamOwner {
                 progressPanel
+            }
+
+            if isHistorical, !occurrence.isCancelled {
+                MatchAwardEntryView(eventID: occurrence.id, artName: artName) { EmptyView() }
             }
 
             // Between the count and the names: the split is what the organizer
@@ -2435,6 +2514,63 @@ struct EventDetailView: View {
                 actionErrorMessage = String(localized: "اكتملت المقاعد لهذا الموعد.")
                 Haptics.error()
             }
+        }
+    }
+}
+
+/// One presentation change per finger gesture. A return scroll that starts
+/// below the top (or an inertial bounce) cannot accidentally fold the page.
+private final class ScheduleScrollSession {
+    private var beganExpanded = false
+    private var beganAtTop = false
+    private var consumed = true
+    var isDragging = false
+
+    func begin(expanded: Bool, offset: CGFloat) {
+        beganExpanded = expanded
+        beganAtTop = offset <= 1
+        consumed = false
+        isDragging = false
+    }
+
+    func consumeCollapse(offset: CGFloat) -> Bool {
+        guard isDragging, !consumed, beganExpanded, beganAtTop, offset < -18 else { return false }
+        consumed = true
+        return true
+    }
+}
+
+/// Admit only vertical pans before the compact ScrollView can move. Horizontal
+/// movement stays with the date pager. Scroll wheels and trackpads follow the
+/// same rule as touch, without relying on SwiftUI scroll-phase notifications.
+private struct ScheduleCardOpeningGesture: UIGestureRecognizerRepresentable {
+    let isEnabled: Bool
+    let open: () -> Void
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
+
+    func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
+        let pan = UIPanGestureRecognizer()
+        pan.maximumNumberOfTouches = 1
+        pan.allowedScrollTypesMask = .all
+        pan.delegate = context.coordinator
+        pan.isEnabled = isEnabled
+        return pan
+    }
+
+    func updateUIGestureRecognizer(_ pan: UIPanGestureRecognizer, context: Context) {
+        pan.isEnabled = isEnabled
+    }
+
+    func handleUIGestureRecognizerAction(_ pan: UIPanGestureRecognizer, context: Context) {
+        if pan.state == .began { open() }
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return false }
+            let velocity = pan.velocity(in: pan.view)
+            return abs(velocity.y) > abs(velocity.x)
         }
     }
 }

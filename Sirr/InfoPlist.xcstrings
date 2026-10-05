@@ -24,6 +24,24 @@
           }
         }
       }
+    },
+    "NSPhotoLibraryAddUsageDescription" : {
+      "comment" : "Privacy - Photo Library Additions Usage Description",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "نحفظ صورة بطاقتك في ألبوم الصور عندما تختار حفظها للمشاركة."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We save your card image to your photo library when you choose to save it for sharing."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

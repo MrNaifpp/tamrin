@@ -26,6 +26,8 @@ struct ProfileSettingsView: View {
     /// stored one should go.
     @State private var avatarRemoved = false
     @State private var showPhotoPicker = false
+    @State private var showsCardCreation = false
+    @State private var cardSummary: PlayerRatingSummary?
     @FocusState private var nameFocused: Bool
 
     /// Stored values, sent to the server as-is. Shown through `positionLabel`.
@@ -50,11 +52,27 @@ struct ProfileSettingsView: View {
             if isPushed {
                 form
             } else {
-                NavigationStack { form }
-                    .fittedSheet(includesNavigationBar: true)
+                NavigationStack {
+                    ScrollView { form }
+                        .scrollBounceBehavior(.basedOnSize)
+                }
+                .presentationDetents([.height(initialSheetHeight)])
+                .presentationBackground(TamrinTheme.sheet)
+                .presentationDragIndicator(.visible)
+                .sheetPresentationHaptic()
             }
         }
         .environment(\.layoutDirection, .tamrin)
+        .fullScreenCover(isPresented: $showsCardCreation) {
+            PlayerCardPage(feed: feed)
+                .presentationBackground {
+                    ZStack {
+                        Rectangle().fill(.ultraThinMaterial)
+                        Color.black.opacity(0.3)
+                    }.environment(\.colorScheme, .dark)
+                }
+        }
+        .task { cardSummary = try? await feed.myPlayerRating() }
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItem, matching: .images)
         .task(id: photoItem) {
             guard let photoItem, let data = await photoItem.loadAvatarData() else { return }
@@ -77,9 +95,35 @@ struct ProfileSettingsView: View {
         }
     }
 
+    // Resolve the initial detent before presentation. Measuring the expanding
+    // NavigationStack after it appears made the sheet open tall, then shrink.
+    private var initialSheetHeight: CGFloat {
+        let window = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first?.keyWindow
+        let width = window?.bounds.width ?? 402
+        let columns = max(1, Int((width - 44 + 8) / (88 + 8)))
+        let rows = CGFloat((positions.count + columns - 1) / columns)
+        let labelHeight = TamrinFont.uiFont(size: 13, weight: .medium).lineHeight
+        let nameHeight = labelHeight + 8 + 56
+        let positionHeight = labelHeight + 10 + rows * 44 + (rows - 1) * 8
+        let settingsHeight = max(28, TamrinFont.uiFont(size: 17, weight: .medium).lineHeight) + 30
+        let createHeight: CGFloat = PlayerCardLibrary.shared.portrait(for: feed.currentUserID) == nil
+            ? TamrinFont.uiFont(size: 14, weight: .medium).lineHeight + 10 : 0
+        let contentHeight = 150 / PlayerCardView.aspectRatio + createHeight
+            + nameHeight + positionHeight + settingsHeight + 60 + 30
+        let navigationHeight = UINavigationBar().sizeThatFits(CGSize(width: width, height: 100)).height
+        return min(contentHeight + navigationHeight, (window?.bounds.height ?? 874) * 0.92)
+    }
+
     private var form: some View {
         VStack(spacing: 20) {
-            avatarPicker
+            PlayerCardThumbnail(
+                name: feed.profileName.isEmpty ? String(localized: "لاعب") : feed.profileName,
+                position: feed.playerPosition,
+                overall: cardSummary?.averageOverall ?? LineupStrength.neutral,
+                scores: cardSummary?.average ?? .neutral,
+                portrait: PlayerCardLibrary.shared.portrait(for: feed.currentUserID),
+                create: { showsCardCreation = true }
+            )
             nameField
             positionPicker
             // Settings live behind the profile photo, one level in: how the app
@@ -95,7 +139,7 @@ struct ProfileSettingsView: View {
         // pushed: the settings sheet reduces these heights with max() and allows
         // expansion, so it grows to fit this form and shrinks back on pop.
         .sheetContentHeight()
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, alignment: .top)
         .navigationTitle("حسابي")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

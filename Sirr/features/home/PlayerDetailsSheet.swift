@@ -248,11 +248,23 @@ struct PlayerDetailsSheet: View {
     /// a squad list marks a shirt, then the name.
     private var identity: some View {
         VStack(spacing: 10) {
-            PlayerPortrait(
-                name: member.name,
-                avatarData: avatarImageData,
-                avatarUrl: member.avatarUrl
-            )
+            if let portrait = PlayerCardLibrary.shared.portrait(for: member.userId) {
+                PlayerCardThumbnail(
+                    name: member.name,
+                    position: positionText,
+                    overall: rating?.averageOverall ?? LineupStrength.neutral,
+                    scores: rating?.average ?? .neutral,
+                    portrait: portrait,
+                    showsScores: revealsRating,
+                    change: rating?.change
+                )
+            } else {
+                PlayerPortrait(
+                    name: member.name,
+                    avatarData: avatarImageData,
+                    avatarUrl: member.avatarUrl
+                )
+            }
 
             Text(member.name)
                 .font(TamrinFont.font(size: 24, weight: .bold))

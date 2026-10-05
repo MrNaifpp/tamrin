@@ -22,6 +22,7 @@ final class PushManager {
     /// Ask for permission (system dialog shows once) and register for APNs if granted.
     /// Safe to call repeatedly and from any payment entry point.
     func requestAuthorizationAndRegister() async {
+        #if !TAMRIN_PERSONAL_TEAM
         do {
             let granted = try await UNUserNotificationCenter.current()
                 .requestAuthorization(options: [.alert, .sound, .badge])
@@ -31,6 +32,7 @@ final class PushManager {
         } catch {
             logger.error("requestAuthorization failed: \(error.localizedDescription)")
         }
+        #endif
     }
 
     /// Upsert the APNs token for the signed-in user. RLS lets a user manage own tokens.

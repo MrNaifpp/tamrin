@@ -525,6 +525,7 @@ private struct TemplateComposerPage: View {
     /// it hides this field rather than asking for the same thing twice. The
     /// standalone session composer still needs it.
     var showsNameField = true
+    var creatingAdditionalSession = false
     var actionTitle = String(localized: "احفظ الموعد")
     var isSaving = false
     /// Present only in the main-template editor. Creation already chose the
@@ -559,7 +560,7 @@ private struct TemplateComposerPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(editsExerciseTemplate
+                    Text(creatingAdditionalSession ? String(localized: "إنشاء موعد جديد") : editsExerciseTemplate
                          ? String(localized: "عدّل قالب التمرين")
                          : (showsNameField ? String(localized: "صمّم الموعد") : String(localized: "صمّم التمرين")))
                         .font(TamrinFont.largeTitle)
@@ -630,7 +631,7 @@ private struct TemplateComposerPage: View {
                         // has a real date and times, even before the sheet is
                         // opened, so weekdays.isEmpty (which is also true for
                         // every one-off plan) cannot gate it here.
-                        value: (plan.scheduleKind == .recurring && plan.weekdays.isEmpty)
+                        value: (creatingAdditionalSession && !reviewedFields.contains(.schedule)) || (plan.scheduleKind == .recurring && plan.weekdays.isEmpty)
                             ? nil
                             : "\(plan.daysSummary)\n\(plan.timeSummary)"
                     ) { activeSheet = .schedule }
@@ -646,12 +647,12 @@ private struct TemplateComposerPage: View {
                     ComposerTile(
                         symbol: "person.2.fill",
                         title: "عدد اللاعبين",
-                        value: capacitySummary
+                        value: creatingAdditionalSession && !reviewedFields.contains(.capacity) ? nil : capacitySummary
                     ) { activeSheet = .capacity }
                     ComposerTile(
                         symbol: "banknote.fill",
                         title: "قيمة الملعب",
-                        value: plan.totalVenueCost == 0
+                        value: creatingAdditionalSession && !reviewedFields.contains(.venueCost) ? nil : plan.totalVenueCost == 0
                             ? String(localized: "مجاني")
                             : String(localized: "\(plan.totalVenueCost.cleanAmount) ر.س\nالقطة \(plan.pricePerPerson.cleanAmount) ر.س")
                     ) { activeSheet = .venueCost }
@@ -663,7 +664,9 @@ private struct TemplateComposerPage: View {
                 ComposerTile(
                     symbol: "creditcard.fill",
                     title: "وسائل الدفع",
-                    value: plan.totalVenueCost == 0
+                    value: creatingAdditionalSession && !reviewedFields.contains(.venueCost)
+                        ? (plan.paymentMethods.isEmpty ? nil : String(localized: "وسائل الدفع المحفوظة"))
+                        : plan.totalVenueCost == 0
                         ? String(localized: "غير مطلوب\nالتمرين مجاني")
                         : (plan.paymentMethods.isEmpty
                            ? (canUsePersistedPaymentMethods
@@ -672,7 +675,7 @@ private struct TemplateComposerPage: View {
                            : (plan.paymentMethods.count == 1
                               ? plan.paymentMethods[0].provider.displayName
                               : String(localized: "\(plan.paymentMethods.count.appDigits) وسائل دفع"))),
-                    isEnabled: plan.totalVenueCost > 0
+                    isEnabled: plan.totalVenueCost > 0 || (creatingAdditionalSession && !reviewedFields.contains(.venueCost))
                 ) {
                     didOpenPaymentEditor = true
                     activeSheet = .payment
@@ -683,7 +686,9 @@ private struct TemplateComposerPage: View {
                    !plan.locationName.isEmpty {
                     Text(message).font(TamrinFont.footnote).foregroundStyle(.red)
                 }
-                Text(editsExerciseTemplate
+                Text(creatingAdditionalSession
+                     ? String(localized: "يُضاف الموعد إلى نفس المجموعة، ويصل تنبيه إلى أعضائها.")
+                     : editsExerciseTemplate
                      ? (editsRecurringTemplate
                         ? String(localized: "سيظهر الاسم والرياضة والتفاصيل الجديدة في المواعيد القادمة.")
                         : String(localized: "ستُحفظ التغييرات على هذا الموعد."))
@@ -768,6 +773,10 @@ private struct TemplateComposerPage: View {
     }
 
     private var canSave: Bool {
+        if creatingAdditionalSession {
+            guard Set([ComposerSheet.schedule, .capacity, .venueCost]).isSubset(of: reviewedFields),
+                  plan.newSessionValidationError() == nil else { return false }
+        }
         if plan.isComplete {
             return plan.scheduleKind != .oneOff || plan.newSessionValidationError() == nil
         }
@@ -848,10 +857,16 @@ private struct ScheduleSheet: View {
                 // hand-filled capsules.
                 if !locksScheduleKind {
                     Picker("نوع الموعد", selection: $plan.scheduleKind.animation(.smooth(duration: 0.3))) {
-                        Text("متكرر").tag(FeedScheduleKind.recurring)
-                        Text("مرة واحدة").tag(FeedScheduleKind.oneOff)
+                        Text("ثابت").tag(FeedScheduleKind.recurring)
+                        Text("متغير").tag(FeedScheduleKind.oneOff)
                     }
                     .pickerStyle(.segmented)
+                    Text(plan.scheduleKind == .recurring
+                         ? String(localized: "يتكرر الموعد تلقائيًا كل أسبوع.")
+                         : String(localized: "تحدد هذا الموعد، وتضيف مواعيد جديدة متى احتجت. تبقى المجموعة وأعضاؤها."))
+                        .font(TamrinFont.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 if plan.scheduleKind == .recurring {
@@ -1955,6 +1970,8 @@ struct AddSessionSheet: View {
     @Binding var isPresented: Bool
     let editingEventID: UUID?
     let editingTemplateID: UUID?
+    let workspaceID: UUID
+    var onCreated: ((FeedOccurrence) -> Void)?
     @State private var plan: PlanDraft
     @State private var saving = false
     @State private var failureMessage: String?
@@ -1962,12 +1979,20 @@ struct AddSessionSheet: View {
 
     init(feed: HomeStore, isPresented: Binding<Bool>,
          editingEventID: UUID? = nil, editingTemplateID: UUID? = nil,
-         initialPlan: PlanDraft = PlanDraft()) {
+         workspaceID: UUID? = nil,
+         initialPlan: PlanDraft = PlanDraft(),
+         onCreated: ((FeedOccurrence) -> Void)? = nil) {
         self.feed = feed
         self._isPresented = isPresented
         self.editingEventID = editingEventID
         self.editingTemplateID = editingTemplateID
-        self._plan = State(initialValue: initialPlan)
+        self.workspaceID = workspaceID ?? feed.selectedTeamID
+        self.onCreated = onCreated
+        var resolvedPlan = initialPlan
+        if editingEventID == nil, resolvedPlan.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            resolvedPlan = feed.newSessionDraft(for: workspaceID ?? feed.selectedTeamID)
+        }
+        self._plan = State(initialValue: resolvedPlan)
     }
 
     var body: some View {
@@ -1976,6 +2001,10 @@ struct AddSessionSheet: View {
                 TamrinTheme.page.ignoresSafeArea()
                 TemplateComposerPage(
                     plan: $plan,
+                    showsNameField: editingEventID != nil,
+                    creatingAdditionalSession: editingEventID == nil,
+                    actionTitle: editingEventID == nil ? String(localized: "إنشاء موعد") : String(localized: "حفظ الموعد"),
+                    isSaving: saving,
                     save: {
                         guard !saving else { return }
                         if editingEventID != nil, editingTemplateID != nil {
@@ -2004,6 +2033,13 @@ struct AddSessionSheet: View {
             }
         }
         .environment(\.layoutDirection, .tamrin)
+        .task {
+            guard editingEventID == nil else { return }
+            await feed.loadGroupDetails(workspaceID)
+            if plan.paymentMethods.isEmpty {
+                plan.paymentMethods = feed.methods(for: workspaceID).map(\.asDraft)
+            }
+        }
         .sheetPresentationHaptic()
         .interactiveDismissDisabled(saving)
         .confirmationDialog(
@@ -2045,7 +2081,9 @@ struct AddSessionSheet: View {
                         scope: scope
                     )
                 } else {
-                    try await feed.addSession(plan)
+                    if let created = try await feed.addSession(plan, in: workspaceID) {
+                        onCreated?(created)
+                    }
                 }
                 Haptics.success()
                 isPresented = false

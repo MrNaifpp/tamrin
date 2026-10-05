@@ -244,3 +244,15 @@ Deno.test("added_to_event falls back when the organizer has no name", () => {
   const c = copyFor("added_to_event", "تمرين الخميس", { actorName: "  " });
   assertEquals(c?.body, "المشرف أضافك إلى «تمرين الخميس». سجّل مكانك 👍");
 });
+
+Deno.test("match award notifications cover nomination, secret voting and results", () => {
+  assertEquals(copyFor("match_award_nominate", "الخميس"), {
+    title: "من كان نجمها؟ 🏆", body: "انتهى الخميس. رشّح ثلاثة لاعبين لرجل المباراة وخلّ الفريق يختار.",
+  });
+  assertEquals(copyFor("match_award_vote", "الخميس"), {
+    title: "صوّت لرجل المباراة 🏆", body: "وصلت ترشيحات الخميس. اختر نجمك؛ صوتك سرّي والتصويت مفتوح ٢٤ ساعة.",
+  });
+  assertEquals(copyFor("match_award_result", "الخميس"), {
+    title: "نتيجة رجل المباراة جاهزة 🏆", body: "انتهى تصويت الخميس. افتح وشوف النتيجة.",
+  });
+});

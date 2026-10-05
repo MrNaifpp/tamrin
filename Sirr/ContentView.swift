@@ -18,6 +18,7 @@ struct ContentView: View {
     @StateObject private var appState = AppState()
     @StateObject private var updateGate = AppUpdateGate()
     #if DEBUG
+    @State private var matchAwardDemo = MatchAwardModel.demo()
     @State private var paymentArchivePreview = HomeStore.paymentArchivePreview
     @State private var paymentRequestPreview = HomeStore.paymentRequestPreview
     @State private var guestOnlyRegistrationPreview = HomeStore.guestOnlyRegistrationPreview
@@ -34,7 +35,9 @@ struct ContentView: View {
 
     var body: some View {
         #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("-demoPaymentArchive") {
+        if ProcessInfo.processInfo.arguments.contains("-demoMatchAward") {
+            MatchAwardFlowView(eventID: matchAwardDemo.eventID, model: matchAwardDemo)
+        } else if ProcessInfo.processInfo.arguments.contains("-demoPaymentArchive") {
             DesignerHomeView(appState: appState, feed: paymentArchivePreview)
         } else if ProcessInfo.processInfo.arguments.contains("-demoGuestOnlyDetailScreen") {
             EventDetailView(

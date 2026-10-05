@@ -38,7 +38,7 @@ struct DesignerHomeView: View {
     /// The archive keeps its own position and backdrop. Reusing the upcoming
     /// card id here made switching tabs forget where both pages had been.
     @State private var activePastMonth: PastEventsArchiveMonth?
-    @State private var selected: FeedOccurrence?
+    @State private var selected: HomeExerciseDestination?
     @State private var registrationEntryEventID: UUID?
     // Freeze the visible shelf while details are open: the payment refresh
     // must not remove the zoom source before the cover has returned to it.
@@ -66,6 +66,9 @@ struct DesignerHomeView: View {
     init(appState: AppState, feed: HomeStore? = nil) {
         self.appState = appState
         _feed = State(initialValue: feed ?? HomeStore())
+        #if DEBUG
+        _showsPast = State(initialValue: ProcessInfo.processInfo.arguments.contains("-demoMatchAwardJourney"))
+        #endif
     }
 
     /// Which half of the calendar Home is showing. The title is the control:
@@ -86,16 +89,22 @@ struct DesignerHomeView: View {
         return liveUpcomingShelf
     }
 
-    /// Re-read every 30 seconds and on return to the app, so a workout that
-    /// has just ended leaves the shelf without a manual refresh.
     @State private var scheduleClock = Date.now
-    private var upcomingIDs: [UUID] { upcomingShelf.map(\.id) }
-    private var hasVisibleCards: Bool { !shelf.isEmpty }
+    private var unscheduledTeams: [FeedTeam] {
+        let scheduledIDs = Set(upcomingShelf.compactMap { feed.teamID(for: $0) })
+        return feed.teams.filter { !scheduledIDs.contains($0.id) }
+    }
+    private func homeCardID(for occurrence: FeedOccurrence) -> UUID {
+        feed.teamID(for: occurrence) ?? occurrence.id
+    }
+    private var upcomingIDs: [UUID] { upcomingShelf.map { homeCardID(for: $0) } + unscheduledTeams.map(\.id) }
+    private var hasVisibleCards: Bool { showsPast ? !pastShelf.isEmpty : !upcomingIDs.isEmpty }
+    private func art(for team: FeedTeam) -> String {
+        SportArtLibrary.photo(for: team.id, sportKey: team.sport) ?? artName(0)
+    }
 
     private var liveUpcomingShelf: [FeedOccurrence] {
-        feed.allOccurrences.filter {
-            !$0.isPast(relativeTo: scheduleClock) || $0.requiresPaymentAction
-        }
+        feed.homeScheduleOccurrences(at: scheduleClock)
     }
 
     /// A group event is not automatically this person's workout. Only a held
@@ -143,7 +152,7 @@ struct DesignerHomeView: View {
     }
 
     private var upcomingArtworkNames: [String] {
-        upcomingShelf.map { art(for: $0) }
+        upcomingShelf.map { art(for: $0) } + unscheduledTeams.map { art(for: $0) }
     }
 
     private var shelf: [FeedOccurrence] {
@@ -187,9 +196,7 @@ struct DesignerHomeView: View {
     /// folder has any, and otherwise the artwork the app ships with. The sport
     /// is the group's, since that is where it is chosen.
     private func art(for occurrence: FeedOccurrence) -> String {
-        let sportKey = feed.team(for: occurrence)?.sport
-        return SportArtLibrary.photo(for: occurrence.id, sportKey: sportKey)
-            ?? artName(occurrence.artIndex)
+        feed.scheduleArt(for: occurrence)
     }
 
     /// The gap between one card and the next one down. Must stay under
@@ -214,7 +221,7 @@ struct DesignerHomeView: View {
     private var backdropOccurrence: FeedOccurrence? {
         if showsPast { return pastBackdropOccurrence }
         guard let id = scrolledID ?? settledID else { return upcomingShelf.first }
-        return upcomingShelf.first(where: { $0.id == id }) ?? upcomingShelf.first
+        return upcomingShelf.first(where: { homeCardID(for: $0) == id }) ?? upcomingShelf.first
     }
 
     /// A month owns one backdrop: the artwork of its newest exercise. The
@@ -234,6 +241,9 @@ struct DesignerHomeView: View {
             if let artName = activePastMonth?.artName { return artName }
             return pastShelf.first.map { art(for: $0) } ?? artName(0)
         }
+        if let id = scrolledID ?? settledID,
+           let team = unscheduledTeams.first(where: { $0.id == id }) { return art(for: team) }
+        if upcomingShelf.isEmpty, let team = unscheduledTeams.first { return art(for: team) }
         guard let occurrence = backdropOccurrence else { return artName(0) }
         return art(for: occurrence)
     }
@@ -421,7 +431,7 @@ struct DesignerHomeView: View {
             } ?? liveUpcomingShelf.first
             withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .smooth(duration: 0.32)) {
                 heldPaymentShelf = nil
-                scrolledID = next?.id
+                scrolledID = next.map { homeCardID(for: $0) }
                 settledID = scrolledID
                 archiveLanded = false
             }
@@ -477,7 +487,7 @@ struct DesignerHomeView: View {
                             GeometryReader { contentProxy in
                                 let activeIndex = visualCurrentIndex
                                 let indexedOccurrences = upcomingShelf.enumerated().map {
-                                    (index: $0.offset, id: $0.element.id, occurrence: $0.element)
+                                    (index: $0.offset, id: homeCardID(for: $0.element), occurrence: $0.element)
                                 }
 
                                 ScrollView(.vertical, showsIndicators: false) {
@@ -496,12 +506,16 @@ struct DesignerHomeView: View {
                                                 attendees: feed.roster(for: occurrence)
                                                     .filter { $0.status != .waitlisted },
                                                 currentUserID: feed.currentUserID,
-                                                art: art(for: occurrence)
+                                                art: art(for: occurrence),
+                                                scheduleCount: feed.scheduleOccurrences(for: item.id, at: scheduleClock).count,
+                                                exerciseTitle: feed.team(for: occurrence)?.name
                                             ) {
                                                 Haptics.impact(.light)
                                                 registrationEntryEventID = nil
                                                 feed.focusTeam(for: occurrence)
-                                                selected = occurrence
+                                                if let team = feed.team(for: occurrence) {
+                                                    selected = .workspace(team)
+                                                }
                                             }
                                             // Shorter than the screen on
                                             // purpose: what is left over below
@@ -534,6 +548,22 @@ struct DesignerHomeView: View {
                                             .transition(.opacity.combined(with: .scale(scale: reduceMotion ? 1 : 0.94)))
                                             .id(item.id)
                                             .matchedTransitionSource(id: item.id, in: cardZoom)
+                                        }
+                                        ForEach(unscheduledTeams) { team in
+                                            UnscheduledExercisePoster(
+                                                team: team,
+                                                isOwner: feed.isOwner(ofTeamID: team.id),
+                                                artName: art(for: team)
+                                            ) {
+                                                feed.focusTeam(id: team.id)
+                                                selected = .workspace(team)
+                                            } onCreate: {
+                                                feed.focusTeam(id: team.id)
+                                                selected = .workspace(team, createSession: true)
+                                            }
+                                            .frame(height: max(contentProxy.size.height - Self.posterBottomClearance, 320))
+                                            .id(team.id)
+                                            .matchedTransitionSource(id: team.id, in: cardZoom)
                                         }
                                     }
                                     .scrollTargetLayout()
@@ -650,24 +680,36 @@ struct DesignerHomeView: View {
                     } else {
                         heldPaymentShelf = nil
                     }
-                }) { occ in
-                    EventDetailView(
-                        feed: feed,
-                        occurrence: occ,
-                        artName: art(for: occ),
-                        onOverduePaymentCompleted: { completed in
-                            guard !showsPast else { return }
-                            archivingOccurrence = completed
-                            scrolledID = completed.id
-                            settledID = completed.id
-                        },
-                        initiallyShowsRegistration: registrationEntryEventID == occ.id
-                    )
-                        .navigationTransition(.zoom(sourceID: occ.id, in: cardZoom))
+                }) { destination in
+                    switch destination {
+                    case .event(let occ):
+                        if !occ.isPast(), !occ.isCancelled, let team = feed.team(for: occ) {
+                            ExerciseScheduleView(feed: feed, team: team, initialOccurrence: occ,
+                                                 initiallyShowsRegistration: registrationEntryEventID == occ.id)
+                                .navigationTransition(.zoom(sourceID: team.id, in: cardZoom))
+                        } else {
+                            EventDetailView(
+                                feed: feed,
+                                occurrence: occ,
+                                artName: art(for: occ),
+                                onOverduePaymentCompleted: { completed in
+                                    guard !showsPast else { return }
+                                    archivingOccurrence = completed
+                                    scrolledID = homeCardID(for: completed)
+                                    settledID = homeCardID(for: completed)
+                                },
+                                initiallyShowsRegistration: registrationEntryEventID == occ.id
+                            )
+                                .navigationTransition(.zoom(sourceID: occ.id, in: cardZoom))
+                        }
+                    case .workspace(let team, let createSession):
+                        ExerciseScheduleView(feed: feed, team: team, initiallyCreatesSession: createSession)
+                            .navigationTransition(.zoom(sourceID: team.id, in: cardZoom))
+                    }
                 }
                 .onChange(of: selected?.id) { _, newValue in
                     if newValue == nil { registrationEntryEventID = nil }
-                    if let selected, !showsPast, selected.isPast() {
+                    if let selected = selected?.occurrence, !showsPast, selected.isPast() {
                         heldPaymentShelf = liveUpcomingShelf
                     }
                 }
@@ -677,7 +719,7 @@ struct DesignerHomeView: View {
                 .onChange(of: feed.requestedOccurrenceID) { _, requested in
                     guard let requested else { return }
                     feed.requestedOccurrenceID = nil
-                    selected = feed.occurrence(withID: requested)
+                    selected = feed.occurrence(withID: requested).map { .event($0) }
                 }
                 // Decode the small palette samples immediately, then prepare
                 // the display-sized photos away from the main actor. LazyVStack
@@ -711,7 +753,19 @@ struct DesignerHomeView: View {
                     if let settledID, ids.contains(settledID) {
                         if scrolledID.map({ ids.contains($0) }) != true { scrolledID = settledID }
                     } else {
-                        let next = scrolledID.flatMap { ids.contains($0) ? $0 : nil } ?? first
+                        var next = scrolledID.flatMap { ids.contains($0) ? $0 : nil } ?? first
+                        #if DEBUG
+                        if settledID == nil, CommunityScheduleFixture.isEnabled {
+                            if ProcessInfo.processInfo.arguments.contains("-demoCommunityEmpty") {
+                                next = CommunityScheduleFixture.id(2)
+                            } else if ProcessInfo.processInfo.arguments.contains("-demoCommunityMember") {
+                                next = CommunityScheduleFixture.id(3)
+                            } else if ProcessInfo.processInfo.arguments.contains("-demoCommunityFootball"),
+                                      let football = upcomingShelf.first(where: { feed.teamID(for: $0) == CommunityScheduleFixture.id(4) }) {
+                                next = homeCardID(for: football)
+                            }
+                        }
+                        #endif
                         scrolledID = next
                         settledID = next
                         focusShelfItem(next)
@@ -814,7 +868,7 @@ struct DesignerHomeView: View {
                     Haptics.impact(.light)
                     registrationEntryEventID = nil
                     feed.focusTeam(for: occurrence)
-                    selected = occurrence
+                    selected = .event(occurrence)
                 }
             )
             .refreshable {
@@ -866,7 +920,7 @@ struct DesignerHomeView: View {
         do {
             if let occurrence = try await feed.occurrenceForDeepLink(eventID: eventID) {
                 registrationEntryEventID = nil
-                selected = occurrence
+                selected = .event(occurrence)
                 if appState.deepLinkEventId == eventID { appState.deepLinkEventId = nil }
             } else {
                 actionError = String(localized: "هذا الموعد غير متاح لك أو لم تعد عضوًا في تمرينه.")
@@ -886,8 +940,10 @@ struct DesignerHomeView: View {
     }
 
     private func focusShelfItem(_ id: UUID) {
-        if let occurrence = upcomingShelf.first(where: { $0.id == id }) {
+        if let occurrence = upcomingShelf.first(where: { homeCardID(for: $0) == id }) {
             feed.focusTeam(for: occurrence)
+        } else if unscheduledTeams.contains(where: { $0.id == id }) {
+            feed.focusTeam(id: id)
         }
     }
 
