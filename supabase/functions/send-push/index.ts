@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { copyFor } from "./copy.ts";
 import { makeApnsJwt, sendApns } from "./apns.ts";
+import { makeWebPushServer, sendWebPush, type WebResult, webPushPayload } from "./webpush.ts";
 
 const SEND_PUSH_SECRET = Deno.env.get("SEND_PUSH_SECRET")!;
 const APNS_TOPIC = Deno.env.get("APNS_BUNDLE_ID")!;
@@ -48,12 +49,19 @@ Deno.serve(async (req) => {
     return new Response(msg, { status: 200 }); // 200: we recorded the failure
   };
 
-  // 3. Recipient tokens.
+  // 3. Recipients: the iPhones the person signed in on, and the browsers that
+  // allowed notifications (the web app, mostly Android).
   const { data: tokens } = await admin
     .from("device_tokens")
     .select("apns_token")
     .eq("user_id", row.user_id);
-  if (!tokens || tokens.length === 0) return await fail("no device tokens");
+  const { data: webSubs } = await admin
+    .from("web_push_subscriptions")
+    .select("endpoint, p256dh, auth")
+    .eq("user_id", row.user_id);
+  const apple = tokens ?? [];
+  const web = webSubs ?? [];
+  if (apple.length === 0 && web.length === 0) return await fail("no device tokens");
 
   // 4. Event name (for copy).
   let eventName = "";
@@ -79,20 +87,13 @@ Deno.serve(async (req) => {
   });
   if (!copy) return await fail(`no copy for type ${row.type}`);
 
-  // 6. Sign + send to every device.
-  const jwt = await makeApnsJwt({
-    keyId: Deno.env.get("APNS_KEY_ID")!,
-    teamId: Deno.env.get("APNS_TEAM_ID")!,
-    authKeyPem: Deno.env.get("APNS_AUTH_KEY")!,
-    nowSeconds: Math.floor(Date.now() / 1000),
-  });
-
+  // 6a. Apple: sign once, send to every device.
   // 400 BadDeviceToken means the token belongs to the other environment, not
   // that it is dead — the same token still delivers on the sibling host.
   const isWrongEnvironment = (r: { status: number; text: string }) =>
     r.status === 400 && r.text.includes("BadDeviceToken");
 
-  const deliver = async (deviceToken: string) => {
+  const deliverApple = async (jwt: string, deviceToken: string) => {
     const payload = {
       deviceToken,
       topic: APNS_TOPIC,
@@ -113,7 +114,41 @@ Deno.serve(async (req) => {
     };
   };
 
-  const results = await Promise.all(tokens.map((t) => deliver(t.apns_token)));
+  const appleResults = apple.length === 0 ? [] : await (async () => {
+    const jwt = await makeApnsJwt({
+      keyId: Deno.env.get("APNS_KEY_ID")!,
+      teamId: Deno.env.get("APNS_TEAM_ID")!,
+      authKeyPem: Deno.env.get("APNS_AUTH_KEY")!,
+      nowSeconds: Math.floor(Date.now() / 1000),
+    });
+    return await Promise.all(apple.map((t) => deliverApple(jwt, t.apns_token)));
+  })();
+
+  // 6b. Browsers. A subscription the push service calls gone is deleted, so
+  // dead browsers do not pile up the way old device tokens have.
+  const webResults: WebResult[] = web.length === 0 ? [] : await (async () => {
+    let server;
+    try {
+      server = await makeWebPushServer({
+        vapidKeysJson: Deno.env.get("VAPID_KEYS") ?? "",
+        subject: Deno.env.get("VAPID_SUBJECT") ?? "",
+      });
+    } catch (error) {
+      // Missing or malformed secrets: record it rather than crash, so Apple
+      // deliveries in the same row still count.
+      return web.map(() => ({ ok: false, status: 0, text: `web push setup: ${error}`, gone: false }));
+    }
+    const payload = webPushPayload(copy, row.event_id ?? null);
+    return await Promise.all(web.map(async (s) => {
+      const result = await sendWebPush(server, s, payload);
+      if (result.gone) {
+        await admin.from("web_push_subscriptions").delete().eq("endpoint", s.endpoint);
+      }
+      return result;
+    }));
+  })();
+
+  const results = [...appleResults, ...webResults];
 
   const anyOk = results.some((r) => r.ok);
   await admin.from("push_outbox").update({
