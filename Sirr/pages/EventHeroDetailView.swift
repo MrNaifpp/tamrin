@@ -1123,7 +1123,7 @@ struct EnrollmentSheetView: View {
 
                     case .alreadyJoined(let status):
                         switch status {
-                        case .confirmed: paymentError = String(localized: "أنت مسجل بالفعل في هذه الفعالية")
+                        case .confirmed, .waived: paymentError = String(localized: "أنت مسجل بالفعل في هذه الفعالية")
                         case .pending: paymentError = String(localized: "لديك طلب دفع قيد التأكيد")
                         case .rejected: paymentError = String(localized: "رُفض طلبك سابقًا")
                         }
