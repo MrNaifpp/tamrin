@@ -106,9 +106,9 @@ struct EditProfileSheet: View {
                         .buttonStyle(.plain)
                         .onChange(of: selectedItem) { newItem in
                             Task {
-                                if let data = try? await newItem?.loadTransferable(type: Data.self) {
-                                    selectedImageData = data
-                                }
+                                guard let newItem,
+                                      let data = await newItem.loadAvatarData() else { return }
+                                selectedImageData = data
                             }
                         }
                         .padding(.top, 24)
@@ -163,7 +163,7 @@ struct EditProfileSheet: View {
 
                                 let trimmed = stcPayInput.trimmingCharacters(in: .whitespaces)
                                 if !trimmed.isEmpty && STCPay.normalize(trimmed) == nil {
-                                    stcPayError = "رقم STC Pay غير صالح"
+                                    stcPayError = String(localized: "رقم STC Pay غير صالح")
                                     return
                                 }
 
@@ -181,7 +181,7 @@ struct EditProfileSheet: View {
                                         try await AuthService.shared.updateSTCPayNumber(newCanonical)
                                         await authVM.loadCurrentProfile()
                                     } catch {
-                                        stcPayError = "تعذر حفظ رقم STC Pay"
+                                        stcPayError = String(localized: "تعذر حفظ رقم STC Pay")
                                         return
                                     }
                                 }
@@ -208,7 +208,7 @@ struct EditProfileSheet: View {
                     }
                 }
             }
-            .environment(\.layoutDirection, .rightToLeft)
+            .environment(\.layoutDirection, .tamrin)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {

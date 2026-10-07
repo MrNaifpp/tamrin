@@ -6,12 +6,13 @@ import UIKit
 /// remains visible beneath the page, like the declined-responses surface.
 struct ExerciseDetailsOverlayPage: View {
     @Bindable var feed: HomeStore
-    let occurrence: FeedOccurrence
+    let occurrence: FeedOccurrence?
     let teamID: UUID
     /// The page's moving shell ignores the safe area so its silhouette reaches
     /// the physical display corners. Preserve the host's original top inset so
     /// the header itself still clears the status bar and Dynamic Island.
     let screenTopInset: CGFloat
+    let onLeave: () -> Void
     let onClose: () -> Void
 
     @State private var memberInDetails: FeedTeamMember?
@@ -22,19 +23,28 @@ struct ExerciseDetailsOverlayPage: View {
     /// turns true the two sections below have nothing to show — and saying
     /// «تعذر تحميل» then is a lie: nothing has been attempted yet.
     @State private var hasLoadedGroupDetails = false
+    @State private var showsLeaveConfirm = false
+    @State private var isLeaving = false
+    @State private var leaveError: String?
     @State private var showsDeleteConfirm = false
     @State private var showsSkipSheet = false
 
     /// The editor refreshes HomeStore before it dismisses. Reading the event
     /// back by id keeps this still-present details page in sync instead of
     /// continuing to render the immutable navigation snapshot it opened with.
-    private var currentOccurrence: FeedOccurrence {
-        feed.allOccurrences.first { $0.id == occurrence.id } ?? occurrence
+    private var currentOccurrence: FeedOccurrence? {
+        guard let occurrence else { return nil }
+        return feed.allOccurrences.first { $0.id == occurrence.id } ?? occurrence
     }
 
     private var team: FeedTeam? {
         feed.teams.first { $0.id == teamID }
     }
+
+    /// What the delete and leave confirmations call this exercise when its
+    /// workspace has not loaded yet.
+    private var exerciseTitle: String { team?.name ?? String(localized: "التمرين") }
+    private var groupTitle: String { team?.name ?? String(localized: "المجموعة") }
 
     private var usesFootballFeatures: Bool {
         LineupSportStyle(sport: team?.sport).usesFootballFeatures
@@ -48,6 +58,7 @@ struct ExerciseDetailsOverlayPage: View {
     /// one synthesized plan from another upcoming date; borrowing its time or
     /// coordinates here would make this page confidently show the wrong venue.
     private var plan: FeedPlan? {
+        guard let currentOccurrence else { return nil }
         if let exact = plans.first(where: { $0.sourceEventID == currentOccurrence.id }) {
             return exact
         }
@@ -74,17 +85,19 @@ struct ExerciseDetailsOverlayPage: View {
     /// main-template editor is therefore offered only from the live/current
     /// occurrence, where there is still a future template to change.
     private var canEditTemplate: Bool {
-        isOwner && !currentOccurrence.isPast()
+        isOwner && currentOccurrence.map { !$0.isPast() } == true
     }
 
     /// A date already called off cannot be called off again, and a date that
     /// has happened is a receipt rather than a plan.
     private var canSkipOccurrence: Bool {
-        isOwner && !currentOccurrence.isPast() && !currentOccurrence.isCancelled
+        isOwner && currentOccurrence.map { !$0.isPast() } == true && currentOccurrence?.isCancelled == false
     }
 
     private var paymentMethods: [PaymentMethodRecord] {
-        guard isOwner, !currentOccurrence.paymentMethodIds.isEmpty else { return [] }
+        guard isOwner else { return [] }
+        guard let currentOccurrence else { return feed.methods(for: teamID) }
+        guard !currentOccurrence.paymentMethodIds.isEmpty else { return [] }
         let availableByID = Dictionary(
             uniqueKeysWithValues: feed.methods(for: teamID).map { ($0.id, $0) }
         )
@@ -92,32 +105,35 @@ struct ExerciseDetailsOverlayPage: View {
     }
 
     private var dayText: String {
+        guard let currentOccurrence else { return "" }
         guard currentOccurrence.isRecurring,
               let plan,
               !plan.weekdays.isEmpty else {
             return currentOccurrence.startAt.arabicDay
         }
-        return plan.weekdays.compactMap(weekdayName).joined(separator: "، ")
+        return plan.weekdays.compactMap(weekdayName).joined(separator: AppLanguage.isArabic ? "، " : ", ")
     }
 
     private var timeText: String {
+        guard let currentOccurrence else { return "" }
         guard let plan else { return currentOccurrence.startAt.arabicTime }
         return "\(plan.startTime.arabicTime) – \(plan.endTime.arabicTime)"
     }
 
     private var currency: String {
-        plan?.currency ?? "ر.س"
+        plan?.currency ?? String(localized: "ر.س")
     }
 
     private var playerShare: Double {
-        plan?.price ?? currentOccurrence.price
+        plan?.price ?? currentOccurrence?.price ?? 0
     }
 
     private var templateCapacity: Int {
-        plan?.capacity ?? currentOccurrence.capacity
+        plan?.capacity ?? currentOccurrence?.capacity ?? 0
     }
 
     private var venueName: String {
+        guard let currentOccurrence else { return "" }
         let templateVenue = plan?.locationName.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !templateVenue.isEmpty { return templateVenue }
         let occurrenceVenue = currentOccurrence.locationName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -126,8 +142,8 @@ struct ExerciseDetailsOverlayPage: View {
 
     private var directionsDestination: EventDirectionsDestination {
         EventDirectionsDestination(
-            latitude: plan?.latitude ?? currentOccurrence.latitude,
-            longitude: plan?.longitude ?? currentOccurrence.longitude,
+            latitude: plan?.latitude ?? currentOccurrence?.latitude,
+            longitude: plan?.longitude ?? currentOccurrence?.longitude,
             name: venueName
         )
     }
@@ -139,7 +155,13 @@ struct ExerciseDetailsOverlayPage: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 28) {
-                templateSection
+                if currentOccurrence != nil {
+                    templateSection
+                } else {
+                    Text("لا يوجد موعد")
+                        .font(TamrinFont.body)
+                        .foregroundStyle(.white.opacity(0.75))
+                }
                 membersSection
 
                 if isOwner {
@@ -159,7 +181,7 @@ struct ExerciseDetailsOverlayPage: View {
             await feed.loadGroupDetails(teamID)
             hasLoadedGroupDetails = true
         }
-        .alert("حذف «\(team?.name ?? "التمرين")»؟", isPresented: $showsDeleteConfirm) {
+        .alert("حذف «\(exerciseTitle)»؟", isPresented: $showsDeleteConfirm) {
             Button("حذف التمرين", role: .destructive) {
                 feed.deleteTeam(teamID)
                 onClose()
@@ -168,10 +190,40 @@ struct ExerciseDetailsOverlayPage: View {
         } message: {
             Text("بيُحذف التمرين وكل مواعيده وأعضائه وطرق الدفع من عندك. تقدر تنشئ تمرينًا جديدًا أي وقت.")
         }
+        .alert("الخروج من «\(groupTitle)»؟", isPresented: $showsLeaveConfirm) {
+            Button("الخروج من التمرين", role: .destructive) {
+                guard !isLeaving else { return }
+                isLeaving = true
+                Task {
+                    do {
+                        try await feed.leaveTeam(teamID)
+                        isLeaving = false
+                        Haptics.success()
+                        onLeave()
+                    } catch {
+                        isLeaving = false
+                        leaveError = ServerErrorMessage.arabic(for: error)
+                        Haptics.error()
+                    }
+                }
+            }
+            Button("تراجع", role: .cancel) {}
+        } message: {
+            Text("ستغادر المجموعة بالكامل، وتختفي تمارينها من عندك. تقدر ترجع للمجموعة برمز الدعوة.")
+        }
+        .alert("تعذر الخروج من التمرين", isPresented: Binding(
+            get: { leaveError != nil },
+            set: { if !$0 { leaveError = nil } }
+        )) {
+            Button("حسنًا", role: .cancel) { leaveError = nil }
+        } message: {
+            Text(leaveError ?? String(localized: "حاول مرة أخرى."))
+        }
         // Pull still does the full refresh, occurrences and rosters included.
         .refreshable { await feed.loadTeamData(teamID) }
         .sheet(isPresented: $showsSkipSheet) {
             AdminSkipEventSheet { reasonCode, reasonText in
+                guard let currentOccurrence else { return }
                 // EventResponseFlow renders whatever this throws, through
                 // ServerErrorMessage, so the failure is reported where the
                 // person is already looking rather than behind a second alert.
@@ -203,6 +255,7 @@ struct ExerciseDetailsOverlayPage: View {
             )
         }
         .fullScreenCover(isPresented: $showsTemplateEditor) {
+            if let currentOccurrence {
             EditExerciseTemplateSheet(
                 feed: feed,
                 isPresented: $showsTemplateEditor,
@@ -214,8 +267,9 @@ struct ExerciseDetailsOverlayPage: View {
                 teamColor: team?.color ?? .blue,
                 initialPlan: editorPlan
             )
+            }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .colorScheme(.dark)
     }
 
@@ -225,54 +279,10 @@ struct ExerciseDetailsOverlayPage: View {
                 .font(TamrinFont.font(size: 17, weight: .bold))
                 .foregroundStyle(.white)
 
+            // Close sits where the exercise page's back button was (leading)
+            // and the options menu where its details button was (trailing),
+            // so the page opens with each control in the place it was tapped.
             HStack {
-                // Contextual actions live in an ellipsis menu, the same
-                // pattern the exercise's own page uses. Circular glass to match
-                // the close button opposite it rather than the capsule the lone
-                // edit button used to wear.
-                if isOwner {
-                    Menu {
-                        // A past occurrence is a receipt: there is no future
-                        // template left to change, so only the deletion stays.
-                        if canEditTemplate {
-                            Button("تعديل التمرين", systemImage: "pencil") {
-                                Haptics.impact(.light)
-                                showsTemplateEditor = true
-                            }
-                        }
-
-                        // Skipping calls off one date and leaves the exercise
-                        // running, so it sits above the deletion that ends the
-                        // whole thing. A past or already-skipped date has
-                        // nothing left to call off.
-                        if canSkipOccurrence {
-                            Button("تخطي هذا الموعد", systemImage: "forward.end.fill") {
-                                Haptics.impact(.light)
-                                showsSkipSheet = true
-                            }
-                        }
-
-                        Button("حذف التمرين", systemImage: "trash", role: .destructive) {
-                            showsDeleteConfirm = true
-                        }
-                    } label: {
-                        Label("خيارات التمرين", systemImage: "ellipsis")
-                            .labelStyle(.iconOnly)
-                            .font(.system(size: 17, weight: .semibold))
-                            .frame(
-                                width: TamrinControlMetrics.glassIconContent,
-                                height: TamrinControlMetrics.glassIconContent
-                            )
-                    }
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.circle)
-                    .controlSize(.regular)
-                    .accessibilityLabel("خيارات التمرين")
-                    .accessibilityHint("تعديل التمرين أو حذفه")
-                }
-
-                Spacer(minLength: 0)
-
                 Button {
                     onClose()
                 } label: {
@@ -288,10 +298,52 @@ struct ExerciseDetailsOverlayPage: View {
                 .buttonBorderShape(.circle)
                 .controlSize(.regular)
                 .accessibilityLabel("إغلاق تفاصيل التمرين")
+                .disabled(isLeaving)
+
+                Spacer(minLength: 0)
+
+                Menu {
+                    if isOwner {
+                        if canEditTemplate {
+                            Button("تعديل التمرين", systemImage: "pencil") {
+                                Haptics.impact(.light)
+                                showsTemplateEditor = true
+                            }
+                        }
+                        if canSkipOccurrence {
+                            Button("تخطي هذا الموعد", systemImage: "forward.end.fill") {
+                                Haptics.impact(.light)
+                                showsSkipSheet = true
+                            }
+                        }
+                        Button("حذف التمرين", systemImage: "trash", role: .destructive) {
+                            showsDeleteConfirm = true
+                        }
+                    } else {
+                        Button("الخروج من التمرين", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
+                            showsLeaveConfirm = true
+                        }
+                    }
+                } label: {
+                    Group {
+                        if isLeaving {
+                            ProgressView().tint(.white)
+                        } else {
+                            Label("خيارات التمرين", systemImage: "ellipsis")
+                                .labelStyle(.iconOnly)
+                                .font(.system(size: 17, weight: .semibold))
+                        }
+                    }
+                    .frame(width: TamrinControlMetrics.glassIconContent,
+                           height: TamrinControlMetrics.glassIconContent)
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .controlSize(.regular)
+                .accessibilityLabel("خيارات التمرين")
+                .accessibilityHint(isOwner ? String(localized: "تعديل التمرين أو حذفه") : String(localized: "الخروج من التمرين"))
+                .disabled(isLeaving)
             }
-            // Physical placement is part of this page's transition: edit stays
-            // where the old close button was (left), while close moves right.
-            .environment(\.layoutDirection, .leftToRight)
         }
         .padding(.horizontal, 20)
         .padding(.top, 4)
@@ -322,24 +374,24 @@ struct ExerciseDetailsOverlayPage: View {
                     ExerciseDetailStat(
                         symbol: "calendar",
                         value: dayText,
-                        title: "يوم التمرين"
+                        title: String(localized: "يوم التمرين")
                     )
                     ExerciseDetailStat(
                         symbol: "clock.fill",
                         value: timeText,
-                        title: "وقت التمرين"
+                        title: String(localized: "وقت التمرين")
                     )
                     ExerciseDetailStat(
                         symbol: "person.fill",
                         value: playerShare == 0
-                            ? "مجاني"
+                            ? String(localized: "مجاني")
                             : "\(playerShare.cleanAmount) \(currency)",
-                        title: "قطة كل لاعب"
+                        title: String(localized: "قطة كل لاعب")
                     )
                     ExerciseDetailStat(
                         symbol: "person.2.fill",
                         value: templateCapacity.counted(.player),
-                        title: "سعة التمرين"
+                        title: String(localized: "سعة التمرين")
                     )
                 }
 
@@ -366,18 +418,18 @@ struct ExerciseDetailsOverlayPage: View {
             } label: {
                 ExerciseDetailInfoRow(
                     symbol: "sportscourt.fill",
-                    title: "الملعب",
-                    value: venueName.isEmpty ? "غير محدد" : venueName,
+                    title: String(localized: "الملعب"),
+                    value: venueName.isEmpty ? String(localized: "غير محدد") : venueName,
                     showsDisclosure: true
                 )
             }
-            .accessibilityLabel(venueName.isEmpty ? "الاتجاهات" : "الاتجاهات إلى \(venueName)")
+            .accessibilityLabel(venueName.isEmpty ? String(localized: "الاتجاهات") : String(localized: "الاتجاهات إلى \(venueName)"))
             .accessibilityHint("يفتح قائمة تطبيقات الخرائط")
         } else {
             ExerciseDetailInfoRow(
                 symbol: "sportscourt.fill",
-                title: "الملعب",
-                value: venueName.isEmpty ? "غير محدد" : venueName
+                title: String(localized: "الملعب"),
+                value: venueName.isEmpty ? String(localized: "غير محدد") : venueName
             )
         }
     }
@@ -395,20 +447,20 @@ struct ExerciseDetailsOverlayPage: View {
                 loadingRow("يجهّز قائمة الأعضاء…")
             } else if members.isEmpty {
                 Text(memberCount > 0
-                     ? "تعذر تحميل قائمة الأعضاء الآن. اسحب لتحديث الصفحة."
-                     : "ما انضم أحد إلى التمرين بعد.")
+                     ? String(localized: "تعذر تحميل قائمة الأعضاء الآن. اسحب لتحديث الصفحة.")
+                     : String(localized: "ما انضم أحد إلى التمرين بعد."))
                     .font(TamrinFont.subheadline)
                     .foregroundStyle(.white.opacity(0.58))
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                VStack(spacing: 8) {
+                LazyVStack(spacing: 8) {
                     ForEach(members) { member in
                         MemberRowCard(
                             name: member.displayName,
                             subtitle: member.isPending
-                                ? "بانتظار الانضمام"
-                                : (member.role == .admin ? "مشرف التمرين" : "عضو"),
+                                ? String(localized: "بانتظار الانضمام")
+                                : (member.role == .admin ? String(localized: "مشرف التمرين") : String(localized: "عضو")),
                             avatarImageData: member.id == feed.currentUserID ? feed.avatarData : nil,
                             avatarImageUrl: member.avatarUrl,
                             // The organizer's disc is the same neutral one
@@ -445,7 +497,7 @@ struct ExerciseDetailsOverlayPage: View {
     /// What a section shows while its data is still on its way. Deliberately
     /// the same shape as the text it replaces, so the section does not change
     /// height when the answer arrives.
-    private func loadingRow(_ title: String) -> some View {
+    private func loadingRow(_ title: LocalizedStringKey) -> some View {
         HStack(spacing: 8) {
             ProgressView()
                 .controlSize(.small)
@@ -459,18 +511,19 @@ struct ExerciseDetailsOverlayPage: View {
 
     private var paymentMethodsSection: some View {
         ExerciseDetailsSection(title: "طرق الدفع", showsContainer: false) {
-            if playerShare == 0 {
+            if currentOccurrence != nil && playerShare == 0 {
                 Label("هذا التمرين مجاني ولا يحتاج إلى طريقة دفع.", systemImage: "checkmark.circle.fill")
                     .font(TamrinFont.subheadline)
                     .foregroundStyle(.white.opacity(0.68))
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else if paymentMethods.isEmpty, !hasLoadedGroupDetails,
-                      !currentOccurrence.paymentMethodIds.isEmpty {
+                      !(currentOccurrence?.paymentMethodIds ?? []).isEmpty {
                 loadingRow("يجهّز طريقة الدفع…")
             } else if paymentMethods.isEmpty {
-                Text(currentOccurrence.paymentMethodIds.isEmpty
-                     ? "لا توجد طريقة دفع مرتبطة بهذا الموعد."
-                     : "تعذر تحميل طريقة الدفع المرتبطة بهذا الموعد الآن.")
+                Text(currentOccurrence == nil ? String(localized: "لا توجد وسائل دفع محفوظة.")
+                     : (currentOccurrence?.paymentMethodIds ?? []).isEmpty
+                     ? String(localized: "لا توجد طريقة دفع مرتبطة بهذا الموعد.")
+                     : String(localized: "تعذر تحميل طريقة الدفع المرتبطة بهذا الموعد الآن."))
                     .font(TamrinFont.subheadline)
                     .foregroundStyle(.white.opacity(0.58))
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -480,7 +533,7 @@ struct ExerciseDetailsOverlayPage: View {
                         TamrinRowCard(
                             title: method.provider.displayName,
                             subtitle: method.provider == .cash
-                                ? "الدفع في الملعب"
+                                ? String(localized: "الدفع في الملعب")
                                 : method.maskedSummary
                         ) {
                             PaymentProviderLogo(
@@ -515,12 +568,15 @@ struct ExerciseDetailsOverlayPage: View {
 
     private func weekdayName(_ value: Int) -> String? {
         [
-            1: "الأحد", 2: "الاثنين", 3: "الثلاثاء", 4: "الأربعاء",
-            5: "الخميس", 6: "الجمعة", 7: "السبت"
+            1: String(localized: "الأحد"), 2: String(localized: "الاثنين"),
+            3: String(localized: "الثلاثاء"), 4: String(localized: "الأربعاء"),
+            5: String(localized: "الخميس"), 6: String(localized: "الجمعة"),
+            7: String(localized: "السبت")
         ][value]
     }
 
     private var editorPlan: PlanDraft {
+        guard let currentOccurrence else { return feed.newSessionDraft(for: teamID) }
         if var draft = feed.editDraft(for: currentOccurrence) {
             // The workspace is the exercise identity. Repair any historical
             // drift between its name and the event before presenting one field.
@@ -570,7 +626,7 @@ struct ExerciseDetailsOverlayPage: View {
 }
 
 private struct ExerciseDetailsSection<Content: View>: View {
-    let title: String
+    let title: LocalizedStringKey
     var caption: String?
     var showsContainer = true
     @ViewBuilder var content: Content

@@ -76,3 +76,6 @@ fastlane/test_output
 # Supabase Edge Function local secrets
 supabase/functions/.env
 .superpowers/
+
+# Originals pulled down by scripts/shrink-existing-avatars.sh
+.avatar-backup/

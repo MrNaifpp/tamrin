@@ -244,7 +244,7 @@ struct EventHeroDetailView: View {
                             } label: {
                                 ActionChip(
                                     icon: isRegistrationLocked ? "lock.open.fill" : "lock.fill",
-                                    title: isRegistrationLocked ? "فتح التسجيل" : "قفل التسجيل",
+                                    title: isRegistrationLocked ? String(localized: "فتح التسجيل") : String(localized: "قفل التسجيل"),
                                     style: .solid
                                 )
                                 .opacity(isTogglingLock ? 0.5 : 1.0)
@@ -252,15 +252,15 @@ struct EventHeroDetailView: View {
                             .buttonStyle(.plain)
                             .disabled(isTogglingLock)
 
-                            ShareLink(item: "https://guileless-squirrel-b6537a.netlify.app/event/\(event.id.uuidString)") {
-                                ActionChip(icon: "square.and.arrow.up.fill", title: "مشاركة", style: .translucent)
+                            ShareLink(item: AppLinks.eventURL(event.id)) {
+                                ActionChip(icon: "square.and.arrow.up.fill", title: String(localized: "مشاركة"), style: .translucent)
                             }
                             .buttonStyle(.plain)
 
                             Button {
                                 showSettingsSheet = true
                             } label: {
-                                ActionChip(icon: "gearshape.fill", title: "الإعدادات", style: .translucent)
+                                ActionChip(icon: "gearshape.fill", title: String(localized: "الإعدادات"), style: .translucent)
                             }
                             .buttonStyle(.plain)
                             .sheet(isPresented: $showSettingsSheet) {
@@ -338,7 +338,7 @@ struct EventHeroDetailView: View {
                                     } else {
                                         Image(systemName: isEnrolled ? "minus" : "plus")
                                             .foregroundStyle(isEnrolled ? Color.white : Color.black)
-                                        Text(isEnrolled ? "اعتذار عن التمرين" : "سجل في التمرين")
+                                        Text(isEnrolled ? String(localized: "اعتذار عن التمرين") : String(localized: "سجل في التمرين"))
                                             .font(.appBody)
                                             .foregroundStyle(isEnrolled ? Color.white : Color.black)
                                     }
@@ -447,7 +447,7 @@ struct EventHeroDetailView: View {
                                                 .foregroundStyle(.white.opacity(0.9))
                                         }
 
-                                        Text(participant.displayName ?? participant.guestName ?? "ضيف")
+                                        Text(participant.displayName ?? participant.guestName ?? String(localized: "ضيف"))
                                             .font(.appBodyMedium)
                                             .foregroundStyle(.white)
 
@@ -466,7 +466,7 @@ struct EventHeroDetailView: View {
                                                 .font(.appCaption)
                                                 .foregroundStyle(.white.opacity(0.6))
                                         } else if participant.isPending {
-                                            Text("بانتظار التأكيد")
+                                            Text(participant.isAwaitingPayment ? String(localized: "بانتظار دفع القطة") : String(localized: "بانتظار التأكيد"))
                                                 .font(.appCaption)
                                                 .foregroundStyle(.yellow)
                                                 .padding(.horizontal, 8)
@@ -476,7 +476,7 @@ struct EventHeroDetailView: View {
                                         }
                                     }
 
-                                    if isOwner && participant.isPending && participant.userId != nil {
+                                    if isOwner && participant.isPending && !participant.isAwaitingPayment && participant.userId != nil {
                                         HStack(spacing: 10) {
                                             Button {
                                                 handleOwnerConfirm(participant: participant)
@@ -501,7 +501,7 @@ struct EventHeroDetailView: View {
                                             Button {
                                                 handleOwnerReject(participant: participant)
                                             } label: {
-                                                Text("رفض")
+                                                Text("باقي")
                                                     .font(.appCaption)
                                                     .foregroundStyle(.white)
                                                     .frame(maxWidth: .infinity, minHeight: 36)
@@ -654,7 +654,7 @@ struct EventHeroDetailView: View {
                     showSkipAlreadyOpen = true
                 }
             } catch {
-                seriesActionError = "تعذر تخطي الأسبوع القادم. حاول مرة أخرى."
+                seriesActionError = String(localized: "تعذر تخطي الأسبوع القادم. حاول مرة أخرى.")
             }
         }
     }
@@ -702,7 +702,7 @@ struct EventHeroDetailView: View {
                 )
                 await loadParticipants()
             } catch {
-                ownerActionError = "تعذر تأكيد الدفعة"
+                ownerActionError = String(localized: "تعذر تأكيد الدفعة")
                 print("[ConfirmPayment] Error — \(error.localizedDescription)")
             }
         }
@@ -715,14 +715,14 @@ struct EventHeroDetailView: View {
         Task {
             defer { actionInFlight = nil }
             do {
-                _ = try await STCPayService.shared.rejectPayment(
+                try await STCPayService.shared.resetPaymentDeclaration(
                     eventId: event.id,
                     joinerId: joinerId,
                     creatorId: creatorId
                 )
                 await loadParticipants()
             } catch {
-                ownerActionError = "تعذر رفض الدفعة"
+                ownerActionError = String(localized: "تعذر إعادة فتح دفع القطة")
                 print("[RejectPayment] Error — \(error.localizedDescription)")
             }
         }
@@ -904,7 +904,7 @@ struct EnrollmentSheetView: View {
                                 HStack(spacing: 6) {
                                     Image(systemName: "creditcard.fill")
                                         .foregroundStyle(.white.opacity(0.8))
-                                    Text(String(format: "%.0f ر.س / شخص", event.pricePerPerson))
+                                    Text("\(String(format: "%.0f", event.pricePerPerson)) ر.س / شخص")
                                         .font(.appBodySemibold)
                                         .foregroundStyle(.white.opacity(0.9))
                                 }
@@ -1062,7 +1062,7 @@ struct EnrollmentSheetView: View {
                                         Image(systemName: "creditcard.fill")
                                             .foregroundStyle(.white)
                                     }
-                                    Text(event.pricePerPerson > 0 ? "ادفع عبر STC Pay" : "سجل")
+                                    Text(event.pricePerPerson > 0 ? String(localized: "ادفع عبر STC Pay") : String(localized: "سجل"))
                                         .font(.appBodySemibold)
                                         .foregroundStyle(.white)
                                 }
@@ -1119,20 +1119,20 @@ struct EnrollmentSheetView: View {
                         dismiss()
                     case .closedAtCapacity:
                         // No queue to offer on a session that closes at capacity.
-                        paymentError = "اكتمل العدد، وهذا الموعد يقفل التسجيل عند الاكتمال"
+                        paymentError = String(localized: "اكتمل العدد، وهذا الموعد يقفل التسجيل عند الاكتمال")
 
                     case .alreadyJoined(let status):
                         switch status {
-                        case .confirmed: paymentError = "أنت مسجل بالفعل في هذه الفعالية"
-                        case .pending: paymentError = "لديك طلب دفع قيد التأكيد"
-                        case .rejected: paymentError = "رُفض طلبك سابقًا"
+                        case .confirmed: paymentError = String(localized: "أنت مسجل بالفعل في هذه الفعالية")
+                        case .pending: paymentError = String(localized: "لديك طلب دفع قيد التأكيد")
+                        case .rejected: paymentError = String(localized: "رُفض طلبك سابقًا")
                         }
                     case .pendingGuestRequest:
-                        paymentError = "لديك طلب ضيوف بانتظار التأكيد. انتظر حسمه قبل تسجيل نفسك."
+                        paymentError = String(localized: "لديك طلب ضيوف بانتظار التأكيد. انتظر حسمه قبل تسجيل نفسك.")
                     case .creatorMissingNumber:
-                        paymentError = "صاحب الفعالية لم يضف رقم STC Pay بعد"
+                        paymentError = String(localized: "صاحب الفعالية لم يضف رقم STC Pay بعد")
                     case .registrationClosed:
-                        paymentError = "التسجيل مغلق لهذه الفعالية"
+                        paymentError = String(localized: "التسجيل مغلق لهذه الفعالية")
                     }
                 } catch {
                     paymentError = error.localizedDescription

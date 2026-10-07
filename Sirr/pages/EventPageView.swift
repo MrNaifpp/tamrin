@@ -160,7 +160,7 @@ struct EventPageView: View {
                     }
                 )
             }
-            .environment(\.layoutDirection, .rightToLeft)
+            .environment(\.layoutDirection, .tamrin)
             .onAppear {
                 Task {
                     await authVM?.loadCurrentProfile()
@@ -186,7 +186,7 @@ struct EventPageView: View {
                     let eventData = EventData.from(record: record)
                     navigationPath.append(eventData)
                 } catch {
-                    deepLinkError = "هذا الموعد في تمرين خاص.\nاطلب دعوة من صاحب التمرين للانضمام."
+                    deepLinkError = String(localized: "هذا الموعد في تمرين خاص.\nاطلب دعوة من صاحب التمرين للانضمام.")
                 }
                 deepLinkEventId = nil
             }
@@ -304,7 +304,7 @@ private extension EventPageView {
             LazyVStack(spacing: 0) {
                 ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
                     VStack(alignment: .leading, spacing: 10) {
-                        sectionLabel(index == 0 ? "التمرين الجاي" : "التمارين القادمة")
+                        sectionLabel(index == 0 ? String(localized: "التمرين الجاي") : String(localized: "التمارين القادمة"))
                             .padding(.top, insets.top + 8)
                         NavigationLink(value: event) {
                             NewActivtyCardView(
@@ -355,10 +355,12 @@ private extension EventPageView {
         )
     }
 
+    var workspaceName: String { currentWorkspace?.name ?? String(localized: "التمرين") }
+
     func emptyStateContent(geometry: GeometryProxy) -> some View {
         VStack(spacing: 24) {
             Spacer()
-            Text("لا توجد مواعيد في \(currentWorkspace?.name ?? "التمرين")")
+            Text("لا توجد مواعيد في \(workspaceName)")
                 .font(.appTitle)
                 .foregroundStyle(.white)
             Text("أنشئ تمرينًا أو انضم إلى واحد")

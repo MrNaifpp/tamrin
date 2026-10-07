@@ -28,7 +28,18 @@ struct ProfileSettingsView: View {
     @State private var showPhotoPicker = false
     @FocusState private var nameFocused: Bool
 
+    /// Stored values, sent to the server as-is. Shown through `positionLabel`.
     private let positions = ["حارس", "دفاع", "وسط", "هجوم"]
+
+    private func positionLabel(_ value: String) -> String {
+        switch value {
+        case "حارس": String(localized: "حارس")
+        case "دفاع": String(localized: "دفاع")
+        case "وسط": String(localized: "وسط")
+        case "هجوم": String(localized: "هجوم")
+        default: value
+        }
+    }
 
     private var trimmedName: String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -43,14 +54,13 @@ struct ProfileSettingsView: View {
                     .fittedSheet(includesNavigationBar: true)
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItem, matching: .images)
         .task(id: photoItem) {
-            if let data = try? await photoItem?.loadTransferable(type: Data.self) {
-                avatarData = data
-                // Picking after removing is a change of mind, not both edits.
-                avatarRemoved = false
-            }
+            guard let photoItem, let data = await photoItem.loadAvatarData() else { return }
+            avatarData = data
+            // Picking after removing is a change of mind, not both edits.
+            avatarRemoved = false
         }
         .onAppear {
             name = feed.profileName
@@ -247,7 +257,7 @@ struct ProfileSettingsView: View {
                         position = value
                         Haptics.selection()
                     } label: {
-                        Text(value)
+                        Text(positionLabel(value))
                             .font(TamrinFont.font(size: 14, weight: .bold))
                             .foregroundStyle(position == value ? .white : .primary)
                             .frame(maxWidth: .infinity)

@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 /// Event detail page — the designer's OccurrenceDetailView (member view) bound
 /// to HomeStore, including the manual-payment registration and review flow.
@@ -11,6 +12,8 @@ struct EventDetailView: View {
     /// until the person closed and reopened the page.
     private let initialOccurrence: FeedOccurrence
     private let initialArtName: String
+    var onOverduePaymentCompleted: ((FeedOccurrence) -> Void)? = nil
+    @State private var completedOverduePayment = false
     var initiallyShowsRegistration = false
     #if DEBUG
     /// Opens the post-registration guest flow for deterministic simulator QA.
@@ -21,23 +24,34 @@ struct EventDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showWithdrawConfirm = false
     @State private var showRegisterFlow = false
-    @State private var guestRegistrationMode: RegistrationFlowSheet.Mode?
-    /// Adding one companion to a free exercise asks a single question, so it
-    /// gets the one-field sheet rather than the whole registration flow. A
-    /// paid one still has to walk the payment steps.
+    /// Adding a companion asks a single question, so it gets the one-field
+    /// sheet, paid or free. A paid guest's share is settled later with the
+    /// member's own from «دفع القطة».
     @State private var showCompanionSheet = false
     @State private var showPaymentReview = false
+    @State private var showCardSheet = false
+    /// Between the pay tap and the server's answer about what is owed.
+    @State private var isLoadingQuote = false
+    /// Apple Pay said yes and the server is deciding. Held until the roster has
+    /// reloaded, so the spinner hands straight over to the paid badge instead of
+    /// flashing the old pay button in between.
+    @State private var isConfirmingPayment = false
     @State private var paymentActionInFlight: UUID?
     @State private var memberAwaitingRejection: FeedMember?
     @State private var actionErrorMessage: String?
     @State private var handledInitialRegistration = false
     @State private var showManualAdd = false
+    @State private var scheduleClock = Date.now
     @State private var showMemberReminder = false
     @State private var reminderToast: String?
     @State private var memberAwaitingRemoval: FeedMember?
     @State private var memberInDetails: FeedMember?
     @State private var removalInFlight: UUID?
     @State private var showDeclinedResponses = false
+    @State private var showExerciseSettings = false
+    @State private var isOpeningRegistration = false
+    @State private var requestInFlight: UUID?
+    @State private var withdrawingRequest = false
     /// Captures the group behind this occurrence while its translucent details
     /// page is open. The optional itself drives the horizontal transition.
     @State private var exerciseDetailsTeamID: UUID?
@@ -68,16 +82,17 @@ struct EventDetailView: View {
     /// Set when a lineup is saved and this person has not said what they think
     /// of the feature yet. The question waits for the lineup page to close —
     /// a sheet raised while a cover is dismissing has nothing to sit on.
-    /// Live top edge of the content panel, in screen coordinates. The blurred
+    /// Live top edge of the content panel, in scroll-viewport coordinates. The blurred
     /// artwork is revealed from here down, so the frost follows the panel
     /// through every scroll and every added row.
-    @State private var panelTop: CGFloat = .greatestFiniteMagnitude
+    @State private var frostPosition = EventDetailFrostPosition()
 
     #if DEBUG
     init(
         feed: HomeStore,
         occurrence: FeedOccurrence,
         artName: String = "ExerciseArt1",
+        onOverduePaymentCompleted: ((FeedOccurrence) -> Void)? = nil,
         initiallyShowsRegistration: Bool = false,
         initiallyShowsGuestRegistration: Bool = false,
         initiallyShowsGuestOnlyRegistration: Bool = false
@@ -85,6 +100,7 @@ struct EventDetailView: View {
         self.feed = feed
         self.initialOccurrence = occurrence
         self.initialArtName = artName
+        self.onOverduePaymentCompleted = onOverduePaymentCompleted
         self.initiallyShowsRegistration = initiallyShowsRegistration
         self.initiallyShowsGuestRegistration = initiallyShowsGuestRegistration
         self.initiallyShowsGuestOnlyRegistration = initiallyShowsGuestOnlyRegistration
@@ -94,11 +110,13 @@ struct EventDetailView: View {
         feed: HomeStore,
         occurrence: FeedOccurrence,
         artName: String = "ExerciseArt1",
+        onOverduePaymentCompleted: ((FeedOccurrence) -> Void)? = nil,
         initiallyShowsRegistration: Bool = false
     ) {
         self.feed = feed
         self.initialOccurrence = occurrence
         self.initialArtName = artName
+        self.onOverduePaymentCompleted = onOverduePaymentCompleted
         self.initiallyShowsRegistration = initiallyShowsRegistration
     }
     #endif
@@ -184,73 +202,90 @@ struct EventDetailView: View {
         return ownName.isEmpty ? nil : ownName
     }
 
+    private var removalCandidateName: String {
+        memberAwaitingRemoval?.name ?? String(localized: "اللاعب")
+    }
+
     private func rosterSubtitle(for member: FeedMember) -> String? {
-        if member.isManual { return "سجّله المشرف" }
-        return registeredByName(for: member).map { "سجّله \($0)" }
+        if member.isManual { return String(localized: "سجّله المشرف") }
+        return registeredByName(for: member).map { String(localized: "سجّله \($0)") }
+    }
+
+    private var detailCanvas: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .top) {
+                Image(exerciseArt: artName)
+                    .resizable().aspectRatio(contentMode: .fill)
+                    .frame(width: proxy.size.width, height: proxy.size.height).clipped()
+
+                // The same artwork, blurred, revealed only where the panel
+                // is. Because both layers are the one photograph, the panel
+                // edge dissolves as a change in focus rather than a veil
+                // laid over the picture — and the mask is measured from the
+                // panel's live position, so the frost travels with it.
+                EventDetailFrostArtwork(artName: artName, size: proxy.size)
+                    .frame(width: proxy.size.width, height: proxy.size.height).clipped()
+                    .mask(alignment: .top) {
+                        EventDetailFrostMask(position: frostPosition,
+                            lead: Self.panelFadeLead, fadeHeight: Self.panelFadeHeight)
+                    }
+
+                LinearGradient(stops: [
+                    .init(color: .black.opacity(0.32), location: 0),
+                    .init(color: .black.opacity(0.06), location: 0.26),
+                    .init(color: .black.opacity(0.30), location: 0.55),
+                    .init(color: .black.opacity(0.58), location: 1)
+                ], startPoint: .top, endPoint: .bottom)
+
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 0) {
+                        // The window onto the untouched artwork. Everything
+                        // after it travels with the panel.
+                        Color.clear
+                            .frame(height: Self.artworkWindow)
+
+                        contentPanel
+                            .frame(
+                                minHeight: proxy.size.height - Self.artworkWindow,
+                                alignment: .top
+                            )
+                    }
+                }
+                .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                    // The card's global frame animates during expansion. Derive
+                    // the panel edge solely from its local content offset so
+                    // that animation cannot temporarily uncover sharp artwork.
+                    let offset = geometry.contentOffset.y + geometry.contentInsets.top
+                    return max(Self.panelFadeLead, Self.artworkWindow - offset)
+                } action: { _, top in
+                    // Follow scrolling directly; never inherit the card's
+                    // expansion animation and animate the frost a second time.
+                    var update = Transaction()
+                    update.disablesAnimations = true
+                    withTransaction(update) { frostPosition.top = top }
+                }
+            }
+        }
     }
 
     var body: some View {
         ZStack {
-            GeometryReader { proxy in
-                ZStack(alignment: .top) {
-                    Image(exerciseArt: artName)
-                        .resizable().aspectRatio(contentMode: .fill)
-                        .frame(width: proxy.size.width, height: proxy.size.height).clipped()
-
-                    // The same artwork, blurred, revealed only where the panel
-                    // is. Because both layers are the one photograph, the panel
-                    // edge dissolves as a change in focus rather than a veil
-                    // laid over the picture — and the mask is measured from the
-                    // panel's live position, so the frost travels with it.
-                    Image(exerciseArt: artName)
-                        .resizable().aspectRatio(contentMode: .fill)
-                        .frame(width: proxy.size.width, height: proxy.size.height).clipped()
-                        .blur(radius: 26, opaque: true)
-                        .mask(alignment: .top) { panelMask }
-
-                    LinearGradient(stops: [
-                        .init(color: .black.opacity(0.32), location: 0),
-                        .init(color: .black.opacity(0.06), location: 0.26),
-                        .init(color: .black.opacity(0.30), location: 0.55),
-                        .init(color: .black.opacity(0.58), location: 1)
-                    ], startPoint: .top, endPoint: .bottom)
-
-                    ScrollView(showsIndicators: false) {
-                        VStack(spacing: 0) {
-                            // The window onto the untouched artwork. Everything
-                            // after it travels with the panel.
-                            Color.clear
-                                .frame(height: Self.artworkWindow)
-
-                            contentPanel
-                                .frame(
-                                    minHeight: proxy.size.height - Self.artworkWindow,
-                                    alignment: .top
-                                )
-                                .onGeometryChange(for: CGFloat.self) {
-                                    $0.frame(in: .global).minY
-                                } action: { panelTop = $0 }
-                        }
-                    }
-                }
-            }
-            .ignoresSafeArea()
+            detailCanvas
+                .ignoresSafeArea()
         }
         .overlay(alignment: .topLeading) {
             Button {
                 dismiss()
             } label: {
-                Label("إغلاق", systemImage: "chevron.backward")
+                Label(String(localized: "إغلاق"), systemImage: "chevron.backward")
                     .labelStyle(.iconOnly)
                     .font(.system(size: 17, weight: .semibold))
-                    .frame(width: TamrinControlMetrics.glassIconContent, height: TamrinControlMetrics.glassIconContent)
+                    .frame(width: TamrinControlMetrics.roundButton, height: TamrinControlMetrics.roundButton)
             }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
-            .controlSize(.regular)
+            .buttonStyle(ExerciseChromeButtonStyle())
             .padding(.horizontal, 20)
             .padding(.top, 6)
-            .accessibilityLabel("إغلاق")
+            .accessibilityLabel(String(localized: "إغلاق"))
         }
         .overlay(alignment: .topTrailing) {
             Button {
@@ -276,13 +311,11 @@ struct EventDetailView: View {
                     .labelStyle(.iconOnly)
                     .font(.system(size: 18, weight: .semibold))
                     .frame(
-                        width: TamrinControlMetrics.glassIconContent,
-                        height: TamrinControlMetrics.glassIconContent
+                        width: TamrinControlMetrics.roundButton,
+                        height: TamrinControlMetrics.roundButton
                     )
             }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
-            .controlSize(.regular)
+            .buttonStyle(ExerciseChromeButtonStyle())
             .padding(.horizontal, 20)
             .padding(.top, 6)
             .accessibilityLabel("تفاصيل التمرين")
@@ -356,7 +389,11 @@ struct EventDetailView: View {
                                     feed: feed,
                                     occurrence: occurrence,
                                     teamID: teamID,
-                                    screenTopInset: max(hostProxy.frame(in: .global).minY, 0)
+                                    screenTopInset: max(hostProxy.frame(in: .global).minY, 0),
+                                    onLeave: {
+                                        exerciseDetailsTeamID = nil
+                                        dismiss()
+                                    }
                                 ) {
                                     withAnimation(reduceMotion
                                                   ? .easeOut(duration: 0.18)
@@ -378,7 +415,13 @@ struct EventDetailView: View {
                             .transition(
                                 reduceMotion
                                     ? .opacity
-                                    : .offset(x: -max(proxy.size.width, 1), y: 0)
+                                    : .offset(
+                                        // Enter from the trailing side, where the
+                                        // details button sits: physical left in
+                                        // Arabic, right in English.
+                                        x: (AppLanguage.isArabic ? -1 : 1) * max(proxy.size.width, 1),
+                                        y: 0
+                                    )
                             )
                             .zIndex(200)
                         }
@@ -393,10 +436,12 @@ struct EventDetailView: View {
                 .ignoresSafeArea(.container)
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
-        .colorScheme(.dark)
+        .environment(\.layoutDirection, .tamrin)
+        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { now in
+            scheduleClock = now
+        }
         .sheet(isPresented: $showWithdrawConfirm) {
-            MemberDeclineSheet { reasonCode, reasonText in
+            MemberDeclineSheet(refundNotice: refundNoticeForWithdrawal) { reasonCode, reasonText in
                 let outcome = await feed.decline(
                     occurrence,
                     reasonCode: reasonCode,
@@ -413,34 +458,37 @@ struct EventDetailView: View {
             }
         }
         .sheet(isPresented: $showRegisterFlow) {
-            RegistrationFlowSheet(feed: feed, occurrence: occurrence, artName: artName)
+            JoinSessionSheet(feed: feed, occurrence: occurrence)
         }
         .sheet(isPresented: $showCompanionSheet) {
             ManualParticipantSheet(
                 isPaid: false,
-                title: "سجّل معك أحد",
-                subtitle: "أضف لاعبًا يحضر معك في هذا الموعد",
-                footnote: "يحجز له مقعدًا في هذا الموعد فقط، ولا يحتاج حساب في التطبيق."
+                title: String(localized: "سجّل معك أحد"),
+                subtitle: String(localized: "أضف لاعبًا يحضر معك في هذا الموعد"),
+                footnote: String(localized: "يحجز له مقعدًا في هذا الموعد فقط، ولا يحتاج حساب في التطبيق.")
             ) { name in
                 await addCompanion(named: name)
             }
         }
-        .sheet(item: $guestRegistrationMode) { mode in
-            RegistrationFlowSheet(
-                feed: feed,
-                occurrence: occurrence,
-                artName: artName,
-                mode: mode
-            )
-        }
-        .sheet(isPresented: $showPaymentReview) {
+        .sheet(isPresented: $showPaymentReview, onDismiss: {
+            guard completedOverduePayment else { return }
+            onOverduePaymentCompleted?(initialOccurrence)
+            dismiss()
+        }) {
             RegistrationFlowSheet(
                 feed: feed,
                 occurrence: occurrence,
                 artName: artName,
                 reviewOnly: true,
-                onSuccessDismiss: occurrence.requiresPaymentAction ? { dismiss() } : nil
+                onSuccessDismiss: initialOccurrence.isPast() ? {
+                    completedOverduePayment = true
+                } : nil
             )
+        }
+        .sheet(isPresented: $showCardSheet) {
+            CardPaymentSheet(eventId: occurrence.id, eventName: occurrence.title) {
+                Task { await feed.markCardPaid(for: occurrence) }
+            }
         }
         .task {
             await feed.reloadOccurrence(occurrence.id)
@@ -455,7 +503,7 @@ struct EventDetailView: View {
                !occurrence.isCancelled {
                 handledInitialRegistration = true
                 await Task.yield()
-                guestRegistrationMode = .guestOnly
+                showRegisterFlow = true
                 return
             }
             if initiallyShowsGuestRegistration,
@@ -467,7 +515,7 @@ struct EventDetailView: View {
                !occurrence.isCancelled {
                 handledInitialRegistration = true
                 await Task.yield()
-                guestRegistrationMode = .additionalGuests
+                showCompanionSheet = true
                 return
             }
             #endif
@@ -493,11 +541,11 @@ struct EventDetailView: View {
                 showRegisterFlow = true
             }
         }
-        .alert("رفض طلب الدفع؟", isPresented: Binding(
+        .alert("القطة ما وصلت؟", isPresented: Binding(
             get: { memberAwaitingRejection != nil },
             set: { if !$0 { memberAwaitingRejection = nil } }
         )) {
-            Button("رفض الطلب", role: .destructive) {
+            Button("القطة ما وصلت") {
                 if let member = memberAwaitingRejection {
                     rejectPayment(member)
                 }
@@ -506,9 +554,7 @@ struct EventDetailView: View {
             Button("تراجع", role: .cancel) { memberAwaitingRejection = nil }
         } message: {
             Text(
-                memberAwaitingRejection?.userId == nil
-                    ? "سيُلغى طلب الضيوف المعلّق وتتحرر مقاعدهم، ويبقى تسجيل العضو محفوظًا."
-                    : "سيُلغى حجز اللاعب وكل الضيوف المسجلين معه وتتحرر مقاعدهم."
+                "سيصله تنبيه بأن القطة ما وصلت، ويظهر له زر دفع القطة مجددًا. يبقى مكانه ومقاعد ضيوفه محفوظة."
             )
         }
         .fullScreenCover(isPresented: $showDeclinedResponses) {
@@ -530,6 +576,17 @@ struct EventDetailView: View {
                 }
                 .environment(\.colorScheme, .dark)
             }
+        }
+        .sheet(isPresented: $showExerciseSettings) {
+            ExerciseSettingsSheet(feed: feed, occurrence: occurrence)
+        }
+        .task(id: occurrence.registrationOpensAt) {
+            // Flip the page the second registration opens, not on the next
+            // half-minute tick.
+            guard let opensAt = occurrence.registrationOpensAt, opensAt > .now else { return }
+            try? await Task.sleep(for: .seconds(opensAt.timeIntervalSinceNow + 0.2))
+            guard !Task.isCancelled else { return }
+            scheduleClock = .now
         }
         .fullScreenCover(item: $lineupCoverPresentation) { source in
             LineupFlowView(feed: feed, occurrence: occurrence, artName: artName) { plan in
@@ -590,7 +647,13 @@ struct EventDetailView: View {
                     && member.userId != feed.currentUserID
                     ? { await feed.remindPayment(member, on: occurrence) }
                     : nil,
+                // The organizer may remove anyone. A member may remove a guest
+                // they added themselves, which is also what returns that seat's
+                // share to their card.
                 onRemove: feed.isCurrentTeamOwner
+                    || (member.isGuest && !member.isManual
+                        && member.addedBy != nil
+                        && member.addedBy == feed.currentUserID)
                     ? { memberAwaitingRemoval = member }
                     : nil
             )
@@ -607,7 +670,7 @@ struct EventDetailView: View {
             }
             Button("تراجع", role: .cancel) { memberAwaitingRemoval = nil }
         } message: {
-            Text("سيُزال \(memberAwaitingRemoval?.name ?? "اللاعب") من قائمة «\(occurrence.title)» ويتحرر مقعده.")
+            Text(removalAlertMessage)
         }
         .alert("تعذر إكمال العملية", isPresented: Binding(
             get: { actionErrorMessage != nil },
@@ -648,12 +711,16 @@ struct EventDetailView: View {
 
             // One row of square tiles rather than a wall of full-width rows.
             // Whichever tiles apply share the width between them.
-            if !declinedResponses.isEmpty || canRemindMembers || canShareJoinLink {
+            if actionTileCount > 0 {
                 HStack(spacing: 10) {
                     if !declinedResponses.isEmpty { declinedResponsesButton }
                     if canRemindMembers { remindMembersButton }
                     if canShareJoinLink { shareButton }
+                    if canEditSettings { settingsButton }
                 }
+                // Four to a row makes each tile narrow, and the full card
+                // radius turns them into near-circles; three keep the card's.
+                .environment(\.actionTileCornerRadius, actionTileCount >= 4 ? 18 : TamrinCard.cornerRadius)
             }
 
             // Full width under the tiles, and titled with the venue itself when
@@ -661,7 +728,10 @@ struct EventDetailView: View {
             // among three, and the pitch's name says more than "الاتجاهات".
             if hasDirections { directionsButton }
 
-            progressPanel
+            // Nobody can register yet, so a member has no count to read.
+            if pendingOpening == nil || feed.isCurrentTeamOwner {
+                progressPanel
+            }
 
             // Between the count and the names: the split is what the organizer
             // does once he knows how many showed up, and before he reads the
@@ -670,22 +740,39 @@ struct EventDetailView: View {
                 lineupSection
             }
 
-            Text("القائمة")
-                .font(TamrinFont.font(size: 15, weight: .medium))
-                .foregroundStyle(.white.opacity(0.75))
+            // Until registration opens, the time left stands where the list
+            // will be. The organizer keeps the list under it.
+            if let opensAt = pendingOpening {
+                RegistrationCountdownPanel(
+                    opensAt: opensAt,
+                    isOpening: isOpeningRegistration,
+                    onOpenNow: openNowAction
+                )
                 .padding(.top, 8)
-                .padding(.horizontal, 4)
-
-            // Above the names, not after them: the organizer reaches it
-            // without scrolling past a full roster.
-            if canRegisterManually {
-                manualAddButton
+                .transition(.blurReplace)
             }
 
-            rosterRows
+            if pendingOpening == nil || feed.isCurrentTeamOwner {
+                registrationRequestsSection
 
-            waitlistSection
+                Text("القائمة")
+                    .font(TamrinFont.font(size: 15, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.75))
+                    .padding(.top, 8)
+                    .padding(.horizontal, 4)
+
+                // Above the names, not after them: the organizer reaches it
+                // without scrolling past a full roster.
+                if canRegisterManually {
+                    manualAddButton
+                }
+
+                rosterRows
+
+                waitlistSection
+            }
         }
+        .animation(.smooth(duration: 0.35), value: pendingOpening)
         .padding(.horizontal, 20)
         .padding(.top, 26)
         .padding(.bottom, 40)
@@ -696,20 +783,6 @@ struct EventDetailView: View {
     /// ramp starts a little before the panel's top edge so the title is already
     /// sitting on softened artwork, exactly as it did when the mask was pinned
     /// to the screen.
-    private var panelMask: some View {
-        VStack(spacing: 0) {
-            Color.clear
-                .frame(height: max(panelTop - Self.panelFadeLead, 0))
-            LinearGradient(
-                colors: [.black.opacity(0), .black],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: Self.panelFadeHeight)
-            Color.black
-        }
-    }
-
     private var heroTitle: some View {
         VStack(spacing: 7) {
             if occurrence.isCancelled {
@@ -763,17 +836,17 @@ struct EventDetailView: View {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if let custom, !custom.isEmpty { return custom }
         switch occurrence.cancellationReasonCode {
-        case "weather": return "ظرف الطقس"
-        case "match_or_event_conflict": return "تعارض مع مباراة أو حدث مهم"
-        case "low_attendance": return "قلة العدد"
-        case "occasion": return "وجود مناسبة"
-        case "other": return "سبب آخر"
+        case "weather": return String(localized: "ظرف الطقس")
+        case "match_or_event_conflict": return String(localized: "تعارض مع مباراة أو حدث مهم")
+        case "low_attendance": return String(localized: "قلة العدد")
+        case "occasion": return String(localized: "وجود مناسبة")
+        case "other": return String(localized: "سبب آخر")
         default: return nil
         }
     }
 
     private var isHistorical: Bool {
-        occurrence.isPast(relativeTo: .now)
+        occurrence.isPast(relativeTo: scheduleClock)
     }
 
     /// The API metadata keeps the payment door open after the clock has ended.
@@ -781,7 +854,7 @@ struct EventDetailView: View {
     /// success sheet is dismissed, so the old detail settles back to read-only.
     private var showsOverduePaymentAction: Bool {
         guard isHistorical,
-              occurrence.requiresPaymentAction,
+              !occurrence.isCancelled,
               !feed.isCurrentTeamOwner else { return false }
         let paymentRows = roster.filter { $0.paymentOwnerId == feed.currentUserID }
         if paymentRows.contains(where: { $0.status == .awaitingPayment }) {
@@ -790,10 +863,114 @@ struct EventDetailView: View {
         if paymentRows.contains(where: { $0.status == .paymentPending }) {
             return false
         }
+        if !paymentRows.isEmpty { return false }
         // Before the roster arrives, the server-computed occurrence flag is
         // authoritative. This also covers a standalone guest debt where the
         // payer never reserved a self seat.
-        return true
+        return occurrence.requiresPaymentAction
+    }
+
+    /// Apple Pay answered. Authorized is not paid: only verify-payment on the
+    /// server decides whether the money is captured and the seat confirmed.
+    private func handleApplePay(_ outcome: CardPaymentOutcome, quote: CardPaymentQuote) {
+        switch outcome {
+        case .cancelled:
+            break
+        case .failed(let message):
+            Haptics.error()
+            actionErrorMessage = message
+        case .authorized(let moyasarPaymentId):
+            isConfirmingPayment = true
+            Task {
+                defer { isConfirmingPayment = false }
+                do {
+                    let verdict = try await MoyasarPaymentService.shared.verifyUntilSettled(
+                        paymentId: quote.paymentId,
+                        moyasarPaymentId: moyasarPaymentId
+                    )
+                    switch verdict {
+                    case .paid:
+                        Haptics.success()
+                        // Awaited, because the roster reload is what turns this
+                        // member's status to registered and brings the paid
+                        // badge in; the spinner holds until it has.
+                        await feed.markCardPaid(for: occurrence)
+                        // A past workout's debt was the only reason this screen
+                        // was open. The transfer path closes it on success, so
+                        // paying by card does the same.
+                        if isHistorical { dismiss() }
+                    case .processing:
+                        actionErrorMessage = String(localized: "تأخر التحقق من الدفع. سيتأكد مقعدك تلقائيًا عند وصول التأكيد.")
+                    case .failed(let reason):
+                        Haptics.error()
+                        actionErrorMessage = reason == "amount" || reason == "recipient"
+                            ? String(localized: "تعذر التحقق من الدفع. لم يُخصم أي مبلغ.")
+                            : String(localized: "لم تنجح عملية الدفع.")
+                    }
+                } catch {
+                    actionErrorMessage = ServerErrorMessage.arabic(for: error)
+                }
+            }
+        }
+    }
+
+    /// The refund rule, stated before the slide rather than discovered after
+    /// it. Which branch applies to a given person is the server's call at the
+    /// moment they withdraw; this only promises what the rule is.
+    /// Removing a guest you paid for returns their share, so the alert says so
+    /// rather than leaving it to be noticed on a bank statement.
+    private var removalAlertMessage: String {
+        let name = removalCandidateName
+        let base = String(localized: "سيُزال \(name) من قائمة «\(occurrence.title)» ويتحرر مقعده.")
+        guard !feed.isCurrentTeamOwner, occurrence.price > 0,
+              Date.now < occurrence.startAt else { return base }
+        return base + " " + String(localized: "وما دفعته عنه بالبطاقة يُسترجع إليها.")
+    }
+
+    private var refundNoticeForWithdrawal: String? {
+        guard occurrence.price > 0 else { return nil }
+        return Date.now >= occurrence.startAt
+            ? String(localized: "بدأ التمرين، فلن يُسترجع المبلغ.")
+            : String(localized: "ما دفعته بالبطاقة يُسترجع إليها. التحويل البنكي يُرتَّب مع المشرف.")
+    }
+
+    /// Nothing is asked of the server until the member taps pay. Asking creates
+    /// a pending payment, which is a write, and opening a workout to look at it
+    /// should not make one. The server prices the member's own seat plus every
+    /// unpaid guest they added, then this routes on its answer: Apple Pay when
+    /// the device has it, the card form when it does not, and the manual
+    /// transfer when this workspace takes no cards at all.
+    private func beginPayment() {
+        guard !isLoadingQuote, !isConfirmingPayment else { return }
+        Haptics.impact(.light)
+        isLoadingQuote = true
+        Task {
+            defer { isLoadingQuote = false }
+            do {
+                switch try await MoyasarPaymentService.shared.startPayment(eventId: occurrence.id) {
+                case .ready(let quote):
+                    if ApplePayButton.isAvailable {
+                        ApplePayButton.present(quote: quote, eventName: occurrence.title) { outcome in
+                            handleApplePay(outcome, quote: quote)
+                        }
+                    } else {
+                        showCardSheet = true
+                    }
+                case .recipientNotOnboarded:
+                    showPaymentReview = true
+                case .alreadyPaid:
+                    await feed.markCardPaid(for: occurrence)
+                case .nothingDue, .freeEvent:
+                    await feed.reloadRoster(occurrence.id)
+                case .eventClosed:
+                    Haptics.error()
+                    actionErrorMessage = String(localized: "أُغلق التسجيل لهذا الموعد.")
+                }
+            } catch {
+                Haptics.error()
+                actionErrorMessage = ServerErrorMessage.arabic(for: error)
+            }
+        }
     }
 
     private var overduePaymentCTA: some View {
@@ -807,9 +984,97 @@ struct EventDetailView: View {
                 .foregroundStyle(.white.opacity(0.68))
                 .fixedSize(horizontal: false, vertical: true)
 
+            // The same control as a live workout: a debt from last week is
+            // still paid in one tap.
+            payControl
+        }
+        .padding(16)
+        .tamrinGlassCard()
+    }
+
+    /// The one pay control, shared by a live workout and a past one still owed.
+    /// Spinner while the server prices the seats or confirms a payment; the
+    /// system Apple Pay button when the device has it; otherwise a plain button
+    /// that routes to the card form or the transfer, whichever the workspace takes.
+    /// Guests this member brought, each removable in one tap. Before this the
+    /// only way to remove one was to find their card in the roster and open its
+    /// details. Tapping minus goes through the same confirmation and removal as
+    /// that sheet, so a guest paid for by card gets their share back before the
+    /// workout starts. The server refuses once it has ended, so the buttons go
+    /// with it rather than offering something that cannot work.
+    @ViewBuilder
+    private var myGuestsSection: some View {
+        let myGuests = roster.filter {
+            $0.isGuest && !$0.isManual && $0.addedBy != nil && $0.addedBy == feed.currentUserID
+        }
+        if !myGuests.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("ضيوفك")
+                    .font(TamrinFont.font(size: 13, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.6))
+                ForEach(myGuests) { guest in
+                    HStack(spacing: 8) {
+                        Text(guest.name)
+                            .font(TamrinFont.font(size: 15, weight: .medium))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 14)
+                            .frame(height: 48)
+                            .background(.white.opacity(0.08), in: .capsule)
+
+                        if !isHistorical {
+                            // The same red minus the add-guest sheet uses to drop
+                            // a name, so removing reads the same everywhere.
+                            Button {
+                                Haptics.impact(.light)
+                                memberAwaitingRemoval = guest
+                            } label: {
+                                Image(systemName: "minus")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(.red)
+                                    .frame(width: 40, height: 40)
+                                    .background(.red.opacity(0.12), in: .circle)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(removalInFlight != nil)
+                            .accessibilityLabel("إزالة \(guest.name)")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Whether this member owes anything here: their own seat, or any guest
+    /// they brought. Their own status alone is not enough. Paying confirms
+    /// their seat, so a guest added afterwards would owe money with no pay
+    /// button in sight, under a badge saying everything was paid. The
+    /// past-workout card already counts guests this way.
+    private func owesPayment(for mine: FeedMember) -> Bool {
+        mine.status == .awaitingPayment
+            || roster.contains {
+                $0.paymentOwnerId == feed.currentUserID && $0.status == .awaitingPayment
+            }
+    }
+
+    @ViewBuilder
+    private var payControl: some View {
+        if isLoadingQuote || isConfirmingPayment {
+            // Same height as the button it stands in for, so nothing jumps.
+            ProgressView()
+                .controlSize(.regular)
+                .tint(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: TamrinControlMetrics.glassActionHeight)
+                .accessibilityLabel(isConfirmingPayment ? "نتحقق من الدفع" : "جارٍ تجهيز الدفع")
+        } else if ApplePayButton.isAvailable {
+            // Apple requires the control that starts a payment to be their own
+            // button, and that is also what puts the Apple mark on it.
+            ApplePayButton { beginPayment() }
+                .accessibilityHint("يجهّز الدفع ثم يفتح Apple Pay")
+        } else {
             Button {
-                Haptics.impact(.light)
-                showPaymentReview = true
+                beginPayment()
             } label: {
                 Label("دفع القطة", systemImage: "banknote.fill")
                     .font(TamrinFont.font(size: 16, weight: .bold))
@@ -821,11 +1086,11 @@ struct EventDetailView: View {
             .buttonStyle(.glassProminent)
             .buttonBorderShape(.capsule)
             .controlSize(.regular)
+            // Banknote green rather than the app's lime: this is the one button
+            // in the app that moves money, and it should read as money.
             .tint(Self.moneyGreen)
-            .accessibilityHint("يفتح مبلغ القطة ووسائل الدفع المتاحة")
+            .accessibilityHint("يجهّز الدفع ويفتح وسيلة الدفع المتاحة")
         }
-        .padding(16)
-        .tamrinGlassCard()
     }
 
     private var historicalStatusPanel: some View {
@@ -910,54 +1175,36 @@ struct EventDetailView: View {
                 .tamrinGlassCard()
             } else {
                 VStack(spacing: 10) {
-                    if mine.status == .awaitingPayment, occurrence.price > 0 {
-                        Button {
-                            Haptics.impact(.light)
-                            showPaymentReview = true
-                        } label: {
-                            Label("دفع القطة", systemImage: "banknote.fill")
-                                .font(TamrinFont.font(size: 16, weight: .bold))
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: TamrinControlMetrics.glassActionHeight)
-                                .contentShape(.capsule)
-                        }
-                        .buttonStyle(.glassProminent)
-                        .buttonBorderShape(.capsule)
-                        .controlSize(.regular)
-                        // Banknote green rather than the app's lime: this is
-                        // the one button in the app that moves money, and it
-                        // should read as money rather than as another accent.
-                        .tint(Self.moneyGreen)
-                        .accessibilityHint("يفتح مبلغ القطة ووسائل الدفع المتاحة")
+                    if owesPayment(for: mine), occurrence.price > 0 {
+                        payControl
                     }
 
                     if mine.status == .paymentPending, occurrence.price > 0 {
                         paymentStateRow(
-                            title: "بانتظار تأكيد وصول القطة",
+                            title: String(localized: "بانتظار تأكيد وصول القطة"),
                             systemImage: "hourglass",
                             tint: .orange
                         )
                     }
 
-                    if mine.status == .registered, occurrence.price > 0 {
+                    if mine.status == .registered, !owesPayment(for: mine), occurrence.price > 0 {
                         paymentStateRow(
-                            title: "القطة مدفوعة",
+                            title: String(localized: "القطة مدفوعة"),
                             systemImage: "checkmark.seal.fill",
                             tint: Self.moneyGreen
                         )
                     }
 
+                    myGuestsSection
+
                     if mine.status == .registered || mine.status == .awaitingPayment,
                        occurrence.isPublished,
-                       !occurrence.isCancelled {
+                       !occurrence.isCancelled,
+                       occurrence.registrationSettings.guestsAllowed,
+                       occurrence.registrationSettings.approvalMode == .auto {
                         Button {
                             Haptics.impact(.medium)
-                            if occurrence.price > 0 {
-                                guestRegistrationMode = .additionalGuests
-                            } else {
-                                showCompanionSheet = true
-                            }
+                            showCompanionSheet = true
                         } label: {
                             // The quiet glass capsule, not the filled one:
                             // adding guests is a secondary action beside the
@@ -979,6 +1226,17 @@ struct EventDetailView: View {
                     participationStatusButton(for: mine)
                 }
             }
+        } else if pendingOpening != nil {
+            closedRegistrationLabel
+        } else if feed.participationState(for: occurrence) == .requested {
+            requestPendingRow
+        } else if feed.participationState(for: occurrence) == .requestDeclined {
+            Label("لم يُقبل طلبك", systemImage: "xmark.circle.fill")
+                .font(TamrinFont.font(size: 16, weight: .bold))
+                .foregroundStyle(.white.opacity(0.55))
+                .frame(maxWidth: .infinity)
+                .frame(height: TamrinControlMetrics.glassActionHeight)
+                .background(.white.opacity(0.08), in: .capsule)
         } else {
             let full = occurrence.capacity > 0 && confirmedCount >= occurrence.capacity
             // A full session that closes at capacity has nothing to tap: the
@@ -1002,9 +1260,11 @@ struct EventDetailView: View {
                         Haptics.impact(.medium)
                         showRegisterFlow = true
                     } label: {
+                        // A request says nothing about how full the list is.
+                        let reserve = full && occurrence.registrationSettings.approvalMode == .auto
                         Label(
-                            full ? "سجل كاحتياط" : "سجل في التمرين",
-                            systemImage: full ? "person.badge.clock.fill" : "plus"
+                            reserve ? String(localized: "سجل كاحتياط") : String(localized: "سجل في التمرين"),
+                            systemImage: reserve ? "person.badge.clock.fill" : "plus"
                         )
                         .font(TamrinFont.font(size: 16, weight: .bold))
                         .foregroundStyle(TamrinTheme.ink)
@@ -1026,7 +1286,11 @@ struct EventDetailView: View {
     @MainActor
     private func addCompanion(named name: String) async -> String? {
         do {
-            let destination = try await feed.paymentDestination(for: occurrence)
+            // A paid guest owes against the guest destination, the same one
+            // the registration flow reads for guests.
+            let destination = try await (occurrence.price > 0
+                ? feed.guestPaymentDestination(for: occurrence)
+                : feed.paymentDestination(for: occurrence))
             let outcome = await feed.addGuests(
                 [name],
                 to: occurrence,
@@ -1036,7 +1300,7 @@ struct EventDetailView: View {
             await feed.reloadRoster(occurrence.id)
             return nil
         } catch {
-            return "تعذر إضافة اللاعب. تحقق من اتصالك وحاول مرة أخرى."
+            return String(localized: "تعذر إضافة اللاعب. تحقق من اتصالك وحاول مرة أخرى.")
         }
     }
 
@@ -1068,12 +1332,12 @@ struct EventDetailView: View {
         Button { showWithdrawConfirm = true } label: {
             HStack(spacing: 10) {
                 Image(systemName: member.status == .waitlisted ? "clock.fill" : "checkmark.circle.fill")
-                    .foregroundStyle(member.status == .waitlisted ? .orange : TamrinTheme.lime)
-                Text(member.status == .waitlisted ? "أنت في قائمة الانتظار" : "مكانك محفوظ")
+                    .foregroundStyle(member.status == .waitlisted ? .orange : TamrinTheme.success)
+                Text(member.status == .waitlisted ? String(localized: "أنت في قائمة الانتظار") : String(localized: "مكانك محفوظ"))
                     .font(TamrinFont.font(size: 15, weight: .bold))
                     .foregroundStyle(.white)
                 Spacer()
-                Text(member.status == .waitlisted ? "انسحب" : "اعتذر")
+                Text(member.status == .waitlisted ? String(localized: "انسحب") : String(localized: "اعتذر"))
                     .font(TamrinFont.font(size: 13, weight: .medium))
                     .foregroundStyle(.red.opacity(0.95))
             }
@@ -1102,7 +1366,7 @@ struct EventDetailView: View {
                 Spacer()
                 // "٩ من ١٤" — the word «من» disambiguates registered-vs-capacity
                 // and pins the bidi order (the designer's "9\14" could flip in RTL).
-                Text("\(confirmedCount.formatted()) من \(occurrence.capacity.formatted())")
+                Text("\(confirmedCount.formatted(.number.locale(.tamrin))) من \(occurrence.capacity.formatted(.number.locale(.tamrin)))")
                     .font(TamrinFont.font(size: 15, weight: .bold))
                     .foregroundStyle(.white)
                     .contentTransition(.numericText())
@@ -1122,9 +1386,9 @@ struct EventDetailView: View {
             .animation(.smooth(duration: 0.3), value: filledFraction)
             .accessibilityElement()
             .accessibilityLabel("المسجلون")
-            .accessibilityValue("\(confirmedCount.formatted()) من \(occurrence.capacity.formatted())")
+            .accessibilityValue("\(confirmedCount.formatted(.number.locale(.tamrin))) من \(occurrence.capacity.formatted(.number.locale(.tamrin)))")
             if waitingCount > 0 {
-                Text("\(waitingCount.formatted()) في قائمة الانتظار")
+                Text("\(waitingCount.formatted(.number.locale(.tamrin))) في قائمة الانتظار")
                     .font(TamrinFont.font(size: 12, weight: .medium))
                     .foregroundStyle(.orange)
             } else if occurrence.capacityPolicy == .closed {
@@ -1143,8 +1407,8 @@ struct EventDetailView: View {
         Button {
             showDeclinedResponses = true
         } label: {
-            EventActionTile(symbol: "person.crop.circle.badge.xmark", title: "المعتذرون") {
-                Text(declinedResponses.count.formatted())
+            EventActionTile(symbol: "person.crop.circle.badge.xmark", title: String(localized: "المعتذرون")) {
+                Text(declinedResponses.count.formatted(.number.locale(.tamrin)))
                     .font(TamrinFont.font(size: 11, weight: .bold))
                     .foregroundStyle(.white)
                     .contentTransition(.numericText())
@@ -1154,7 +1418,7 @@ struct EventDetailView: View {
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("المعتذرون، \(declinedResponses.count.formatted())")
+        .accessibilityLabel("المعتذرون، \(declinedResponses.count.formatted(.number.locale(.tamrin)))")
         .accessibilityHint("يفتح قائمة المعتذرين وأسبابهم")
     }
 
@@ -1410,12 +1674,12 @@ struct EventDetailView: View {
         if let customReason, !customReason.isEmpty { return customReason }
 
         switch response.reasonCode {
-        case "traveling": return "مسافر"
-        case "tired": return "تعبان"
-        case "injured": return "مصاب"
-        case "commitment": return "لدي ارتباط"
-        case "other": return "أخرى"
-        default: return "لم يُذكر سبب"
+        case "traveling": return String(localized: "مسافر")
+        case "tired": return String(localized: "تعبان")
+        case "injured": return String(localized: "مصاب")
+        case "commitment": return String(localized: "لدي ارتباط")
+        case "other": return String(localized: "أخرى")
+        default: return String(localized: "لم يُذكر سبب")
         }
     }
 
@@ -1433,11 +1697,12 @@ struct EventDetailView: View {
             // roster reads as one block of names rather than separate cards —
             // while the manual-registration row above keeps that wider gap and
             // stays visibly apart from the people.
-            VStack(spacing: 8) {
+            LazyVStack(spacing: 8) {
                 ForEach(seatedRoster) { person in
                     rosterRow(for: person)
                 }
             }
+            .animation(paymentReviewAnimation, value: seatedRoster.map(\.status))
         }
     }
 
@@ -1458,19 +1723,19 @@ struct EventDetailView: View {
                 .foregroundStyle(.white.opacity(0.5))
                 .padding(.horizontal, 4)
 
-            VStack(spacing: 8) {
+            LazyVStack(spacing: 8) {
                 ForEach(Array(waitingRoster.enumerated()), id: \.element.id) { index, person in
                     MemberRowCard(
                         name: person.name,
-                        subtitle: index == 0 ? "التالي على الدور" : nil,
+                        subtitle: index == 0 ? String(localized: "التالي على الدور") : nil,
                         avatarImageData: avatarData(for: person),
                         avatarImageUrl: person.avatarUrl
                     ) {
-                        Text("\((index + 1).formatted())")
+                        Text("\((index + 1).formatted(.number.locale(.tamrin)))")
                             .font(TamrinFont.font(size: 13, weight: .bold))
                             .foregroundStyle(.orange)
                             .monospacedDigit()
-                            .accessibilityLabel("الدور \((index + 1).formatted())")
+                            .accessibilityLabel("الدور \((index + 1).formatted(.number.locale(.tamrin)))")
                     }
                     .contentShape(.rect)
                     .onTapGesture { memberInDetails = person }
@@ -1482,6 +1747,10 @@ struct EventDetailView: View {
     /// The colour money wears in this app, on both ends of the transfer.
     static let moneyGreen = Color(red: 0.15, green: 0.56, blue: 0.38)
 
+    private var paymentReviewAnimation: Animation? {
+        reduceMotion ? nil : .smooth(duration: 0.42, extraBounce: 0)
+    }
+
     private func rosterRow(for person: FeedMember) -> some View {
         let isReviewing = showsPaymentReview(for: person)
         return VStack(spacing: 0) {
@@ -1490,8 +1759,8 @@ struct EventDetailView: View {
                 subtitle: rosterSubtitle(for: person),
                 avatarImageData: avatarData(for: person),
                 avatarImageUrl: person.avatarUrl,
-                // One card, not two stacked: the question belongs to this row.
-                drawsCard: !isReviewing
+                // Keep the same outer surface as the payment panel folds away.
+                drawsCard: false
             ) {
                 HStack(spacing: 6) {
                     rosterStatusAccessory(for: person)
@@ -1501,24 +1770,25 @@ struct EventDetailView: View {
                 }
             }
 
+            .contentShape(.rect)
+            .onTapGesture { memberInDetails = person }
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint("يفتح تفاصيل اللاعب وتقييمه")
+            .accessibilityAction { memberInDetails = person }
+
             // A declared transfer is a question put to the organizer, so the
             // card grows to ask it in words rather than leaving two glyphs to
             // carry the decision.
             if isReviewing {
                 paymentReviewPanel(for: person)
+                    .transition(.opacity)
             }
         }
-        .modifier(RosterCardBackground(isOn: isReviewing))
-        .animation(.snappy(duration: 0.34, extraBounce: 0.08), value: person.status)
-        .animation(.snappy(duration: 0.28), value: paymentActionInFlight)
-        // A tap gesture rather than a Button: the card holds its own menu, and
-        // a button inside a button swallows it. While the card is asking about
-        // a payment it stops being one big target — the two answers are.
-        .contentShape(.rect)
-        .onTapGesture { if !isReviewing { memberInDetails = person } }
-        .accessibilityAddTraits(.isButton)
-        .accessibilityHint("يفتح تفاصيل اللاعب وتقييمه")
-        .accessibilityAction { memberInDetails = person }
+        // A stable view hierarchy lets the surface and surrounding rows resize
+        // together; swapping the background branch used to replace the card.
+        .clipped()
+        .tamrinGlassCard()
+        .animation(paymentReviewAnimation, value: isReviewing)
     }
 
     /// Only the states that need acting on carry a mark. A confirmed seat is
@@ -1540,7 +1810,7 @@ struct EventDetailView: View {
 
     /// One follow-up payment may contain several guest rows. Show a single
     /// confirm/reject control for their shared registrar instead of repeating
-    /// the same destructive action on every name.
+    /// the same payment decision on every name.
     private func isPrimaryPendingPaymentRow(_ member: FeedMember) -> Bool {
         guard let ownerID = member.paymentOwnerId else { return false }
         let pendingRows = roster.filter {
@@ -1601,7 +1871,7 @@ struct EventDetailView: View {
                 subject: Text("انضم إلى \(team.name)"),
                 message: Text(teamInviteMessage(team))
             ) {
-                EventActionTile(symbol: "square.and.arrow.up.fill", title: "مشاركة")
+                EventActionTile(symbol: "square.and.arrow.up.fill", title: String(localized: "مشاركة"))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("مشاركة رابط الانضمام للتمرين")
@@ -1616,8 +1886,8 @@ struct EventDetailView: View {
 
     private func teamInviteMessage(_ team: FeedTeam) -> String {
         team.inviteURL == nil
-            ? "انضم لتمريننا برمز الدعوة: \(team.inviteCode)"
-            : "هذا رابط الانضمام لتمريننا"
+            ? String(localized: "انضم لتمريننا برمز الدعوة: \(team.inviteCode)")
+            : String(localized: "هذا رابط الانضمام لتمريننا")
     }
 
     /// A plain menu, not a popover: the choice is two labelled destinations,
@@ -1665,7 +1935,7 @@ struct EventDetailView: View {
             .tamrinGlassCard()
             .contentShape(.rect)
         }
-        .accessibilityLabel(venueName.isEmpty ? "الاتجاهات" : "الاتجاهات إلى \(venueName)")
+        .accessibilityLabel(venueName.isEmpty ? String(localized: "الاتجاهات") : String(localized: "الاتجاهات إلى \(venueName)"))
         .accessibilityHint("يفتح قائمة تطبيقات الخرائط")
     }
 
@@ -1675,7 +1945,7 @@ struct EventDetailView: View {
 
     /// The venue names itself when it can; otherwise the action does.
     private var directionsTitle: String {
-        venueName.isEmpty ? "الاتجاهات" : venueName
+        venueName.isEmpty ? String(localized: "الاتجاهات") : venueName
     }
 
     private func openDirections(_ provider: EventDirectionsProvider) {
@@ -1701,11 +1971,219 @@ struct EventDetailView: View {
         Button {
             showMemberReminder = true
         } label: {
-            EventActionTile(symbol: "bell.badge.fill", title: "إشعار الأعضاء")
+            EventActionTile(symbol: "bell.badge.fill", title: String(localized: "الإشعارات"))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("إشعار الأعضاء")
         .accessibilityHint("يفتح خيارات تذكير الأعضاء بالتسجيل أو بدفع القطة")
+    }
+
+    // MARK: - Registration settings
+
+    /// When registration opens, while that is still ahead. Nil once it is
+    /// open, and on anything that has finished or been skipped.
+    private var pendingOpening: Date? {
+        guard let opensAt = occurrence.registrationOpensAt,
+              opensAt > scheduleClock,
+              !occurrence.isCancelled,
+              !isHistorical else { return nil }
+        return opensAt
+    }
+
+    private var openNowAction: (() -> Void)? {
+        guard feed.isOwner(of: occurrence) else { return nil }
+        return { openRegistrationNow() }
+    }
+
+    private var actionTileCount: Int {
+        [!declinedResponses.isEmpty, canRemindMembers, canShareJoinLink, canEditSettings]
+            .filter { $0 }.count
+    }
+
+    private var canEditSettings: Bool {
+        feed.isOwner(of: occurrence) && !occurrence.isCancelled && !isHistorical
+    }
+
+    private var settingsButton: some View {
+        Button {
+            showExerciseSettings = true
+        } label: {
+            EventActionTile(symbol: "gearshape.fill", title: String(localized: "الإعدادات"))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("الإعدادات")
+    }
+
+    /// The register button itself, at half strength: the same place and
+    /// shape the member will press once it opens, just not yet.
+    private var closedRegistrationLabel: some View {
+        Button {} label: {
+            Label("التسجيل مغلق", systemImage: "lock.fill")
+                .font(TamrinFont.font(size: 16, weight: .bold))
+                .foregroundStyle(TamrinTheme.ink)
+                .frame(maxWidth: .infinity)
+                .frame(height: TamrinControlMetrics.glassActionHeight)
+                .contentShape(.capsule)
+        }
+        .buttonStyle(.glassProminent)
+        .buttonBorderShape(.capsule)
+        .controlSize(.regular)
+        .tint(.white.opacity(0.94))
+        .allowsHitTesting(false)
+        .opacity(0.5)
+        .accessibilityAddTraits(.isStaticText)
+    }
+
+    /// Asked, not seated. Nothing here hints at how the request stands
+    /// against anyone else's.
+    private var requestPendingRow: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "hourglass")
+                .foregroundStyle(.orange)
+            Text("طلبك عند المشرف")
+                .font(TamrinFont.font(size: 15, weight: .bold))
+                .foregroundStyle(.white)
+            Spacer()
+            if withdrawingRequest {
+                ProgressView().tint(.white)
+            } else {
+                Button("اسحب الطلب") { withdrawRequest() }
+                    .font(TamrinFont.font(size: 13, weight: .medium))
+                    .foregroundStyle(.red.opacity(0.95))
+                    .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 18)
+        .frame(maxWidth: .infinity)
+        .frame(height: TamrinControlMetrics.glassActionHeight)
+        .background(.white.opacity(0.08), in: .capsule)
+    }
+
+    private var registrationRequests: [FeedRegistrationRequest] {
+        guard feed.isOwner(of: occurrence),
+              occurrence.registrationSettings.approvalMode == .manual,
+              !isHistorical else { return [] }
+        return feed.registrationRequests(for: occurrence)
+    }
+
+    @ViewBuilder
+    private var registrationRequestsSection: some View {
+        let requests = registrationRequests
+        if !requests.isEmpty {
+            HStack(spacing: 8) {
+                Text("طلبات التسجيل")
+                    .font(TamrinFont.font(size: 15, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.75))
+                Text(requests.count.formatted(.number.locale(.tamrin)))
+                    .font(TamrinFont.font(size: 11, weight: .bold))
+                    .foregroundStyle(.white)
+                    .contentTransition(.numericText())
+                    .padding(.horizontal, 6)
+                    .frame(minWidth: 20, minHeight: 20)
+                    .background(.white.opacity(0.22), in: .capsule)
+            }
+            .padding(.top, 8)
+            .padding(.horizontal, 4)
+
+            LazyVStack(spacing: 8) {
+                ForEach(requests) { request in
+                    requestCard(request)
+                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                }
+            }
+            .animation(.smooth(duration: 0.3), value: requests.map(\.id))
+        }
+    }
+
+    /// One card per person. A guest stands as their own request, and the
+    /// line under their name says which member asked to bring them.
+    private func requestCard(_ request: FeedRegistrationRequest) -> some View {
+        MemberRowCard(
+            name: request.name,
+            subtitle: request.isGuest ? String(localized: "سجّله \(request.requesterName)") : nil,
+            avatarImageUrl: request.avatarUrl
+        ) {
+            requestActions(for: request)
+        }
+    }
+
+    @ViewBuilder
+    private func requestActions(for request: FeedRegistrationRequest) -> some View {
+        if requestInFlight == request.id {
+            ProgressView()
+                .tint(.white)
+                .frame(width: TamrinControlMetrics.touchTarget, height: TamrinControlMetrics.touchTarget)
+        } else {
+            HStack(spacing: 8) {
+                Button {
+                    respond(to: request, accept: false)
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.red)
+                        .frame(width: 36, height: 36)
+                        .background(.red.opacity(0.1), in: .circle)
+                }
+                .accessibilityLabel("رفض طلب \(request.name)")
+
+                Button {
+                    respond(to: request, accept: true)
+                } label: {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(TamrinTheme.success)
+                        .frame(width: 36, height: 36)
+                        .background(TamrinTheme.success.opacity(0.1), in: .circle)
+                }
+                .accessibilityLabel("قبول طلب \(request.name)")
+            }
+            .buttonStyle(.plain)
+            .disabled(requestInFlight != nil)
+        }
+    }
+
+    private func respond(to request: FeedRegistrationRequest, accept: Bool) {
+        guard requestInFlight == nil else { return }
+        requestInFlight = request.id
+        Task {
+            let message = await feed.respond(to: request, accept: accept, on: occurrence)
+            requestInFlight = nil
+            if let message {
+                Haptics.error()
+                actionErrorMessage = message
+            } else {
+                accept ? Haptics.success() : Haptics.impact(.light)
+            }
+        }
+    }
+
+    private func openRegistrationNow() {
+        guard !isOpeningRegistration else { return }
+        isOpeningRegistration = true
+        Task {
+            let message = await feed.openRegistrationNow(for: occurrence)
+            isOpeningRegistration = false
+            if let message {
+                Haptics.error()
+                actionErrorMessage = message
+            } else {
+                Haptics.success()
+                scheduleClock = .now
+            }
+        }
+    }
+
+    private func withdrawRequest() {
+        guard !withdrawingRequest else { return }
+        withdrawingRequest = true
+        Task {
+            let message = await feed.withdrawRequest(from: occurrence)
+            withdrawingRequest = false
+            if let message {
+                Haptics.error()
+                actionErrorMessage = message
+            }
+        }
     }
 
     private var manualAddButton: some View {
@@ -1742,6 +2220,14 @@ struct EventDetailView: View {
                 Button("تفاصيل اللاعب", systemImage: "info.circle") {
                     memberInDetails = member
                 }
+                // Cash in hand or a transfer nobody declared: the organizer
+                // settles it themselves. Past workouts too — that is often
+                // when the money changes hands.
+                if member.status == .awaitingPayment, member.paymentOwnerId != nil {
+                    Button("وصلتني القطة", systemImage: "checkmark.circle") {
+                        confirmPayment(member)
+                    }
+                }
                 if !isHistorical {
                     Button("إزالة اللاعب من التمرين", systemImage: "person.badge.minus", role: .destructive) {
                         memberAwaitingRemoval = member
@@ -1765,7 +2251,12 @@ struct EventDetailView: View {
         guard removalInFlight == nil else { return }
         removalInFlight = member.id
         Task {
-            let outcome = await feed.removeParticipant(member, from: occurrence)
+            // The organizer removes anyone through their own RPC. A member
+            // removing their own guest goes through remove_my_guest, which is
+            // the path that also returns that seat's share.
+            let outcome = feed.isCurrentTeamOwner
+                ? await feed.removeParticipant(member, from: occurrence)
+                : await feed.removeMyGuest(member, from: occurrence)
             removalInFlight = nil
             switch outcome {
             case .success:
@@ -1773,8 +2264,8 @@ struct EventDetailView: View {
             case .failure(let message):
                 actionErrorMessage = message
                 Haptics.error()
-            case .seatsFullOfferWaitlist, .closedAtCapacity:
-                actionErrorMessage = "اكتملت المقاعد لهذا الموعد."
+            case .seatsFullOfferWaitlist, .closedAtCapacity, .paymentOwed, .requested:
+                actionErrorMessage = String(localized: "اكتملت المقاعد لهذا الموعد.")
                 Haptics.error()
             }
         }
@@ -1783,7 +2274,7 @@ struct EventDetailView: View {
     /// Only the organizer decides, once per payer — a follow-up request can
     /// carry several guest rows that share one transfer.
     private func showsPaymentReview(for member: FeedMember) -> Bool {
-        !isHistorical
+        !occurrence.isCancelled
             && feed.isCurrentTeamOwner
             && member.status == .paymentPending
             && isPrimaryPendingPaymentRow(member)
@@ -1801,17 +2292,17 @@ struct EventDetailView: View {
             if paymentActionInFlight == member.paymentOwnerId {
                 ProgressView()
                     .tint(.white)
-                    .frame(maxWidth: .infinity, minHeight: 34)
+                    .frame(maxWidth: .infinity, minHeight: TamrinControlMetrics.touchTarget)
             } else {
                 HStack(spacing: 10) {
                     paymentAnswerButton(
-                        title: "وصلت",
+                        title: String(localized: "وصلت"),
                         isAffirmative: true
                     ) { confirmPayment(member) }
                     .accessibilityLabel("تأكيد وصول قطة \(member.name)")
 
                     paymentAnswerButton(
-                        title: "باقي",
+                        title: String(localized: "باقي"),
                         isAffirmative: false
                     ) { memberAwaitingRejection = member }
                     .accessibilityLabel("قطة \(member.name) لم تصل بعد")
@@ -1822,32 +2313,25 @@ struct EventDetailView: View {
         .padding(.bottom, 12)
     }
 
-    /// The system's own glass capsules, the same pair of styles every other
-    /// decision in the app is offered with.
-    @ViewBuilder
+    /// Flat translucent fills keep the payment actions quiet on the roster.
     private func paymentAnswerButton(
         title: String,
         isAffirmative: Bool,
         action: @escaping () -> Void
     ) -> some View {
-        let label = Text(title)
-            .font(TamrinFont.font(size: 14, weight: .bold))
-            .frame(maxWidth: .infinity)
-            .frame(height: 34)
-            .contentShape(.capsule)
-
-        if isAffirmative {
-            Button(action: action) { label.foregroundStyle(.white) }
-                .buttonStyle(.glassProminent)
-                .buttonBorderShape(.capsule)
-                .controlSize(.regular)
-                .tint(Self.moneyGreen)
-        } else {
-            Button(action: action) { label.foregroundStyle(.white) }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.capsule)
-                .controlSize(.regular)
+        Button(action: action) {
+            Text(title)
+                .font(TamrinFont.font(size: 14, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: TamrinControlMetrics.touchTarget)
+                .background(
+                    isAffirmative ? Self.moneyGreen.opacity(0.5) : Color.white.opacity(0.1),
+                    in: .capsule
+                )
+                .contentShape(.capsule)
         }
+        .buttonStyle(.plain)
     }
 
     private func paymentReviewActions(for member: FeedMember) -> some View {
@@ -1862,9 +2346,9 @@ struct EventDetailView: View {
                 } label: {
                     Image(systemName: "checkmark")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(TamrinTheme.ink)
+                        .foregroundStyle(TamrinTheme.success)
                         .frame(width: 36, height: 36)
-                        .background(TamrinTheme.lime, in: .circle)
+                        .background(TamrinTheme.success.opacity(0.1), in: .circle)
                         .frame(minWidth: TamrinControlMetrics.touchTarget, minHeight: TamrinControlMetrics.touchTarget)
                         .contentShape(.rect)
                 }
@@ -1893,17 +2377,15 @@ struct EventDetailView: View {
         paymentActionInFlight = joinerId
         Task {
             let outcome = await feed.confirmPayment(for: member, in: occurrence)
-            withAnimation(.snappy(duration: 0.34, extraBounce: 0.08)) {
-                paymentActionInFlight = nil
-            }
+            paymentActionInFlight = nil
             switch outcome {
             case .success:
                 Haptics.success()
             case .failure(let message):
                 actionErrorMessage = message
                 Haptics.error()
-            case .seatsFullOfferWaitlist, .closedAtCapacity:
-                actionErrorMessage = "اكتملت المقاعد لهذا الموعد."
+            case .seatsFullOfferWaitlist, .closedAtCapacity, .paymentOwed, .requested:
+                actionErrorMessage = String(localized: "اكتملت المقاعد لهذا الموعد.")
                 Haptics.error()
             }
         }
@@ -1921,10 +2403,43 @@ struct EventDetailView: View {
             case .failure(let message):
                 actionErrorMessage = message
                 Haptics.error()
-            case .seatsFullOfferWaitlist, .closedAtCapacity:
-                actionErrorMessage = "اكتملت المقاعد لهذا الموعد."
+            case .seatsFullOfferWaitlist, .closedAtCapacity, .paymentOwed, .requested:
+                actionErrorMessage = String(localized: "اكتملت المقاعد لهذا الموعد.")
                 Haptics.error()
             }
+        }
+    }
+}
+
+/// Blur once off the main actor, then slide a bitmap and its lightweight mask.
+/// The sharp photograph remains visible while a new frost image is prepared.
+private struct EventDetailFrostArtwork: View {
+    let artName: String
+    let size: CGSize
+    @State private var rendered: UIImage?
+
+    init(artName: String, size: CGSize) {
+        self.artName = artName
+        self.size = size
+        _rendered = State(initialValue: SportArtLibrary.cachedDetailFrostImage(named: artName, size: size))
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            if let rendered {
+                Image(uiImage: rendered).resizable().aspectRatio(contentMode: .fill)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+            }
+        }
+        .task(id: "\(artName):\(Int(size.width))x\(Int(size.height))") {
+            let name = artName
+            let viewport = size
+            let worker = Task.detached(priority: .userInitiated) {
+                SportArtLibrary.detailFrostImage(named: name, size: viewport)
+            }
+            let image = await withTaskCancellationHandler(operation: { await worker.value }, onCancel: { worker.cancel() })
+            guard !Task.isCancelled else { return }
+            rendered = image
         }
     }
 }
@@ -1955,7 +2470,7 @@ private struct DeclinedResponsesPage: View {
             .padding(.bottom, 40)
         }
         .safeAreaInset(edge: .top) { topBar }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .colorScheme(.dark)
     }
 
@@ -1998,7 +2513,7 @@ private struct DeclinedResponsesPage: View {
 
             Spacer(minLength: 0)
 
-            Text("الإجمالي: \(responses.count.formatted())")
+            Text("الإجمالي: \(responses.count.formatted(.number.locale(.tamrin)))")
                 .font(TamrinFont.font(size: 14, weight: .regular))
                 .foregroundStyle(.white.opacity(0.45))
         }
@@ -2019,18 +2534,9 @@ private struct DeclinedResponsesPage: View {
 /// submitted only after the player reviews the destination and confirms from
 /// the detail step.
 struct RegistrationFlowSheet: View {
-    enum Mode: String, Identifiable {
-        case selfAndGuests
-        case additionalGuests
-        case guestOnly
-
-        var id: String { rawValue }
-    }
-
     @Bindable var feed: HomeStore
     let occurrence: FeedOccurrence
     var artName: String = "ExerciseArt1"
-    var mode: Mode = .selfAndGuests
     var reviewOnly = false
     var onSuccessDismiss: (() -> Void)?
 
@@ -2038,6 +2544,13 @@ struct RegistrationFlowSheet: View {
     @State private var step: Step
     @State private var guestNames: [String] = []
     @State private var showGuestSection = false
+    /// Card payment through Moyasar. The server's quote for this member's
+    /// outstanding seats, fetched when the review step opens; its presence is
+    /// what puts the Apple Pay and card buttons on screen. A workspace the
+    /// server will not quote never sees either, and the manual transfer flow
+    /// below them is untouched.
+    @State private var showCardPayment = false
+    @State private var cardQuote: CardPaymentQuote?
     /// Whether the member has claimed a seat for themselves. Starts off, so
     /// registering is a deliberate tap on your own card rather than something
     /// that already happened when the sheet opened.
@@ -2051,6 +2564,9 @@ struct RegistrationFlowSheet: View {
     @State private var failureMessage: String?
     @State private var copiedMessage: String?
     @State private var joiningWaitlist = false
+    @State private var finishedSuccess = false
+    /// The exercise asks for approval, so registering sent a request.
+    @State private var requestSent = false
     @FocusState private var focusedGuest: Int?
 
     private enum Step: Hashable {
@@ -2064,90 +2580,45 @@ struct RegistrationFlowSheet: View {
         case waitlisted
         /// Every seat is taken on a session that closes at capacity.
         case closedAtCapacity
+        /// An ended workout in this group is unpaid; registering waits on it.
+        case paymentOwed(UUID)
     }
 
     init(
         feed: HomeStore,
         occurrence: FeedOccurrence,
         artName: String = "ExerciseArt1",
-        mode: Mode = .selfAndGuests,
         reviewOnly: Bool = false,
         onSuccessDismiss: (() -> Void)? = nil
     ) {
         self.feed = feed
         self.occurrence = occurrence
         self.artName = artName
-        self.mode = mode
         self.reviewOnly = reviewOnly
         self.onSuccessDismiss = onSuccessDismiss
         _step = State(initialValue: reviewOnly ? .paymentMethod : .selection)
-        _guestNames = State(initialValue: mode == .selfAndGuests ? [] : [""])
-        _showGuestSection = State(initialValue: mode != .selfAndGuests)
     }
 
     /// The flow's accent, shared by the submit button and the seat marker so
     /// the thing you tick and the thing it enables are visibly one action.
     private static let accent = Color(red: 0.20, green: 0.47, blue: 0.96)
 
-    private var isGuestRequest: Bool { mode != .selfAndGuests || guestsWithoutSelf }
-    private var registersWithoutSelf: Bool { mode == .guestOnly || guestsWithoutSelf }
+    private var isGuestRequest: Bool { guestsWithoutSelf }
 
-    /// The member's own card is only a choice on the plain registration; the
-    /// guest-only entries arrive with that decision already made.
-    private var offersSelfSeat: Bool { mode == .selfAndGuests }
+    /// Guests can be switched off, and an approved exercise takes a request
+    /// for yourself with guests alongside, never guests on their own.
+    private var offersGuestEntry: Bool {
+        let settings = occurrence.registrationSettings
+        return settings.guestsAllowed && (settings.approvalMode == .auto || includesSelf)
+    }
+    private var registersWithoutSelf: Bool { guestsWithoutSelf }
 
     /// Nothing can be submitted until the request has someone in it: either a
     /// seat for the member, or at least one named guest.
     private var canContinue: Bool {
-        if offersSelfSeat && !guestsWithoutSelf { return includesSelf }
+        if !guestsWithoutSelf { return includesSelf }
         return !validGuests.isEmpty
     }
-
-
-    private var memberSummaryTitle: String {
-        switch mode {
-        case .selfAndGuests:
-            feed.profileName.isEmpty ? "أنا" : feed.profileName
-        case .additionalGuests:
-            "تسجيلك محفوظ مسبقًا"
-        case .guestOnly:
-            "لن تُسجَّل أنت"
-        }
-    }
-
-    private var memberSummarySubtitle: String {
-        switch mode {
-        case .selfAndGuests: "اللاعب الأساسي"
-        case .additionalGuests: "الطلب الجديد للضيوف فقط"
-        case .guestOnly: "المقاعد والمبلغ للضيوف فقط"
-        }
-    }
-
-    private var memberSummaryIcon: String {
-        registersWithoutSelf ? "minus.circle.fill" : "checkmark.circle.fill"
-    }
-
-    private var memberSummaryTint: Color {
-        registersWithoutSelf ? .white.opacity(0.58) : TamrinTheme.lime
-    }
-
-    private var memberSummaryBackground: Color {
-        registersWithoutSelf
-            ? Color(red: 0.20, green: 0.47, blue: 0.96).opacity(0.14)
-            : TamrinTheme.lime.opacity(0.2)
-    }
-
-    private var memberSummaryAccessibilityLabel: String {
-        switch mode {
-        case .selfAndGuests:
-            "\(feed.profileName.isEmpty ? "أنا" : feed.profileName)، اللاعب الأساسي، مشمول"
-        case .additionalGuests:
-            "تسجيلك محفوظ، ولن تُحسب ضمن الطلب الجديد"
-        case .guestOnly:
-            "لن تُسجّل أنت، والمقاعد والمبلغ للضيوف فقط"
-        }
-    }
-
     private var validGuests: [String] {
         guestNames
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -2184,12 +2655,13 @@ struct RegistrationFlowSheet: View {
     /// rather than a hand-drawn header row.
     private var stepTitle: String {
         switch step {
-        case .selection: isGuestRequest ? "سجّل ضيوفك" : "سجّل في الموعد"
-        case .paymentMethod: reviewOnly ? "وسيلة الدفع" : "وسائل الدفع"
-        case .details: "تفاصيل الدفع"
-        case .success: "تم"
-        case .waitlistOffer, .waitlisted: "قائمة الانتظار"
-        case .closedAtCapacity: "اكتمل العدد"
+        case .selection: isGuestRequest ? String(localized: "سجّل ضيوفك") : String(localized: "سجّل في الموعد")
+        case .paymentMethod: reviewOnly ? String(localized: "وسيلة الدفع") : String(localized: "وسائل الدفع")
+        case .details: String(localized: "تفاصيل الدفع")
+        case .success: String(localized: "تم")
+        case .waitlistOffer, .waitlisted: String(localized: "قائمة الانتظار")
+        case .closedAtCapacity: String(localized: "اكتمل العدد")
+        case .paymentOwed: String(localized: "عليك قطة سابقة")
         }
     }
 
@@ -2197,7 +2669,7 @@ struct RegistrationFlowSheet: View {
     /// close the sheet instead.
     private var backStep: Step? {
         switch step {
-        case .selection, .success, .waitlistOffer, .waitlisted, .closedAtCapacity: nil
+        case .selection, .success, .waitlistOffer, .waitlisted, .closedAtCapacity, .paymentOwed: nil
         case .paymentMethod: reviewOnly ? nil : .selection
         case .details: .paymentMethod
         }
@@ -2233,6 +2705,8 @@ struct RegistrationFlowSheet: View {
                         waitlistedStep
                     case .closedAtCapacity:
                         closedAtCapacityStep
+                    case .paymentOwed(let eventId):
+                        paymentOwedStep(eventId)
                     }
                 }
                 .sheetContentHeight()
@@ -2253,7 +2727,10 @@ struct RegistrationFlowSheet: View {
                             withAnimation(.smooth(duration: 0.3)) { step = backStep }
                         }
                     } else {
-                        Button("إغلاق", systemImage: "xmark") { dismiss() }
+                        Button("إغلاق", systemImage: "xmark") {
+                            if step == .success { finishSuccess() }
+                            else { dismiss() }
+                        }
                     }
                 }
             }
@@ -2272,7 +2749,7 @@ struct RegistrationFlowSheet: View {
                     .zIndex(10)
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .preferredColorScheme(.dark)
         .fittedSheet(
             minHeight: 300,
@@ -2280,6 +2757,24 @@ struct RegistrationFlowSheet: View {
             background: TamrinTheme.sheet,
             extraHeight: -bottomSafeInset
         )
+        .task(id: occurrence.id) {
+            // Card is only offered when the server says the workspace can take
+            // it. A workspace without a verified Moyasar recipient never sees
+            // the button, and the manual flow is unchanged. Asked only in the
+            // review step, which is the only place the button can appear.
+            guard reviewOnly else { return }
+            if case .ready(let quote) = try? await MoyasarPaymentService.shared.startPayment(eventId: occurrence.id) {
+                cardQuote = quote
+            }
+        }
+        .sheet(isPresented: $showCardPayment) {
+            CardPaymentSheet(eventId: occurrence.id, eventName: occurrence.title) {
+                Task {
+                    await feed.markCardPaid(for: occurrence)
+                    withAnimation { step = .success }
+                }
+            }
+        }
         .task {
             if reviewOnly, destination == nil {
                 await loadDestination()
@@ -2303,48 +2798,33 @@ struct RegistrationFlowSheet: View {
                     // The member's own row, drawn as the app's member card so
                     // it is the same object here as on the roster. The circle
                     // on the far side is the seat: empty until it is claimed.
-                    if offersSelfSeat {
-                        Button {
-                            Haptics.selection()
-                            includesSelf.toggle()
-                            if includesSelf { guestsWithoutSelf = false }
-                        } label: {
-                            MemberRowCard(
-                                name: feed.profileName.isEmpty ? "أنا" : feed.profileName,
-                                subtitle: includesSelf ? "اللاعب الأساسي" : "اضغط لتحجز مقعدك",
-                                avatarImageData: feed.avatarData,
-                                avatarImageUrl: feed.avatarUrl
-                            ) {
-                                // Palette rendering both ways, so one image can
-                                // morph into the other: layer one is the ring
-                                // or the tick, layer two the disc behind it.
-                                Image(systemName: includesSelf ? "checkmark.circle.fill" : "circle")
-                                    .font(.system(size: 22, weight: .semibold))
-                                    .symbolRenderingMode(.palette)
-                                    .foregroundStyle(
-                                        includesSelf ? Color.white : Color.white.opacity(0.3),
-                                        includesSelf ? Self.accent : Color.clear
-                                    )
-                                    .contentTransition(.symbolEffect(.replace))
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityAddTraits(includesSelf ? .isSelected : [])
-                        .accessibilityHint(includesSelf ? "يلغي حجز مقعدك" : "يحجز مقعدك في الموعد")
-                    } else {
+                    Button {
+                        Haptics.selection()
+                        includesSelf.toggle()
+                        if includesSelf { guestsWithoutSelf = false }
+                    } label: {
                         MemberRowCard(
-                            name: memberSummaryTitle,
-                            subtitle: memberSummarySubtitle,
+                            name: feed.profileName.isEmpty ? String(localized: "أنا") : feed.profileName,
+                            subtitle: includesSelf ? String(localized: "اللاعب الأساسي") : String(localized: "اضغط لتحجز مقعدك"),
                             avatarImageData: feed.avatarData,
                             avatarImageUrl: feed.avatarUrl
                         ) {
-                            Image(systemName: memberSummaryIcon)
-                                .font(.system(size: 21, weight: .semibold))
-                                .foregroundStyle(memberSummaryTint)
+                            // Palette rendering both ways, so one image can
+                            // morph into the other: layer one is the ring
+                            // or the tick, layer two the disc behind it.
+                            Image(systemName: includesSelf ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 22, weight: .semibold))
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(
+                                    includesSelf ? Color.white : Color.white.opacity(0.3),
+                                    includesSelf ? Self.accent : Color.clear
+                                )
+                                .contentTransition(.symbolEffect(.replace))
                         }
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel(memberSummaryAccessibilityLabel)
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(includesSelf ? .isSelected : [])
+                    .accessibilityHint(includesSelf ? String(localized: "يلغي حجز مقعدك") : String(localized: "يحجز مقعدك في الموعد"))
 
                     if showGuestSection || isGuestRequest {
                         VStack(spacing: 9) {
@@ -2391,7 +2871,7 @@ struct RegistrationFlowSheet: View {
                             }
                             .buttonStyle(.plain)
                         }
-                    } else {
+                    } else if offersGuestEntry {
                         // One button, two meanings: with a seat claimed it adds
                         // people alongside you, without one it registers them
                         // instead of you.
@@ -2407,7 +2887,7 @@ struct RegistrationFlowSheet: View {
                                 Image(systemName: "person.badge.plus")
                                     .font(.system(size: 15, weight: .semibold))
                                     .contentTransition(.symbolEffect(.replace))
-                                Text(includesSelf ? "بسجل معي أحد" : "سجّل ضيف بدونك")
+                                Text(includesSelf ? String(localized: "بسجل معي أحد") : String(localized: "سجّل ضيف بدونك"))
                                     .font(TamrinFont.font(size: 15, weight: .medium))
                                     .contentTransition(.interpolate)
                             }
@@ -2429,7 +2909,7 @@ struct RegistrationFlowSheet: View {
             // seat is taken here and the money is settled later from «دفع
             // القطة», which is the only thing that opens the payment steps.
             primaryButton(
-                title: "تسجيل",
+                title: String(localized: "تسجيل"),
                 color: Self.accent,
                 isLoading: submitting,
                 isEnabled: canContinue && !submitting
@@ -2470,10 +2950,10 @@ struct RegistrationFlowSheet: View {
                     VStack(alignment: .leading, spacing: 14) {
                         Text(
                             isSubmittedPaymentReview
-                                ? "راجع الوسيلة التي حوّلت إليها"
+                                ? String(localized: "راجع الوسيلة التي حوّلت إليها")
                                 : (reviewOnly
-                                    ? "اختر وسيلة الدفع لعرض بياناتها"
-                                    : "اختر وسيلة الدفع المناسبة لك")
+                                    ? String(localized: "اختر وسيلة الدفع لعرض بياناتها")
+                                    : String(localized: "اختر وسيلة الدفع المناسبة لك"))
                         )
                             .font(TamrinFont.font(size: 14, weight: .medium))
                             .foregroundStyle(.white.opacity(0.58))
@@ -2493,7 +2973,7 @@ struct RegistrationFlowSheet: View {
 
                         if destination.status != .free {
                             HStack {
-                                Text(isSubmittedPaymentReview ? "المبلغ المسجل" : "المبلغ المطلوب")
+                                Text(isSubmittedPaymentReview ? String(localized: "المبلغ المسجل") : String(localized: "المبلغ المطلوب"))
                                     .font(TamrinFont.font(size: 13, weight: .medium))
                                     .foregroundStyle(.white.opacity(0.55))
                                 Spacer()
@@ -2576,13 +3056,45 @@ struct RegistrationFlowSheet: View {
                     .padding(.bottom, 12)
                 }
 
+                if reviewOnly, let cardQuote, destination.status != .free {
+                    // Apple Pay first, and one tap from here: the sheet it
+                    // opens is Wallet's own, so there is nothing of ours to
+                    // put in front of it.
+                    if ApplePayButton.isAvailable {
+                        ApplePayButton(quote: cardQuote, eventName: occurrence.title) { outcome in
+                            handleApplePay(outcome, quote: cardQuote)
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 10)
+                    }
+
+                    Button {
+                        showCardPayment = true
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "creditcard")
+                            Text("ادفع بالبطاقة")
+                                .font(TamrinFont.font(size: 15, weight: .bold))
+                            Spacer()
+                        }
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 16)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .background(.white, in: .rect(cornerRadius: 17, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 10)
+                }
+
                 // Review is now the paying step: the seat already exists, and
                 // this is where its owner says the money is on its way.
                 if reviewOnly {
                     primaryButton(
                         title: destination.provider == .cash
-                            ? (occurrence.isPast(relativeTo: .now) ? "سددت للمشرف" : "سأسدد في الملعب")
-                            : "حوّلت المبلغ",
+                            ? (occurrence.isPast(relativeTo: .now) ? String(localized: "سددت للمشرف") : String(localized: "سأسدد في الملعب"))
+                            : String(localized: "حوّلت المبلغ"),
                         color: destination.provider?.brandColor ?? Self.accent,
                         isLoading: submitting,
                         isEnabled: !submitting && destination.selectedMethod != nil
@@ -2593,8 +3105,8 @@ struct RegistrationFlowSheet: View {
                 } else {
                     primaryButton(
                         title: destination.status == .free
-                            ? (isGuestRequest ? "تأكيد الضيوف" : "تأكيد التسجيل")
-                            : (destination.provider == .cash ? "سأسدد في الملعب" : "حوّلت المبلغ"),
+                            ? (isGuestRequest ? String(localized: "تأكيد الضيوف") : String(localized: "تأكيد التسجيل"))
+                            : (destination.provider == .cash ? String(localized: "سأسدد في الملعب") : String(localized: "حوّلت المبلغ")),
                         color: destination.provider?.brandColor ?? Self.accent,
                         isLoading: submitting,
                         isEnabled: !submitting
@@ -2632,9 +3144,9 @@ struct RegistrationFlowSheet: View {
                 .padding(.horizontal, 28)
 
             primaryButton(
-                title: joiningWaitlist ? "..." : "انضم لقائمة الانتظار",
-                color: TamrinTheme.lime,
-                foregroundColor: TamrinTheme.ink
+                title: joiningWaitlist ? "..." : String(localized: "انضم لقائمة الانتظار"),
+                color: TamrinTheme.success,
+                foregroundColor: .white
             ) {
                 guard !joiningWaitlist else { return }
                 joiningWaitlist = true
@@ -2648,9 +3160,12 @@ struct RegistrationFlowSheet: View {
                     case .failure(let message):
                         Haptics.error()
                         failureMessage = message
-                    case .seatsFullOfferWaitlist, .closedAtCapacity:
+                    case .seatsFullOfferWaitlist, .closedAtCapacity, .requested:
                         Haptics.error()
-                        failureMessage = "تعذر الانضمام لقائمة الانتظار."
+                        failureMessage = String(localized: "تعذر الانضمام لقائمة الانتظار.")
+                    case .paymentOwed(let eventId):
+                        Haptics.error()
+                        withAnimation(.smooth(duration: 0.3)) { step = .paymentOwed(eventId) }
                     }
                 }
             }
@@ -2662,10 +3177,10 @@ struct RegistrationFlowSheet: View {
             Color.clear.frame(height: 26)
 
             ZStack {
-                Circle().fill(TamrinTheme.lime)
+                Circle().fill(TamrinTheme.success)
                 Image(systemName: "checkmark")
                     .font(.system(size: 31, weight: .bold))
-                    .foregroundStyle(TamrinTheme.ink)
+                    .foregroundStyle(.white)
             }
             .frame(width: 76, height: 76)
 
@@ -2679,7 +3194,7 @@ struct RegistrationFlowSheet: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 28)
 
-            primaryButton(title: "تم", color: .white, foregroundColor: .black) {
+            primaryButton(title: String(localized: "تم"), color: .white, foregroundColor: .black) {
                 dismiss()
             }
         }
@@ -2708,9 +3223,57 @@ struct RegistrationFlowSheet: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 28)
 
-            primaryButton(title: "حسنًا", color: .white, foregroundColor: .black) {
+            primaryButton(title: String(localized: "حسنًا"), color: .white, foregroundColor: .black) {
                 dismiss()
             }
+        }
+    }
+
+    /// The server refused because an ended workout here is unpaid. Its name
+    /// comes from the loaded feed; without it the sentence still reads.
+    private func paymentOwedStep(_ unpaidEventID: UUID) -> some View {
+        let unpaid = feed.occurrence(withID: unpaidEventID)
+        let message = unpaid.map { String(localized: "ما دفعت قطتك في \($0.title). ادفعها عشان تقدر تسجّل.") }
+            ?? String(localized: "ما دفعت قطتك في تمرين سابق. ادفعها عشان تقدر تسجّل.")
+        return VStack(spacing: 14) {
+            Color.clear.frame(height: 26)
+
+            ZStack {
+                Circle().fill(.white.opacity(0.12))
+                Image(systemName: "creditcard.fill")
+                    .font(.system(size: 29, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 76, height: 76)
+
+            Text("عليك قطة سابقة")
+                .font(TamrinFont.font(size: 24, weight: .bold))
+                .foregroundStyle(.white)
+
+            Text(message)
+                .font(TamrinFont.font(size: 14, weight: .medium))
+                .foregroundStyle(.white.opacity(0.62))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 28)
+
+            Text("إذا حوّلت للمنظم مباشرة، اطلب منه يأكد إنه وصلته.")
+                .font(TamrinFont.font(size: 13, weight: .medium))
+                .foregroundStyle(.white.opacity(0.45))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 28)
+
+            primaryButton(title: String(localized: "ادفع الآن"), color: TamrinTheme.success, foregroundColor: .white) {
+                // Home swaps its presented workout for the unpaid one, or, when
+                // the feed does not hold it, simply closes back to Home where
+                // the unpaid workout is listed.
+                feed.requestedOccurrenceID = unpaidEventID
+                dismiss()
+            }
+
+            Button("لاحقاً") { dismiss() }
+                .font(TamrinFont.font(size: 15, weight: .bold))
+                .foregroundStyle(.white.opacity(0.7))
+                .frame(minHeight: 44)
         }
     }
 
@@ -2743,11 +3306,25 @@ struct RegistrationFlowSheet: View {
             // distance from it.
             Color.clear.frame(height: 22)
 
-            primaryButton(title: "تم", color: .white, foregroundColor: .black) {
-                dismiss()
-                onSuccessDismiss?()
+            primaryButton(title: String(localized: "تم"), color: .white, foregroundColor: .black) {
+                finishSuccess()
             }
         }
+        .interactiveDismissDisabled(onSuccessDismiss != nil)
+        .task {
+            guard onSuccessDismiss != nil else { return }
+            do { try await Task.sleep(for: .milliseconds(700)) }
+            catch { return }
+            finishSuccess()
+        }
+    }
+
+    /// Used by both the automatic handoff and the button; never dismiss twice.
+    private func finishSuccess() {
+        guard !finishedSuccess else { return }
+        finishedSuccess = true
+        onSuccessDismiss?()
+        dismiss()
     }
 
     private func loadDestination() async {
@@ -2760,7 +3337,7 @@ struct RegistrationFlowSheet: View {
                 ? feed.guestPaymentDestination(for: occurrence)
                 : feed.paymentDestination(for: occurrence))
             guard loaded.status != .paymentMethodRequired else {
-                failureMessage = "لم يضف المشرف وسيلة دفع لهذا الموعد بعد."
+                failureMessage = String(localized: "لم يضف المشرف وسيلة دفع لهذا الموعد بعد.")
                 if !reviewOnly { step = .selection }
                 return
             }
@@ -2777,6 +3354,7 @@ struct RegistrationFlowSheet: View {
     private var declaredPayment: Bool { reviewOnly }
 
     private var successSymbol: String {
+        if requestSent { return "paperplane.fill" }
         if declaredPayment {
             return destination?.provider == .cash ? "banknote.fill" : "checkmark"
         }
@@ -2784,21 +3362,66 @@ struct RegistrationFlowSheet: View {
     }
 
     private var successTitle: String {
-        if declaredPayment { return "سُجّل تحويلك" }
-        if isGuestRequest { return "سُجّل ضيوفك" }
-        return "أنت في القائمة"
+        if declaredPayment { return String(localized: "سُجّل تحويلك") }
+        if requestSent { return String(localized: "وصل طلبك") }
+        if isGuestRequest { return String(localized: "سُجّل ضيوفك") }
+        return String(localized: "أنت في القائمة")
     }
 
     private var successSubtitle: String {
         if declaredPayment {
             return destination?.provider == .cash
                 ? (occurrence.isPast(relativeTo: .now)
-                    ? "سُجّل سدادك للمشرف، وينتظر تأكيده"
-                    : "تسدد للمشرف في الملعب، وينتظر تأكيده")
-                : "طلبك الآن بانتظار تأكيد وصول القطة من المشرف"
+                    ? String(localized: "سُجّل سدادك للمشرف، وينتظر تأكيده")
+                    : String(localized: "تسدد للمشرف في الملعب، وينتظر تأكيده"))
+                : String(localized: "طلبك الآن بانتظار تأكيد وصول القطة من المشرف")
         }
-        if isGuestRequest { return "أضيف الضيوف إلى قائمة التمرين" }
-        return "اسمك مسجل في قائمة التمرين"
+        if requestSent { return String(localized: "يوصلك تنبيه أول ما يقبله المشرف") }
+        if isGuestRequest { return String(localized: "أضيف الضيوف إلى قائمة التمرين") }
+        return String(localized: "اسمك مسجل في قائمة التمرين")
+    }
+
+    /// Apple Pay came back. Authorized is not paid: the funds are held, and
+    /// only verify-payment on the server decides whether they are captured and
+    /// the seat confirmed. So this asks, and shows whatever the server says.
+    private func handleApplePay(_ outcome: CardPaymentOutcome, quote: CardPaymentQuote) {
+        switch outcome {
+        case .cancelled:
+            break
+        case .failed(let message):
+            Haptics.error()
+            failureMessage = message
+        case .authorized(let moyasarPaymentId):
+            guard !submitting else { return }
+            submitting = true
+            Task {
+                do {
+                    let verdict = try await MoyasarPaymentService.shared.verifyUntilSettled(
+                        paymentId: quote.paymentId,
+                        moyasarPaymentId: moyasarPaymentId
+                    )
+                    submitting = false
+                    switch verdict {
+                    case .paid:
+                        Haptics.success()
+                        await feed.markCardPaid(for: occurrence)
+                        withAnimation { step = .success }
+                    case .processing:
+                        // The hold is real and the webhook will finish it, so
+                        // this is a delay to report, not a failure to retry.
+                        failureMessage = String(localized: "تأخر التحقق من الدفع. سيتأكد مقعدك تلقائيًا عند وصول التأكيد.")
+                    case .failed(let reason):
+                        Haptics.error()
+                        failureMessage = reason == "amount" || reason == "recipient"
+                            ? String(localized: "تعذر التحقق من الدفع. لم يُخصم أي مبلغ.")
+                            : String(localized: "لم تنجح عملية الدفع.")
+                    }
+                } catch {
+                    submitting = false
+                    failureMessage = ServerErrorMessage.arabic(for: error)
+                }
+            }
+        }
     }
 
     private func declarePayment(using method: PaymentDestinationMethod) {
@@ -2816,9 +3439,9 @@ struct RegistrationFlowSheet: View {
                 failureMessage = message
             // Declaring a transfer says nothing about seats; the server cannot
             // answer with either of these. Reported rather than ignored.
-            case .seatsFullOfferWaitlist, .closedAtCapacity:
+            case .seatsFullOfferWaitlist, .closedAtCapacity, .paymentOwed, .requested:
                 Haptics.error()
-                failureMessage = "اكتملت المقاعد لهذا الموعد."
+                failureMessage = String(localized: "اكتملت المقاعد لهذا الموعد.")
             }
         }
     }
@@ -2847,6 +3470,10 @@ struct RegistrationFlowSheet: View {
             case .success:
                 Haptics.success()
                 step = .success
+            case .requested:
+                Haptics.success()
+                requestSent = true
+                step = .success
             case .failure(let message):
                 Haptics.error()
                 failureMessage = message
@@ -2856,6 +3483,9 @@ struct RegistrationFlowSheet: View {
             case .closedAtCapacity:
                 Haptics.error()
                 withAnimation(.smooth(duration: 0.3)) { step = .closedAtCapacity }
+            case .paymentOwed(let eventId):
+                Haptics.error()
+                withAnimation(.smooth(duration: 0.3)) { step = .paymentOwed(eventId) }
             }
         }
     }
@@ -2865,10 +3495,10 @@ struct RegistrationFlowSheet: View {
         if let provider = destination.provider, provider.requiresMobileNumber,
            let mobileNumber = destination.mobileNumber, !mobileNumber.isEmpty {
             paymentValueRow(
-                title: "رقم الجوال",
+                title: String(localized: "رقم الجوال"),
                 displayedValue: STCPay.displayForm(mobileNumber),
                 copiedValue: mobileNumber,
-                copiedLabel: "نُسخ رقم الجوال"
+                copiedLabel: String(localized: "نُسخ رقم الجوال")
             )
         } else if let provider = destination.provider, provider.requiresIBAN {
             if let iban = destination.iban, !iban.isEmpty {
@@ -2876,15 +3506,15 @@ struct RegistrationFlowSheet: View {
                     title: "IBAN",
                     displayedValue: groupedIBAN(iban),
                     copiedValue: iban.replacingOccurrences(of: " ", with: "").uppercased(),
-                    copiedLabel: "نُسخ الآيبان"
+                    copiedLabel: String(localized: "نُسخ الآيبان")
                 )
             }
             if let accountNumber = destination.accountNumber, !accountNumber.isEmpty {
                 paymentValueRow(
-                    title: "رقم الحساب",
+                    title: String(localized: "رقم الحساب"),
                     displayedValue: accountNumber,
                     copiedValue: accountNumber,
-                    copiedLabel: "نُسخ رقم الحساب"
+                    copiedLabel: String(localized: "نُسخ رقم الحساب")
                 )
             }
         } else if destination.provider == .cash {
@@ -3016,7 +3646,7 @@ struct RegistrationFlowSheet: View {
 
                 Spacer(minLength: 8)
 
-                Image(systemName: "chevron.left")
+                Image(systemName: "chevron.forward")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(.white.opacity(0.55))
             }
@@ -3036,14 +3666,14 @@ struct RegistrationFlowSheet: View {
     private func paymentMethodSubtitle(_ method: PaymentDestinationMethod) -> String {
         switch method.provider.methodType {
         case .cash:
-            return "الدفع عند الحضور"
+            return String(localized: "الدفع عند الحضور")
         case .mobileWallet:
             guard let mobile = method.mobileNumber, !mobile.isEmpty else {
-                return "تحويل إلى رقم الجوال"
+                return String(localized: "تحويل إلى رقم الجوال")
             }
-            return "رقم الجوال •••• \(mobile.suffix(4))"
+            return String(localized: "رقم الجوال •••• \(mobile.suffix(4))")
         case .bankAccount:
-            guard let iban = method.iban, !iban.isEmpty else { return "تحويل بنكي" }
+            guard let iban = method.iban, !iban.isEmpty else { return String(localized: "تحويل بنكي") }
             return "IBAN •••• \(iban.suffix(4))"
         }
     }
@@ -3056,10 +3686,10 @@ struct RegistrationFlowSheet: View {
         } else {
             ZStack {
                 RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
-                    .fill(TamrinTheme.lime)
+                    .fill(TamrinTheme.success)
                 Image(systemName: "gift.fill")
                     .font(.system(size: size * 0.34, weight: .semibold))
-                    .foregroundStyle(TamrinTheme.ink)
+                    .foregroundStyle(.white)
             }
             .frame(width: size, height: size)
             .accessibilityHidden(true)
@@ -3067,15 +3697,15 @@ struct RegistrationFlowSheet: View {
     }
 
     private func destinationTitle(_ destination: PaymentDestination) -> String {
-        destination.provider?.displayName ?? "بدون رسوم"
+        destination.provider?.displayName ?? String(localized: "بدون رسوم")
     }
 
     private func destinationSubtitle(_ destination: PaymentDestination) -> String {
-        guard let provider = destination.provider else { return "التسجيل مجاني" }
+        guard let provider = destination.provider else { return String(localized: "التسجيل مجاني") }
         switch provider.methodType {
-        case .cash: return "الدفع عند الحضور"
-        case .mobileWallet: return "تحويل إلى رقم الجوال"
-        case .bankAccount: return "تحويل بنكي"
+        case .cash: return String(localized: "الدفع عند الحضور")
+        case .mobileWallet: return String(localized: "تحويل إلى رقم الجوال")
+        case .bankAccount: return String(localized: "تحويل بنكي")
         }
     }
 
@@ -3085,7 +3715,7 @@ struct RegistrationFlowSheet: View {
                 .locale(.tamrin)
                 .precision(.fractionLength(0 ... 2))
         )
-        return "\(value) ر.س"
+        return String(localized: "\(value) ر.س")
     }
 
     private func groupedIBAN(_ value: String) -> String {
@@ -3120,31 +3750,41 @@ struct RegistrationFlowSheet: View {
 
 
 /// One square action above the roster: the symbol on top, the label under it,
-/// and an optional badge beside the symbol. Three of these share a row, so the
+/// and an optional badge on the symbol's corner. Several of these share a row, so the
 /// shape is fixed here rather than at each call site.
+extension EnvironmentValues {
+    /// Set by the row the tiles share, which knows how many there are.
+    @Entry var actionTileCornerRadius: CGFloat = TamrinCard.cornerRadius
+}
+
 struct EventActionTile<Badge: View>: View {
     let symbol: String
     let title: String
     @ViewBuilder var badge: Badge
+    @Environment(\.actionTileCornerRadius) private var cornerRadius
 
     var body: some View {
         VStack(spacing: 8) {
+            // The badge rides on the symbol's corner rather than beside the
+            // label: with four tiles in a row, the label needs the full width.
             Image(systemName: symbol)
                 .font(.system(size: 19, weight: .semibold))
                 .frame(height: 24)
+                .overlay(alignment: .topTrailing) {
+                    badge
+                        .fixedSize()
+                        .offset(x: 14, y: -8)
+                }
 
-            HStack(spacing: 6) {
-                Text(title)
-                    .font(TamrinFont.font(size: 13, weight: .medium))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                badge
-            }
+            Text(title)
+                .font(TamrinFont.font(size: 13, weight: .medium))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 8)
         .frame(maxWidth: .infinity, minHeight: 88)
-        .tamrinGlassCard()
+        .background(TamrinCard.fill, in: .rect(cornerRadius: cornerRadius, style: .continuous))
         .contentShape(.rect)
     }
 }
@@ -3155,17 +3795,35 @@ extension EventActionTile where Badge == EmptyView {
     }
 }
 
+/// Read only by the mask, never by EventDetailView's body. Per-frame position
+/// changes cannot rebuild the roster, decode avatars or resolve the lineup.
+@Observable
+private final class EventDetailFrostPosition {
+    var top: CGFloat = 300
+}
 
-/// Paints the glass card around a roster row that has grown a question, so the
-/// row and its answers read as one object.
-private struct RosterCardBackground: ViewModifier {
-    let isOn: Bool
+private struct EventDetailFrostMask: View {
+    let position: EventDetailFrostPosition
+    let lead: CGFloat
+    let fadeHeight: CGFloat
 
-    func body(content: Content) -> some View {
-        if isOn {
-            content.tamrinGlassCard()
-        } else {
-            content
+    var body: some View {
+        VStack(spacing: 0) {
+            Color.clear.frame(height: max(position.top - lead, 0))
+            LinearGradient(colors: [.black.opacity(0), .black],
+                           startPoint: .top, endPoint: .bottom)
+                .frame(height: fadeHeight)
+            Color.black
         }
+    }
+}
+
+/// Keep the native glass untinted so each control adapts to the artwork beneath it.
+struct ExerciseChromeButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(.primary)
+            .glassEffect(.regular.interactive(), in: .capsule)
+            .contentShape(.capsule)
     }
 }

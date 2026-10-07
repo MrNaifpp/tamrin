@@ -20,7 +20,16 @@ struct UpcomingScheduleView: View {
     }()
 
     /// Day-name labels indexed by Calendar weekday (1=Sunday … 7=Saturday).
-    private static let dayNames = ["", "أحد", "اثنين", "ثلاثاء", "أربعاء", "خميس", "جمعة", "سبت"]
+    /// Arabic keeps its own short names (no «ال»); English takes the
+    /// calendar's own abbreviations (Sun, Mon, …).
+    private static let dayNames: [String] = {
+        guard AppLanguage.isArabic else {
+            var c = Calendar(identifier: .gregorian)
+            c.locale = .tamrin
+            return [""] + c.shortWeekdaySymbols
+        }
+        return ["", "أحد", "اثنين", "ثلاثاء", "أربعاء", "خميس", "جمعة", "سبت"]
+    }()
 
     private static let monthFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -84,7 +93,7 @@ struct UpcomingScheduleView: View {
         .background(Color(white: 0.95).ignoresSafeArea())
         .navigationTitle("التمارين القادمة")
         .navigationBarTitleDisplayMode(.inline)
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         // The page's surfaces are hardcoded light, so pin the scheme: in
         // device dark mode .primary/.secondary otherwise resolve to white
         // and the text disappears on the white cards.
@@ -129,7 +138,7 @@ struct UpcomingScheduleView: View {
 
     // MARK: - Cards
 
-    private func sectionTitle(_ title: String) -> some View {
+    private func sectionTitle(_ title: LocalizedStringKey) -> some View {
         Text(title)
             .font(.appSubheadline)
             .foregroundStyle(.primary)
@@ -213,15 +222,18 @@ struct UpcomingScheduleView: View {
     private func daysRemainingValue(to date: Date) -> String {
         let d = daysBetweenTodayAnd(date)
         switch d {
-        case ...0: return "اليوم"
-        case 1: return "غدًا"
-        case 2: return "يومين"
+        case ...0: return String(localized: "اليوم")
+        case 1: return String(localized: "غدًا")
+        // Arabic has a dual («يومين») that stands alone without a unit.
+        case 2 where AppLanguage.isArabic: return "يومين"
         default: return Self.arDigits(d)
         }
     }
 
     private func daysRemainingUnit(to date: Date) -> String {
         let d = daysBetweenTodayAnd(date)
+        // English: one plural for every count past tomorrow.
+        guard AppLanguage.isArabic else { return d <= 1 ? "" : String(localized: "أيام") }
         switch d {
         case ...2: return ""
         case 3...10: return "أيام"

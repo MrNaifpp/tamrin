@@ -37,7 +37,7 @@ struct PlayerDetailsSheet: View {
     var onRemind: (@MainActor () async -> HomeStore.PaymentReminderOutcome)?
     /// What removing this person means where the sheet was opened from: out of
     /// this exercise, or out of the group entirely.
-    var removeTitle: String = "إزالة اللاعب من التمرين"
+    var removeTitle: String = String(localized: "إزالة اللاعب من التمرين")
     /// Nil for a member who is not the organizer's to remove.
     var onRemove: (() -> Void)?
 
@@ -77,7 +77,7 @@ struct PlayerDetailsSheet: View {
         loadRating: (@MainActor () async throws -> PlayerRatingSummary)? = nil,
         submitRating: (@MainActor (PlayerRatingScores) async throws -> SubmitRatingResult)? = nil,
         registeredByName: String? = nil,
-        removeTitle: String = "إزالة اللاعب من التمرين",
+        removeTitle: String = String(localized: "إزالة اللاعب من التمرين"),
         onRemind: (@MainActor () async -> HomeStore.PaymentReminderOutcome)? = nil,
         onRemove: (() -> Void)? = nil
     ) {
@@ -104,13 +104,13 @@ struct PlayerDetailsSheet: View {
     private var paymentTile: (value: String, caption: String, symbol: String, tint: Color) {
         switch member.status {
         case .registered:
-            return ("مسدّدة", "حالة القطة", "checkmark.seal.fill", TamrinTheme.brandGreen)
+            return (String(localized: "مسدّدة"), String(localized: "حالة القطة"), "checkmark.seal.fill", TamrinTheme.brandGreen)
         case .awaitingPayment:
-            return ("لم تُدفع", "حالة القطة", "banknote", .orange)
+            return (String(localized: "لم تُدفع"), String(localized: "حالة القطة"), "banknote", .orange)
         case .paymentPending:
-            return ("بانتظار تأكيدك", "حالة القطة", "hourglass", .orange)
+            return (String(localized: "بانتظار تأكيدك"), String(localized: "حالة القطة"), "hourglass", .orange)
         case .waitlisted:
-            return ("في الانتظار", "مكانه بالقائمة", "person.badge.clock.fill", .orange)
+            return (String(localized: "في الانتظار"), String(localized: "مكانه بالقائمة"), "person.badge.clock.fill", .orange)
         }
     }
 
@@ -161,7 +161,7 @@ struct PlayerDetailsSheet: View {
                     }
                 }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         // The system's own half sheet, left entirely to the system: at a
         // non-large detent iOS insets it from the screen edges and paints its
         // own translucent material. Overriding the presentation background —
@@ -293,8 +293,9 @@ struct PlayerDetailsSheet: View {
                 overall: overall,
                 ratersCount: rating.ratingsCount,
                 myOverall: rating.myOverall,
+                change: rating.change,
                 actionTitle: canSubmitRating
-                    ? (rating.hasRated ? "عدّل تقييمك" : "قيّم اللاعب")
+                    ? (rating.hasRated ? String(localized: "عدّل تقييمك") : String(localized: "قيّم اللاعب"))
                     : nil,
                 onAction: ratingPosition != nil && canSubmitRating
                     ? { openRating() }
@@ -305,6 +306,7 @@ struct PlayerDetailsSheet: View {
                 isUnrated: rating?.isUnrated ?? true,
                 ratersCount: rating?.ratingsCount ?? 0,
                 hasRated: rating?.hasRated ?? false,
+                change: rating?.change,
                 isLoading: isLoadingRating && rating == nil,
                 loadFailed: ratingLoadFailed,
                 canSubmit: canSubmitRating,
@@ -326,8 +328,8 @@ struct PlayerDetailsSheet: View {
                 HStack(spacing: 10) {
                     FactTile(
                         symbol: "banknote.fill",
-                        value: share == 0 ? "مجاني" : "\(share.cleanAmount) ﷼",
-                        caption: "قطته"
+                        value: share == 0 ? String(localized: "مجاني") : String(localized: "\(share.cleanAmount) ﷼"),
+                        caption: String(localized: "قطته")
                     )
                     FactTile(
                         symbol: paymentTile.symbol,
@@ -341,7 +343,7 @@ struct PlayerDetailsSheet: View {
             if let seatNumber {
                 FactRow(
                     symbol: "flag.checkered",
-                    caption: "ترتيبه في التسجيل",
+                    caption: String(localized: "ترتيبه في التسجيل"),
                     value: seatNumber.arabicOrdinal
                 )
             }
@@ -349,7 +351,7 @@ struct PlayerDetailsSheet: View {
             if let registeredByName {
                 FactRow(
                     symbol: "person.badge.plus",
-                    caption: "سجّله",
+                    caption: String(localized: "سجّله"),
                     value: registeredByName
                 )
             }
@@ -357,7 +359,7 @@ struct PlayerDetailsSheet: View {
             if let joinedAt = member.joinedAt {
                 FactRow(
                     symbol: "clock.badge.checkmark",
-                    caption: "سجّل يوم",
+                    caption: String(localized: "سجّل يوم"),
                     value: "\(joinedAt.arabicDate) · \(joinedAt.arabicTime)"
                 )
             }
@@ -386,7 +388,7 @@ struct PlayerDetailsSheet: View {
                     .font(TamrinFont.font(size: 16, weight: .bold))
                     .contentTransition(.numericText())
             }
-            .foregroundStyle(justSent ? .white : (isCoolingDown ? Color.secondary : TamrinTheme.ink))
+            .foregroundStyle(justSent ? .white : (isCoolingDown ? Color.secondary : .white))
             .frame(maxWidth: .infinity, minHeight: 54)
             .background(reminderBackground, in: .rect(cornerRadius: 22, style: .continuous))
         }
@@ -395,22 +397,22 @@ struct PlayerDetailsSheet: View {
         .accessibilityLabel(reminderTitle)
         .accessibilityHint(
             isCoolingDown
-                ? "أُرسل تذكير قريبًا. الزر يفتح بعد \(remainingText)"
-                : "يرسل إشعارًا للاعب يذكّره بدفع قطته"
+                ? String(localized: "أُرسل تذكير قريبًا. الزر يفتح بعد \(remainingText)")
+                : String(localized: "يرسل إشعارًا للاعب يذكّره بدفع قطته")
         )
     }
 
     private var reminderTitle: String {
-        if justSent && !isCoolingDown { return "أُرسل التذكير" }
-        if justSent { return "أُرسل التذكير · \(remainingText)" }
-        if isCoolingDown { return "تقدر تذكّره بعد \(remainingText)" }
-        return "تذكير بالقطة"
+        if justSent && !isCoolingDown { return String(localized: "أُرسل التذكير") }
+        if justSent { return String(localized: "أُرسل التذكير · \(remainingText)") }
+        if isCoolingDown { return String(localized: "تقدر تذكّره بعد \(remainingText)") }
+        return String(localized: "تذكير بالقطة")
     }
 
     private var reminderBackground: Color {
         if justSent { return TamrinTheme.brandGreen }
         if isCoolingDown { return TamrinTheme.secondary }
-        return TamrinTheme.lime
+        return TamrinTheme.success
     }
 
     private func removeButton(_ remove: @escaping () -> Void) -> some View {
@@ -465,7 +467,7 @@ struct PlayerDetailsSheet: View {
             Haptics.impact(.rigid)
             now = Date()
             cooldownEndsAt = nextAllowedAt
-            errorMessage = "أُرسل تذكير لهذا اللاعب قبل قليل."
+            errorMessage = String(localized: "أُرسل تذكير لهذا اللاعب قبل قليل.")
         case .failure(let message):
             Haptics.error()
             errorMessage = message
@@ -482,13 +484,17 @@ private struct RatedPanel: View {
     let overall: Int
     let ratersCount: Int
     let myOverall: Int?
+    var change: PlayerRatingChange?
     var actionTitle: String?
     var onAction: (() -> Void)?
 
     var body: some View {
         VStack(spacing: 14) {
             HStack(alignment: .center, spacing: 14) {
-                RatingCrest(value: overall)
+                VStack(spacing: 0) {
+                    RatingCrest(value: overall)
+                    if let change { RatingChangeIndicator(change: change, compact: true) }
+                }
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(RatingBand.label(for: overall))
@@ -538,6 +544,7 @@ private struct LockedRatingPanel: View {
     let isUnrated: Bool
     let ratersCount: Int
     let hasRated: Bool
+    var change: PlayerRatingChange? = nil
     let isLoading: Bool
     /// The fetch failed. Says so rather than claiming nobody has rated him.
     var loadFailed = false
@@ -548,7 +555,10 @@ private struct LockedRatingPanel: View {
     var body: some View {
         VStack(spacing: 14) {
             HStack(spacing: 14) {
-                RatingCrest(value: nil)
+                VStack(spacing: 0) {
+                    RatingCrest(value: nil)
+                    if let change { RatingChangeIndicator(change: change, compact: true) }
+                }
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
@@ -571,7 +581,7 @@ private struct LockedRatingPanel: View {
                             Image(systemName: hasRated ? "slider.horizontal.3" : "star.fill")
                                 .font(.system(size: 16, weight: .semibold))
                         }
-                        Text(hasRated ? "عدّل تقييمك" : "قيّم اللاعب")
+                        Text(hasRated ? String(localized: "عدّل تقييمك") : String(localized: "قيّم اللاعب"))
                     }
                     .frame(maxWidth: .infinity)
                 }
@@ -586,26 +596,26 @@ private struct LockedRatingPanel: View {
     /// Until the fetch lands, the panel says nothing it might have to take
     /// back — "nobody rated him" is a claim, not a placeholder.
     private var title: String {
-        if isLoading { return "التقييم" }
-        if loadFailed { return "تعذّر جلب التقييم" }
-        if positionRequired { return "المركز مطلوب" }
+        if isLoading { return String(localized: "التقييم") }
+        if loadFailed { return String(localized: "تعذّر جلب التقييم") }
+        if positionRequired { return String(localized: "المركز مطلوب") }
         // Not "unavailable": it is available, and there is one thing to do
         // about it. Saying so is the whole point of the panel in this state.
-        return isUnrated ? "باقي ما قُيم" : "قيّمه تشوف تقييمه"
+        return isUnrated ? String(localized: "باقي ما قُيم") : String(localized: "قيّمه تشوف تقييمه")
     }
 
     private var caption: String {
-        if isLoading { return "نجيب تقييمه…" }
-        if loadFailed { return "تحقق من اتصالك وحاول مرة ثانية." }
-        if positionRequired { return "لازم يحدد اللاعب مركزه قبل ما يبدأ التقييم." }
+        if isLoading { return String(localized: "نجيب تقييمه…") }
+        if loadFailed { return String(localized: "تحقق من اتصالك وحاول مرة ثانية.") }
+        if positionRequired { return String(localized: "لازم يحدد اللاعب مركزه قبل ما يبدأ التقييم.") }
         if !canSubmit {
             return isUnrated
-                ? "ما وصلك أي تقييم إلى الآن. تظهر النتيجة هنا بدون أسماء المقيمين."
-                : "تقييمك مجهول ومحمي بدون أسماء المقيمين."
+                ? String(localized: "ما وصلك أي تقييم إلى الآن. تظهر النتيجة هنا بدون أسماء المقيمين.")
+                : String(localized: "تقييمك مجهول ومحمي بدون أسماء المقيمين.")
         }
         return isUnrated
-            ? "كن أول من يقيّمه في ست معايير."
-            : "عنده \(ratersCount.ratingsCounted). قيّمه وينفتح لك."
+            ? String(localized: "كن أول من يقيّمه في ست معايير.")
+            : String(localized: "عنده \(ratersCount.ratingsCounted). قيّمه وينفتح لك.")
     }
 }
 
@@ -648,7 +658,7 @@ struct RatingCrest: View {
                 )
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(value.map { "التقييم الإجمالي \($0)" } ?? "التقييم مقفل")
+        .accessibilityLabel(value.map { String(localized: "التقييم الإجمالي \($0)") } ?? String(localized: "التقييم مقفل"))
     }
 }
 
@@ -723,7 +733,7 @@ private struct AttributeBar: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(
-            isEditable ? TamrinTheme.lime.opacity(0.12) : Color.primary.opacity(0.04),
+            isEditable ? TamrinTheme.success.opacity(0.12) : Color.primary.opacity(0.04),
             in: .rect(cornerRadius: 12, style: .continuous)
         )
         .accessibilityElement(children: .combine)
@@ -741,15 +751,19 @@ struct PositionTag: View {
 
     private var tint: Color { PlayerPosition.resolved(from: position).tint }
 
+    /// `position` is the stored (Arabic) value; the tag shows it in the app
+    /// language.
+    private var title: String { PlayerPosition.exact(from: position)?.title ?? position }
+
     var body: some View {
-        Text(position)
+        Text(title)
             .font(TamrinFont.font(size: 13, weight: .bold))
             .foregroundStyle(tint)
             .lineLimit(1)
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
             .background(tint.opacity(0.14), in: .capsule)
-            .accessibilityLabel("مركزه: \(position)")
+            .accessibilityLabel("مركزه: \(title)")
     }
 }
 
@@ -846,11 +860,18 @@ extension Int {
     /// «الثالث» rather than «#3»: the roster position reads as a sentence, and
     /// past tenth it falls back to the numeral, which is how it is said aloud.
     var arabicOrdinal: String {
+        guard self >= 1 else { return "—" }
+        // English has a real ordinal form («3rd»), so it needs no word list.
+        guard AppLanguage.isArabic else {
+            let formatter = NumberFormatter()
+            formatter.numberStyle = .ordinal
+            formatter.locale = .tamrin
+            return formatter.string(from: NSNumber(value: self)) ?? "\(self)"
+        }
         let names = [
             "الأول", "الثاني", "الثالث", "الرابع", "الخامس",
             "السادس", "السابع", "الثامن", "التاسع", "العاشر"
         ]
-        guard self >= 1 else { return "—" }
         if self <= names.count { return names[self - 1] }
         return "رقم \(formatted(.number.locale(.tamrin).grouping(.never)))"
     }
@@ -863,7 +884,7 @@ extension Int {
     /// «3 تقييمات» / «تقييم واحد» — the app's own counting rule, so the caption
     /// agrees with the number the way the rest of the app's captions do.
     var ratingsCounted: String {
-        self == 0 ? "بدون تقييمات" : counted(.rating)
+        self == 0 ? String(localized: "بدون تقييمات") : counted(.rating)
     }
 }
 

@@ -1,0 +1,7 @@
+#include "Debug.xcconfig"
+
+// The extension must remain a child of the app id configured by each
+// developer in Local.xcconfig. Keeping this out of project.pbxproj preserves
+// the repository's no-machine-specific-signing guard.
+PRODUCT_BUNDLE_IDENTIFIER = $(TAMRIN_LIVE_ACTIVITY_BUNDLE_IDENTIFIER)
+INFOPLIST_KEY_CFBundleDisplayName = تمرين

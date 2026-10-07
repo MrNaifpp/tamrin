@@ -86,7 +86,7 @@ struct PlayerRatingSheet: View {
                 }
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         // One detent, no scroll view anywhere inside: the six steps and the
         // summary are each sized to sit inside a half sheet.
         .presentationDetents([.medium])
@@ -182,8 +182,8 @@ struct PlayerRatingFlowView: View {
                 Spacer(minLength: 6)
 
                 Text(isSummary
-                     ? "النتيجة"
-                     : "\((stepIndex + 1).tamrinNumber) من \(PlayerAttribute.allCases.count.tamrinNumber)")
+                     ? String(localized: "النتيجة")
+                     : String(localized: "\((stepIndex + 1).tamrinNumber) من \(PlayerAttribute.allCases.count.tamrinNumber)"))
                     .font(TamrinFont.font(size: 13, weight: .bold))
                     .foregroundStyle(.secondary)
                     .contentTransition(.numericText())
@@ -252,7 +252,7 @@ struct PlayerRatingFlowView: View {
 
                     // Naming the weighting is what keeps the number from looking
                     // arbitrary: a defender's Overall is not a striker's average.
-                    Text("محسوب بأوزان مركز \(position.rawValue)")
+                    Text("محسوب بأوزان مركز \(position.title)")
                         .font(TamrinFont.font(size: 12, weight: .regular))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -319,9 +319,9 @@ struct PlayerRatingFlowView: View {
     }
 
     private var primaryTitle: String {
-        if isSummary { return isSubmitting ? "يُحفظ…" : "قدّم التقييم" }
-        if stepIndex == PlayerAttribute.allCases.count - 1 { return "شوف النتيجة" }
-        return "التالي"
+        if isSummary { return isSubmitting ? String(localized: "يُحفظ…") : String(localized: "قدّم التقييم") }
+        if stepIndex == PlayerAttribute.allCases.count - 1 { return String(localized: "شوف النتيجة") }
+        return String(localized: "التالي")
     }
 
     private func advance() {
@@ -344,13 +344,13 @@ struct PlayerRatingFlowView: View {
                 Haptics.success()
                 onFinish(summary)
             case .isSelf:
-                errorMessage = "ما تقدر تقيّم نفسك."
+                errorMessage = String(localized: "ما تقدر تقيّم نفسك.")
             case .notAMember:
-                errorMessage = "هذا اللاعب ما عاد عضوًا في المجموعة."
+                errorMessage = String(localized: "هذا اللاعب ما عاد عضوًا في المجموعة.")
             case .positionRequired:
-                errorMessage = "لازم يحدد اللاعب مركزه قبل التقييم."
+                errorMessage = String(localized: "لازم يحدد اللاعب مركزه قبل التقييم.")
             case .outOfRange:
-                errorMessage = "قيم التقييم لازم تكون بين 0 و 100."
+                errorMessage = String(localized: "قيم التقييم لازم تكون بين 0 و 100.")
             }
         } catch {
             Haptics.error()
@@ -507,5 +507,5 @@ struct RatingRuler: View {
     )
     .padding(20)
     .background(TamrinTheme.sheet)
-    .environment(\.layoutDirection, .rightToLeft)
+    .environment(\.layoutDirection, .tamrin)
 }

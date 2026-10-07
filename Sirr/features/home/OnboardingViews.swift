@@ -29,7 +29,7 @@ struct WelcomeView: View {
                     Text("اختر كيف تبدأ، والباقي علينا.").font(TamrinFont.title3).foregroundStyle(.secondary).padding(.top, 8)
                     Spacer().frame(height: 34)
                     Button { showCreate = true } label: {
-                        WelcomeChoiceCard(title: "أنشئ تمرينك", subtitle: "رتّب روتين اللعب وادعُ الربع", symbol: "sparkles", accent: TamrinTheme.lime)
+                        WelcomeChoiceCard(title: "أنشئ تمرينك", subtitle: "رتّب روتين اللعب وادعُ الربع", symbol: "sparkles", accent: TamrinTheme.success)
                     }.buttonStyle(SpringCardPressStyle())
                     Button { showJoin = true } label: {
                         WelcomeChoiceCard(title: "انضم لتمرين", subtitle: "ادخل برمز الدعوة ووفر مكانك", symbol: "link", accent: TamrinTheme.secondary)
@@ -50,8 +50,8 @@ struct WelcomeView: View {
 /// by the accent behind the glyph, not by one card being a black slab. Two
 /// competing surfaces read as two unrelated controls.
 private struct WelcomeChoiceCard: View {
-    let title: String
-    let subtitle: String
+    let title: LocalizedStringKey
+    let subtitle: LocalizedStringKey
     let symbol: String
     let accent: Color
     var body: some View {
@@ -60,13 +60,13 @@ private struct WelcomeChoiceCard: View {
                 .font(.system(size: 19, weight: .bold))
                 .frame(width: 50, height: 50)
                 .background(accent, in: .circle)
-                .foregroundStyle(TamrinTheme.ink)
+                .foregroundStyle(accent == TamrinTheme.success ? Color.white : TamrinTheme.ink)
             VStack(alignment: .leading, spacing: 5) {
                 Text(title).font(TamrinFont.title3)
                 Text(subtitle).font(TamrinFont.subheadline).foregroundStyle(.secondary)
             }
             Spacer()
-            Image(systemName: "chevron.left").font(.caption.bold()).opacity(0.55)
+            Image(systemName: "chevron.forward").font(.caption.bold()).opacity(0.55)
         }
         .foregroundStyle(.primary)
         .padding(16)
@@ -135,7 +135,7 @@ struct JoinTeamView: View {
             }
 
             TamrinActionButton(
-                title: preview?.isMember == true ? "أنت عضو بالفعل" : "الانضمام للتمرين",
+                title: preview?.isMember == true ? String(localized: "أنت عضو بالفعل") : String(localized: "الانضمام للتمرين"),
                 isLoading: joining
             ) {
                 joining = true
@@ -163,7 +163,7 @@ struct JoinTeamView: View {
                 }
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .animation(.smooth(duration: 0.3), value: preview != nil)
         .animation(.smooth(duration: 0.3), value: invalid)
         .task(id: normalized) { preview = await feed.invitePreview(code: normalized) }

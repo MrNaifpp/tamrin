@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-@main
+/// Launched from `main.swift`, which pins the app language first.
 struct SirrApp: App {
     @UIApplicationDelegateAdaptor(PushAppDelegate.self) private var pushDelegate
     init() {

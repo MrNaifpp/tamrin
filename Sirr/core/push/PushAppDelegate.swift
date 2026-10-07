@@ -35,7 +35,12 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification) async
         -> UNNotificationPresentationOptions {
-        [.banner, .sound]
+        if notification.request.content.userInfo["event_id"] is String {
+            await MainActor.run {
+                NotificationCenter.default.post(name: .eventPushReceived, object: nil)
+            }
+        }
+        return [.banner, .sound]
     }
 
     // Tap on a delivered notification -> route to the event via the existing deep-link channel.
@@ -48,4 +53,8 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
             DeepLinkRouter.shared.submit(url)
         }
     }
+}
+
+extension Notification.Name {
+    static let eventPushReceived = Notification.Name("tamrin.eventPushReceived")
 }

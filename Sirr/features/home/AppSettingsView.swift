@@ -58,7 +58,7 @@ struct AppSettingsView: View {
                     )
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
     }
 
     private var content: some View {
@@ -76,6 +76,8 @@ struct AppSettingsView: View {
                     }
 
                     section(title: "التطبيق") {
+                        languageRow
+                        rowDivider
                         hapticsRow
                         rowDivider
                         versionRow
@@ -140,7 +142,7 @@ struct AppSettingsView: View {
     // MARK: - Sections
 
     private func section<Content: View>(
-        title: String,
+        title: LocalizedStringKey,
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -176,7 +178,7 @@ struct AppSettingsView: View {
             settingsRow(
                 icon: "person.crop.circle",
                 title: "حسابي",
-                subtitle: feed.profileName.isEmpty ? "الاسم والصورة والمركز" : feed.profileName
+                subtitle: feed.profileName.isEmpty ? String(localized: "الاسم والصورة والمركز") : feed.profileName
             ) {
                 Image(systemName: "chevron.forward")
                     .font(.system(size: 13, weight: .semibold))
@@ -214,9 +216,31 @@ struct AppSettingsView: View {
         .accessibilityValue(notificationSubtitle)
         .accessibilityHint(
             notificationStatus == .notDetermined
-                ? "يطلب إذن الإشعارات"
-                : "يفتح إعدادات الإشعارات في النظام"
+                ? String(localized: "يطلب إذن الإشعارات")
+                : String(localized: "يفتح إعدادات الإشعارات في النظام")
         )
+    }
+
+    /// iOS owns the per-app language: Settings › Tamrin › Language, which
+    /// relaunches the app in the new one. The row names the current language
+    /// and hands off, the same way the notifications row does.
+    private var languageRow: some View {
+        Button {
+            openSystemSettings()
+        } label: {
+            settingsRow(
+                icon: "globe",
+                title: "اللغة",
+                subtitle: AppLanguage.current.nativeName
+            ) {
+                Image(systemName: "arrow.up.forward.app")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(AppLanguage.current.nativeName)
+        .accessibilityHint("يفتح إعدادات تمرين في النظام لتغيير اللغة")
     }
 
     private var hapticsRow: some View {
@@ -224,7 +248,7 @@ struct AppSettingsView: View {
             rowLabel(
                 icon: "hand.tap",
                 title: "الاهتزاز",
-                subtitle: "اهتزاز خفيف عند التسجيل والتأكيد"
+                subtitle: String(localized: "اهتزاز خفيف عند التسجيل والتأكيد")
             )
         }
         .tint(Self.selectedTint)
@@ -281,7 +305,7 @@ struct AppSettingsView: View {
                     } else {
                         Image(systemName: "trash")
                     }
-                    Text(isDeleting ? "جارٍ الحذف…" : "حذف الحساب")
+                    Text(isDeleting ? String(localized: "جارٍ الحذف…") : String(localized: "حذف الحساب"))
                 }
                 .font(TamrinFont.font(size: 16, weight: .bold))
                 .foregroundStyle(.red)
@@ -305,7 +329,7 @@ struct AppSettingsView: View {
 
     // MARK: - Row building blocks
 
-    private func rowLabel(icon: String, title: String, subtitle: String?) -> some View {
+    private func rowLabel(icon: String, title: LocalizedStringKey, subtitle: String?) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 17, weight: .semibold))
@@ -330,7 +354,7 @@ struct AppSettingsView: View {
 
     private func settingsRow<Trailing: View>(
         icon: String,
-        title: String,
+        title: LocalizedStringKey,
         subtitle: String?,
         @ViewBuilder trailing: () -> Trailing
     ) -> some View {
@@ -348,11 +372,11 @@ struct AppSettingsView: View {
     private var notificationSubtitle: String {
         switch notificationStatus {
         case .authorized, .provisional, .ephemeral:
-            return "مفعّلة"
+            return String(localized: "مفعّلة")
         case .denied:
-            return "موقوفة من إعدادات الجهاز"
+            return String(localized: "موقوفة من إعدادات الجهاز")
         default:
-            return "لم تُفعّل بعد"
+            return String(localized: "لم تُفعّل بعد")
         }
     }
 
@@ -366,14 +390,19 @@ struct AppSettingsView: View {
         if notificationStatus == .notDetermined {
             await PushManager.shared.requestAuthorizationAndRegister()
             await refreshNotificationStatus()
-        } else if let url = URL(string: UIApplication.openSettingsURLString) {
-            await UIApplication.shared.open(url)
+        } else {
+            openSystemSettings()
         }
+    }
+
+    private func openSystemSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 
     private func deleteAccount() {
         guard let onDeleteAccount = feed.onDeleteAccount else {
-            deleteError = "الحذف غير متاح في هذه النسخة."
+            deleteError = String(localized: "الحذف غير متاح في هذه النسخة.")
             return
         }
         isDeleting = true

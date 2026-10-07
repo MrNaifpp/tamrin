@@ -1,19 +1,18 @@
 {
   "images": [
     {
-      "filename": "MapAppGoogleMaps.png",
-      "idiom": "universal",
-      "scale": "1x"
+      "filename": "MapAppGoogleMaps.svg",
+      "idiom": "universal"
     },
     {
-      "filename": "MapAppGoogleMaps@2x.png",
-      "idiom": "universal",
-      "scale": "2x"
-    },
-    {
-      "filename": "MapAppGoogleMaps@3x.png",
-      "idiom": "universal",
-      "scale": "3x"
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "dark"
+        }
+      ],
+      "filename": "MapAppGoogleMapsDark.svg",
+      "idiom": "universal"
     }
   ],
   "info": {
@@ -21,6 +20,7 @@
     "version": 1
   },
   "properties": {
+    "preserves-vector-representation": true,
     "template-rendering-intent": "template"
   }
 }

@@ -181,22 +181,22 @@ extension MemberRowCard where Accessory == EmptyView {
             MemberRowCard(name: "فارس أبومالح") {
                 Image(systemName: "checkmark")
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(TamrinTheme.lime)
+                    .foregroundStyle(TamrinTheme.success)
             }
             MemberRowCard(
                 name: "نايف الشهراني",
                 subtitle: "مشرف التمرين",
-                avatarTint: TamrinTheme.lime,
-                avatarForeground: TamrinTheme.ink
+                avatarTint: TamrinTheme.success,
+                avatarForeground: .white
             ) {
                 Image(systemName: "crown.fill")
                     .font(.system(size: 13))
-                    .foregroundStyle(TamrinTheme.lime)
+                    .foregroundStyle(TamrinTheme.success)
             }
         }
         .padding(20)
     }
-    .environment(\.layoutDirection, .rightToLeft)
+    .environment(\.layoutDirection, .tamrin)
     .colorScheme(.dark)
 }
 

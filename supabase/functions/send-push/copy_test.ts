@@ -20,8 +20,8 @@ Deno.test("payment_confirmed copy interpolates the event name", () => {
 Deno.test("payment_rejected copy interpolates the event name", () => {
   const c = copyFor("payment_rejected", "تمرين كرة قدم");
   assertEquals(c, {
-    title: "تحديث بخصوص قطتك",
-    body: "ما قدر المشرف يأكد قطتك لـ تمرين كرة قدم. تواصل معه لمعرفة التفاصيل.",
+    title: "القطة ما وصلت",
+    body: "المشرف ما استلم قطتك لـ تمرين كرة قدم. مكانك محفوظ، افتح التمرين لدفع القطة مجددًا.",
   });
 });
 
@@ -89,6 +89,14 @@ Deno.test("waitlist_promoted copy does not need the event name", () => {
   });
 });
 
+Deno.test("waitlist_promoted_unpaid copy names the event and asks to pay", () => {
+  const c = copyFor("waitlist_promoted_unpaid", "تمرين الخميس");
+  assertEquals(c, {
+    title: "لاعب اعتذر، أنت في القائمة✨",
+    body: "انضممت إلى القائمة الرئيسية في تمرين الخميس. لا تنسَ تدفع القطة 💳",
+  });
+});
+
 Deno.test("member_declined copy interpolates the event name", () => {
   const c = copyFor("member_declined", "تمرين الخميس");
   assertEquals(c, {
@@ -147,4 +155,82 @@ Deno.test("lineup_published copy interpolates the event name", () => {
     title: "نزلت التشكيلة🔥",
     body: "ادخل التطبيق وشف فريقك ومركزك",
   });
+});
+
+Deno.test("payment_paid copy interpolates the event name", () => {
+  const c = copyFor("payment_paid", "تمرين كرة قدم");
+  assertEquals(c, {
+    title: "وصلت قطة بالبطاقة 💳",
+    body: "لاعب دفع قطة تمرين كرة قدم بالبطاقة وتأكد مقعده تلقائيًا.",
+  });
+});
+Deno.test("refund_issued copy interpolates the event name", () => {
+  const c = copyFor("refund_issued", "تمرين كرة قدم");
+  assertEquals(c, {
+    title: "رجعت لك قطتك 💳",
+    body: "استرجعنا قطة تمرين كرة قدم إلى بطاقتك. تصل خلال أيام قليلة حسب بنكك.",
+  });
+});
+
+Deno.test("member_registered alone names the player", () => {
+  assertEquals(
+    copyFor("member_registered", "تمرين الخميس", { actorName: "فهد", guestCount: 0 }),
+    { title: "تسجيل جديد ⚽", body: "فهد سجّل في تمرين الخميس" },
+  );
+});
+
+Deno.test("member_registered with guests counts them in Arabic", () => {
+  const body = (n: number) =>
+    copyFor("member_registered", "تمرين الخميس", { actorName: "فهد", guestCount: n })!.body;
+  assertEquals(body(1), "فهد سجّل ومعه ضيف في تمرين الخميس");
+  assertEquals(body(2), "فهد سجّل ومعه ضيفين في تمرين الخميس");
+  assertEquals(body(3), "فهد سجّل ومعه ٣ ضيوف في تمرين الخميس");
+  assertEquals(body(10), "فهد سجّل ومعه ١٠ ضيوف في تمرين الخميس");
+  assertEquals(body(11), "فهد سجّل ومعه ١١ ضيف في تمرين الخميس");
+});
+
+Deno.test("member_added_guests reads as guests only", () => {
+  assertEquals(
+    copyFor("member_added_guests", "تمرين الخميس", { actorName: "فهد", guestCount: 2 }),
+    { title: "تسجيل جديد ⚽", body: "فهد سجّل ضيفين في تمرين الخميس" },
+  );
+});
+
+Deno.test("a crossed milestone is appended to the registration", () => {
+  const body = (pct: number) =>
+    copyFor("member_registered", "تمرين الخميس", {
+      actorName: "فهد",
+      guestCount: 0,
+      fillPct: pct,
+    })!.body;
+  assertEquals(body(25), "فهد سجّل في تمرين الخميس. ربع المقاعد انحجزت");
+  assertEquals(body(50), "فهد سجّل في تمرين الخميس. نص المقاعد انحجزت 🔥");
+  assertEquals(body(75), "فهد سجّل في تمرين الخميس. باقي ربع المقاعد ⏳");
+  assertEquals(body(100), "فهد سجّل في تمرين الخميس واكتمل العدد 🎉");
+});
+
+Deno.test("a missing name falls back to لاعب", () => {
+  for (const actorName of [null, undefined, "", "   "]) {
+    assertEquals(
+      copyFor("member_registered", "تمرين الخميس", { actorName, guestCount: 0 })!.body,
+      "لاعب سجّل في تمرين الخميس",
+    );
+  }
+});
+
+Deno.test("existing types ignore the details argument", () => {
+  assertEquals(
+    copyFor("event_fill_50", "تمرين الخميس", { actorName: "فهد", fillPct: 50 }),
+    copyFor("event_fill_50", "تمرين الخميس"),
+  );
+});
+
+Deno.test("registration copy has no em dash", () => {
+  const all = [
+    copyFor("member_registered", "x", { actorName: "فهد", guestCount: 3, fillPct: 75 })!,
+    copyFor("member_added_guests", "x", { actorName: "فهد", guestCount: 12, fillPct: 100 })!,
+  ];
+  for (const c of all) {
+    assertEquals(c.title.includes("—") || c.body.includes("—"), false);
+  }
 });

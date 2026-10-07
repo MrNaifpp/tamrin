@@ -1,6 +1,15 @@
 {
-  "originHash" : "a2b47b975283c007063016d75469b395d89f8763da1d376160fb8c6dcfdb6109",
+  "originHash" : "c3aff0492c9e72db50ccb40a0488392b93fb5d751aab79597a652dd919c9a5d9",
   "pins" : [
+    {
+      "identity" : "moyasar-ios-sdk",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/moyasar/moyasar-ios-sdk",
+      "state" : {
+        "revision" : "380177fac2e5f556a9271d768735b2c1fb7bfa48",
+        "version" : "3.2.3"
+      }
+    },
     {
       "identity" : "supabase-swift",
       "kind" : "remoteSourceControl",

@@ -466,6 +466,28 @@ begin
     raise exception 'FAIL: paid guest rows were snapshotted too early';
   end if;
 
+  -- An unpaid batch nobody has declared a transfer for is only money owed.
+  -- A second batch joins it, and one payment covers both.
+  v_result := public.register_event_guests(
+    p_event_id => v_paid_event_id,
+    p_guest_names => array['دفعة مدفوعة ثانية'],
+    p_expected_payment_method_id => v_method_two_id,
+    p_expected_price_per_person => 100,
+    p_payment_method_id => v_method_two_id
+  );
+  if v_result->>'status' <> 'submitted' then
+    raise exception 'FAIL: an undeclared unpaid batch blocked a second one %', v_result;
+  end if;
+  delete from public.event_participants
+  where event_id = v_paid_event_id and guest_name = 'دفعة مدفوعة ثانية';
+
+  -- Once a transfer is declared and waiting on the organizer, a new batch has
+  -- to wait: confirm_payment would sweep it in under a transfer that never
+  -- covered it.
+  update public.event_participants set payment_declared_at = now()
+  where event_id = v_paid_event_id and user_id is null
+    and added_by = '44000000-0000-0000-0000-000000000002'
+    and payment_status = 'pending';
   select count(*) into v_before
   from public.event_participants
   where event_id = v_paid_event_id;
@@ -477,14 +499,19 @@ begin
     p_payment_method_id => v_method_two_id
   );
   if v_result->>'status' <> 'pending_guest_request' then
-    raise exception 'FAIL: a second pending guest batch returned %', v_result;
+    raise exception 'FAIL: a declared transfer did not hold a second batch %', v_result;
   end if;
   select count(*) into v_count
   from public.event_participants
   where event_id = v_paid_event_id;
   if v_count <> v_before then
-    raise exception 'FAIL: second pending guest batch inserted rows';
+    raise exception 'FAIL: a batch was inserted while a declared transfer waited';
   end if;
+  -- Back to undeclared, which is what the assertions below are written against.
+  update public.event_participants set payment_declared_at = null
+  where event_id = v_paid_event_id and user_id is null
+    and added_by = '44000000-0000-0000-0000-000000000002'
+    and payment_status = 'pending';
 
   perform 1
   from public.event_participants

@@ -5,6 +5,7 @@
 export function copyFor(
   type: string,
   eventName: string,
+  details: CopyDetails = {},
 ): { title: string; body: string } | null {
   switch (type) {
     case "payment_submitted":
@@ -24,8 +25,18 @@ export function copyFor(
       };
     case "payment_rejected":
       return {
-        title: "تحديث بخصوص قطتك",
-        body: `ما قدر المشرف يأكد قطتك لـ ${eventName}. تواصل معه لمعرفة التفاصيل.`,
+        title: "القطة ما وصلت",
+        body: `المشرف ما استلم قطتك لـ ${eventName}. مكانك محفوظ، افتح التمرين لدفع القطة مجددًا.`,
+      };
+    case "payment_paid":
+      return {
+        title: "وصلت قطة بالبطاقة 💳",
+        body: `لاعب دفع قطة ${eventName} بالبطاقة وتأكد مقعده تلقائيًا.`,
+      };
+    case "refund_issued":
+      return {
+        title: "رجعت لك قطتك 💳",
+        body: `استرجعنا قطة ${eventName} إلى بطاقتك. تصل خلال أيام قليلة حسب بنكك.`,
       };
     case "registration_reminder":
       return {
@@ -46,6 +57,16 @@ export function copyFor(
       return {
         title: "انفتح التسجيل ⚽",
         body: `انفتح التسجيل لتمرين ${eventName}. احجز مكانك.`,
+      };
+    case "registration_requested":
+      return {
+        title: "طلب تسجيل جديد 🙋",
+        body: `وصلك طلب تسجيل في ${eventName}. افتح التمرين وراجع الطلبات.`,
+      };
+    case "registration_accepted":
+      return {
+        title: "قُبل طلبك ✅",
+        body: `أنت الآن في قائمة ${eventName}. نشوفك في الملعب 🏃‍♂️`,
       };
     case "event_invited":
       return {
@@ -87,6 +108,11 @@ export function copyFor(
         title: "لاعب اعتذر، أنت في القائمة✨",
         body: "انضممت من قائمة الانتظار إلى القائمة الرئيسية. جهز عمرك 🏃‍♂️",
       };
+    case "waitlist_promoted_unpaid":
+      return {
+        title: "لاعب اعتذر، أنت في القائمة✨",
+        body: `انضممت إلى القائمة الرئيسية في ${eventName}. لا تنسَ تدفع القطة 💳`,
+      };
     case "member_declined":
       return {
         title: "اعتذر لاعب 🏳️",
@@ -97,7 +123,63 @@ export function copyFor(
         title: "تمرين هذا الأسبوع متخطّى",
         body: `أُلغي ${eventName}. افتح التمرين لمعرفة السبب والتفاصيل.`,
       };
+    case "member_registered": {
+      const guests = details.guestCount ?? 0;
+      const verb = guests > 0 ? `سجّل ومعه ${guestPhrase(guests)}` : "سجّل";
+      return {
+        title: "تسجيل جديد ⚽",
+        body: registrationBody(details, verb, eventName),
+      };
+    }
+    case "member_added_guests":
+      return {
+        title: "تسجيل جديد ⚽",
+        body: registrationBody(
+          details,
+          `سجّل ${guestPhrase(details.guestCount ?? 1)}`,
+          eventName,
+        ),
+      };
     default:
       return null;
   }
+}
+
+// What the queue row carries beyond its type, for copy that names who acted.
+export type CopyDetails = {
+  actorName?: string | null;
+  guestCount?: number | null;
+  fillPct?: number | null;
+};
+
+const ARABIC_DIGITS = "٠١٢٣٤٥٦٧٨٩";
+const arabicNumber = (n: number) =>
+  String(n).replace(/[0-9]/g, (d) => ARABIC_DIGITS[Number(d)]);
+
+// Arabic counts: one and two have their own words, three to ten take the
+// plural, eleven and up take the singular.
+function guestPhrase(n: number): string {
+  if (n === 1) return "ضيف";
+  if (n === 2) return "ضيفين";
+  if (n <= 10) return `${arabicNumber(n)} ضيوف`;
+  return `${arabicNumber(n)} ضيف`;
+}
+
+// Appended to the organizer's registration push when the tap crossed a
+// milestone, so one tap is one push.
+const FILL_SUFFIX: Record<number, string> = {
+  25: ". ربع المقاعد انحجزت",
+  50: ". نص المقاعد انحجزت 🔥",
+  75: ". باقي ربع المقاعد ⏳",
+  100: " واكتمل العدد 🎉",
+};
+
+function registrationBody(
+  details: CopyDetails,
+  verb: string,
+  eventName: string,
+): string {
+  const name = details.actorName?.trim() || "لاعب";
+  const suffix = details.fillPct ? FILL_SUFFIX[details.fillPct] ?? "" : "";
+  return `${name} ${verb} في ${eventName}${suffix}`;
 }

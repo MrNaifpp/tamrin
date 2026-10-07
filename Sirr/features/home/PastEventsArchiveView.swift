@@ -104,7 +104,7 @@ struct PastEventsArchiveView: View {
                 archiveScroll
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .onChange(of: months.map(\.selection), initial: true) { _, selections in
             guard let first = selections.first else {
                 activeMonth = nil
@@ -355,7 +355,9 @@ private extension PastEventsArchiveView {
         // is explicitly Gregorian, both for grouping and for every label the
         // person sees, while retaining the caller's timezone for month edges.
         let gregorianArabic = Locale(
-            identifier: "ar_SA@calendar=gregorian;numbers=latn"
+            identifier: AppLanguage.isArabic
+                ? "ar_SA@calendar=gregorian;numbers=latn"
+                : "en_US@calendar=gregorian"
         )
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = gregorianArabic
@@ -371,7 +373,7 @@ private extension PastEventsArchiveView {
         cardDateFormatter.calendar = calendar
         cardDateFormatter.locale = gregorianArabic
         cardDateFormatter.timeZone = calendar.timeZone
-        cardDateFormatter.dateFormat = "EEEE، d MMMM yyyy"
+        cardDateFormatter.dateFormat = AppLanguage.isArabic ? "EEEE، d MMMM yyyy" : "EEEE, MMMM d, yyyy"
 
         let timeFormatter = DateFormatter()
         timeFormatter.calendar = calendar
@@ -398,7 +400,8 @@ private extension PastEventsArchiveView {
                 ArchiveItem(
                     occurrence: occurrence,
                     artName: artResolver(occurrence),
-                    compactDate: "\(cardDateFormatter.string(from: occurrence.startAt))، "
+                    compactDate: cardDateFormatter.string(from: occurrence.startAt)
+                        + (AppLanguage.isArabic ? "، " : ", ")
                         + timeFormatter.string(from: occurrence.startAt)
                 )
             )
@@ -440,13 +443,13 @@ private extension PastEventsArchiveView {
     static func arabicExerciseCount(_ count: Int) -> String {
         switch count {
         case 1:
-            return "تمرين واحد"
+            return String(localized: "تمرين واحد")
         case 2:
-            return "تمرينان"
+            return String(localized: "تمرينان")
         case 3...10:
-            return "\(count) تمارين"
+            return String(localized: "\(count) تمارين")
         default:
-            return "\(count) تمرينًا"
+            return String(localized: "\(count) تمرينًا")
         }
     }
 }
@@ -502,8 +505,7 @@ private struct PastEventCompactCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(
-            "\(occurrence.title)، \(occurrence.startAt.arabicDay)، "
-                + "\(occurrence.startAt.arabicDate)، الساعة \(occurrence.startAt.arabicTime)"
+            String(localized: "\(occurrence.title)، \(occurrence.startAt.arabicDay)، \(occurrence.startAt.arabicDate)، الساعة \(occurrence.startAt.arabicTime)")
         )
         .accessibilityValue(occurrence.locationName)
         .accessibilityHint("يفتح تفاصيل التمرين")

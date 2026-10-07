@@ -39,6 +39,8 @@ enum HomeDebugMemberFixture {
     static let ownerEventID = UUID(uuidString: "E3B00000-0000-4000-8000-000000000002")!
     static let ownerTemplateID = UUID(uuidString: "C3B00000-0000-4000-8000-000000000002")!
 
+    static let paymentReviewPastEventID = UUID(uuidString: "E3B00000-0000-4000-8000-000000000024")!
+
     // MARK: The other sports
     //
     // The three groups above all play football, and the photo a card wears
@@ -235,6 +237,32 @@ enum HomeDebugMemberFixture {
         )
     }
 
+    static func paymentReviewPastOccurrence(referenceDate: Date = .now) -> FeedOccurrence {
+        FeedOccurrence(
+            id: paymentReviewPastEventID,
+            title: "تأكيد القطة",
+            startAt: referenceDate.addingTimeInterval(-24 * 60 * 60),
+            endAt: referenceDate.addingTimeInterval(-22 * 60 * 60),
+            locationName: "ملعب الرواد",
+            capacity: 16,
+            price: 45,
+            isCancelled: false,
+            artIndex: 1,
+            isRecurring: false,
+            paymentMethodIds: paymentMethodIDs,
+            publishedAt: referenceDate.addingTimeInterval(-48 * 60 * 60)
+        )
+    }
+
+    /// Six independent reported payments and ten confirmed seats.
+    static func paymentReviewPastRoster(referenceDate: Date = .now) -> [FeedMember] {
+        let joinedBeforeExercise = referenceDate.addingTimeInterval(-48 * 60 * 60)
+        var pending = Array(ownerRoster(referenceDate: joinedBeforeExercise)
+            .filter { $0.userId != nil }.prefix(6))
+        for index in pending.indices { pending[index].status = .paymentPending }
+        return pending + roster(referenceDate: joinedBeforeExercise)
+    }
+
     /// Two volleyball exercises rather than one: the pair is what shows that
     /// the photo follows the exercise and not the sport — same court, same
     /// group, different picture.
@@ -393,7 +421,7 @@ enum HomeDebugMemberFixture {
         rows.insert(
             FeedMember(
                 id: me,
-                name: myName.isEmpty ? "أنت" : myName,
+                name: myName.isEmpty ? String(localized: "أنت") : myName,
                 status: .awaitingPayment,
                 userId: me,
                 joinedAt: referenceDate.addingTimeInterval(-3 * 60 * 60),
@@ -674,7 +702,7 @@ enum HomeDebugMemberFixture {
             endDate: nil,
             price: occurrence.price,
             totalVenueCost: occurrence.price * Double(max(occurrence.capacity, 1)),
-            currency: "ر.س",
+            currency: String(localized: "ر.س"),
             capacity: occurrence.capacity,
             capacityPolicy: .waitlist,
             latitude: 24.7743,
@@ -698,7 +726,7 @@ enum HomeDebugMemberFixture {
             ),
             FeedTeamMember(
                 id: me,
-                displayName: myName.isEmpty ? "أنا" : myName,
+                displayName: myName.isEmpty ? String(localized: "أنا") : myName,
                 role: .member,
                 isPending: false
             ),
@@ -726,7 +754,7 @@ enum HomeDebugMemberFixture {
         var result = [
             FeedTeamMember(
                 id: me,
-                displayName: myName.isEmpty ? "أنت" : myName,
+                displayName: myName.isEmpty ? String(localized: "أنت") : myName,
                 role: .admin,
                 isPending: false
             ),
