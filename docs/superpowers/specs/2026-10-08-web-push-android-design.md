@@ -42,7 +42,9 @@ RLS enabled, no policies — clients reach it only through the RPCs.
 
 RPCs (`security definer`, granted to `authenticated` only):
 
-- `save_web_push_subscription(p_endpoint, p_p256dh, p_auth)` — upsert on
+- `save_web_push_subscription(p_endpoint, p_p256dh, p_auth)` — rejects an
+  endpoint that is not on a known push service (FCM, Mozilla, Windows, Apple),
+  so `send-push` can never be pointed at an arbitrary URL. Upsert on
   `endpoint`, setting `user_id = auth.uid()` and `last_seen_at = now()`. If a
   different account signs in on the same browser the row moves to them, so a
   shared phone never notifies the previous account.
@@ -55,11 +57,11 @@ RPCs (`security definer`, granted to `authenticated` only):
   `row.user_id`. The row fails with `no device tokens` only when both are empty.
 - APNs signing (JWT) happens only if there are Apple tokens.
 - Web delivery: payload `{ title, body, event_id }`, TTL 24h, urgency `high`,
-  signed with `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT`
-  (new function secrets, set on both Supabase projects).
-- Library: a Deno-native Web Push implementation built on WebCrypto
-  (candidate `jsr:@negrel/webpush`); the plan pins it after a spike proving it
-  runs on Supabase Edge.
+  signed with one VAPID key pair stored as two new function secrets:
+  `VAPID_KEYS` (the pair as JWK JSON) and `VAPID_SUBJECT` (the site URL). The
+  same pair is set on both Supabase projects, so the web app carries one
+  public key.
+- Library: `jsr:@negrel/webpush@0.5.0` — WebCrypto only, built for Deno.
 - A `404` or `410` from the push service means the subscription is gone for
   good: delete that row. Other failures are recorded in `last_error` like APNs
   failures are today.
@@ -70,7 +72,7 @@ RPCs (`security definer`, granted to `authenticated` only):
 ## 3. Web app (tamrin-landing-page repo)
 
 - **`/app/sw.js`** — service worker that only handles `push` (show the
-  notification, Arabic, RTL, icon `/assets/favicon.png`, status-bar badge) and
+  notification, Arabic, RTL, icon `/assets/favicon.png`) and
   `notificationclick` (focus an open tab or open `/event/<event_id>`). No fetch
   handler, no caching. `netlify.toml` gets `Cache-Control: no-cache` for it.
 - **`src/push.js`** — one module owning the feature: `isSupported()`,
@@ -89,7 +91,10 @@ RPCs (`security definer`, granted to `authenticated` only):
   disabled with a line explaining how to allow notifications from the browser's
   site settings.
 - **On load:** `repair()` runs once a session exists.
-- **Sign out:** `disable()` runs before `supabase.auth.signOut()`.
+- **Sign out:** `disable()` runs before `supabase.auth.signOut()`. Turning the
+  Settings switch off is remembered on that browser so `repair()` does not
+  quietly turn it back on; signing out is not, so the next account on the
+  same browser is repaired normally.
 
 ## 4. Rollout
 
@@ -107,7 +112,8 @@ RPCs (`security definer`, granted to `authenticated` only):
 ## Asset
 
 A monochrome (white on transparent) 96×96 PNG for Android's status-bar badge.
-Until one exists Chrome shows a generic bell; this does not block shipping.
+Until one exists Chrome shows a generic bell; this does not block shipping, and
+the service worker adds `badge` only once the file exists.
 
 ## Out of scope
 
