@@ -437,6 +437,7 @@ struct EventDetailView: View {
             }
         }
         .environment(\.layoutDirection, .tamrin)
+        .colorScheme(.dark)
         .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { now in
             scheduleClock = now
         }

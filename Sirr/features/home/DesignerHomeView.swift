@@ -251,6 +251,7 @@ struct DesignerHomeView: View {
                     .environment(\.layoutDirection, .tamrin)
             }
         }
+        .preferredColorScheme(.dark)
         .task(id: liveActivitySyncKey) {
             guard liveActivitySyncKey.isReady else { return }
             await WorkoutLiveActivityManager.shared.synchronize(
