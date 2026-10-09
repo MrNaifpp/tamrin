@@ -157,6 +157,13 @@ Deno.test("lineup_published copy interpolates the event name", () => {
   });
 });
 
+Deno.test("registration_reacted copy names the exercise", () => {
+  assertEquals(copyFor("registration_reacted", "تمرين الخميس"), {
+    title: "تفاعلوا مع تسجيلك 👏",
+    body: "وصلك تفاعل على تسجيلك في تمرين الخميس",
+  });
+});
+
 Deno.test("lineup thought copy names the exercise and has no em dash", () => {
   assertEquals(copyFor("lineup_thought_reacted", "تمرين الخميس"), {
     title: "تفاعلوا مع خاطرتك 🔥",

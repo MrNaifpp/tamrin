@@ -435,6 +435,8 @@ final class HomeStore {
     private var rosterCache: [UUID: [FeedMember]] = [:]
     /// «خواطر التشكيلة» per exercise, as the server last answered it.
     var lineupTalkByEvent: [UUID: LineupTalk] = [:]
+    /// Reactions on each seat, per exercise.
+    var registrationReactionsByEvent: [UUID: [UUID: SeatReactions]] = [:]
     #if DEBUG
     private var debugRatingChanges: [UUID: PlayerRatingChange] = [:]
     private var debugLocalTeamIDs: Set<UUID> = []

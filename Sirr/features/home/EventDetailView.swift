@@ -49,6 +49,10 @@ struct EventDetailView: View {
     @State private var reminderToast: String?
     @State private var memberAwaitingRemoval: FeedMember?
     @State private var memberInDetails: FeedMember?
+    /// The seat whose emoji row is open, WhatsApp style.
+    @State private var reactingSeatID: UUID?
+    /// The seat whose reactions are listed in a sheet.
+    @State private var reactionsSeat: FeedMember?
     @State private var removalInFlight: UUID?
     @State private var showDeclinedResponses = false
     @State private var showExerciseSettings = false
@@ -547,6 +551,21 @@ struct EventDetailView: View {
         .sheet(isPresented: $showCardSheet) {
             CardPaymentSheet(eventId: occurrence.id, eventName: occurrence.title) {
                 Task { await feed.markCardPaid(for: occurrence) }
+            }
+        }
+        .task(id: seatedRoster.map(\.id)) {
+            await feed.loadRegistrationReactions(for: occurrence)
+        }
+        .sheet(item: $reactionsSeat) { seat in
+            if let entry = feed.registrationReactions(for: occurrence)[seat.id] {
+                RegistrationReactionsSheet(
+                    name: seat.name,
+                    entry: entry,
+                    myUserID: feed.currentUserID,
+                    onRemoveMine: entry.reaction(by: feed.currentUserID) != nil
+                        && feed.canReactToRegistrations(in: occurrence)
+                        ? { react(nil, to: seat) } : nil
+                )
             }
         }
         .task {
@@ -1857,7 +1876,61 @@ struct EventDetailView: View {
         reduceMotion ? nil : .smooth(duration: 0.42, extraBounce: 0)
     }
 
+    /// The card, the emoji row above it while it is held, and the reactions it
+    /// has collected hanging off its lower edge.
     private func rosterRow(for person: FeedMember) -> some View {
+        let entry = feed.registrationReactions(for: occurrence)[person.id]
+        let mine = entry?.reaction(by: feed.currentUserID)
+        let hasReactions = !(entry?.reactions.isEmpty ?? true)
+        let canReact = feed.canReactToRegistrations(in: occurrence)
+        return VStack(alignment: .leading, spacing: 8) {
+            if reactingSeatID == person.id, canReact {
+                RegistrationReactionBar(entry: entry, mine: mine) { emoji in
+                    react(emoji, to: person)
+                }
+                .transition(.asymmetric(
+                    insertion: .scale(scale: 0.6, anchor: .bottomLeading).combined(with: .opacity),
+                    removal: .opacity
+                ))
+                .zIndex(2)
+            }
+
+            rosterCard(for: person, onHold: canReact ? {
+                Haptics.impact(.medium)
+                withAnimation(.snappy(duration: 0.26)) {
+                    reactingSeatID = reactingSeatID == person.id ? nil : person.id
+                }
+            } : nil)
+                .accessibilityAction(named: Text("تفاعل مع التسجيل")) {
+                    guard canReact else { return }
+                    reactingSeatID = person.id
+                }
+                .overlay(alignment: .bottomLeading) {
+                    if let entry, hasReactions {
+                        RegistrationReactionPill(entry: entry, mine: mine) {
+                            reactionsSeat = person
+                        }
+                        .padding(.leading, 14)
+                        .offset(y: 14)
+                        .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                .padding(.bottom, hasReactions ? 12 : 0)
+        }
+        .animation(.snappy(duration: 0.24), value: entry)
+    }
+
+    private func react(_ emoji: String?, to person: FeedMember) {
+        withAnimation(.snappy(duration: 0.22)) { reactingSeatID = nil }
+        Task {
+            if let failure = await feed.reactToRegistration(emoji, seat: person, in: occurrence) {
+                Haptics.error()
+                actionErrorMessage = failure
+            }
+        }
+    }
+
+    private func rosterCard(for person: FeedMember, onHold: (() -> Void)? = nil) -> some View {
         let isReviewing = showsPaymentReview(for: person)
         return VStack(spacing: 0) {
             MemberRowCard(
@@ -1877,7 +1950,21 @@ struct EventDetailView: View {
             }
 
             .contentShape(.rect)
-            .onTapGesture { memberInDetails = person }
+            // Holding is tried first; only a touch that lifts before the hold
+            // completes becomes the tap that opens the player. Two separate
+            // modifiers let the tap win every time.
+            .gesture(
+                LongPressGesture(minimumDuration: 0.3)
+                    .onEnded { _ in onHold?() }
+                    .exclusively(before: TapGesture().onEnded {
+                        // An open emoji row closes on the next tap on the list.
+                        if reactingSeatID != nil {
+                            withAnimation(.snappy(duration: 0.22)) { reactingSeatID = nil }
+                        } else {
+                            memberInDetails = person
+                        }
+                    })
+            )
             .accessibilityAddTraits(.isButton)
             .accessibilityHint("يفتح تفاصيل اللاعب وتقييمه")
             .accessibilityAction { memberInDetails = person }

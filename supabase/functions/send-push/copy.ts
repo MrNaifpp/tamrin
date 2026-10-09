@@ -104,6 +104,11 @@ export function copyFor(
         title: "نزلت التشكيلة🔥",
         body: "ادخل التطبيق وشف فريقك ومركزك، واكتب خاطرتك عن التشكيلة",
       };
+    case "registration_reacted":
+      return {
+        title: "تفاعلوا مع تسجيلك 👏",
+        body: `وصلك تفاعل على تسجيلك في ${eventName}`,
+      };
     case "lineup_thought_reacted":
       return {
         title: "تفاعلوا مع خاطرتك 🔥",
