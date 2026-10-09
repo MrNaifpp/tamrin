@@ -41,12 +41,22 @@ struct LineupTeamPage: View {
     @State private var teams = LineupTeams()
     @State private var positions = LineupPositions()
     @State private var showEditor = false
+    @State private var showsThoughtComposer = false
+    @State private var openedThought: LineupThought?
 
     /// Who may change this lineup. Resolved from the exercise's own group, not
     /// the selected one: Home spans every group now, so the exercise in front
     /// of you often belongs to a different group than the one selected, and
     /// `isCurrentTeamOwner` answers about the wrong one.
     private var canEditLineup: Bool { feed.isOwner(of: occurrence) }
+
+    /// Thoughts belong to the published split only; a draft is the
+    /// organizer's alone and has nobody to answer him.
+    private var lineupTalk: LineupTalk? {
+        let isPublished = LineupStore.isPublished(eventID: occurrence.id)
+            || feed.usesLocalLineupTalk(for: occurrence.id)
+        return isPublished ? feed.lineupTalk(for: occurrence) : nil
+    }
 
     init(
         feed: HomeStore,
@@ -113,6 +123,28 @@ struct LineupTeamPage: View {
                     onTransitionReady?()
                 }
 
+                if let talk = lineupTalk {
+                    LineupTalkSection(
+                        talk: talk,
+                        myUserID: feed.currentUserID,
+                        myName: feed.profileName,
+                        myAvatarData: feed.avatarData,
+                        myAvatarUrl: feed.avatarUrl,
+                        canWrite: feed.canJoinLineupTalk(for: occurrence),
+                        isOwner: canEditLineup,
+                        onCompose: { showsThoughtComposer = true },
+                        onOpenThought: { openedThought = $0 },
+                        onVerdict: { verdict in
+                            Task { _ = await feed.setLineupVerdict(verdict, for: occurrence) }
+                        }
+                    )
+                    .padding(.top, 6)
+                    .walletDetailVisibility(
+                        detailsVisible,
+                        enabled: usesWalletTransition
+                    )
+                }
+
                 Text("القائمة")
                     .font(TamrinFont.font(size: 15, weight: .medium))
                     .foregroundStyle(.white.opacity(0.75))
@@ -158,6 +190,19 @@ struct LineupTeamPage: View {
         .allowsHitTesting(interactionEnabled)
         .task {
             if reloadsTeamsOnAppear { await reload() }
+            await feed.loadLineupTalk(for: occurrence)
+        }
+        .sheet(isPresented: $showsThoughtComposer) {
+            LineupThoughtComposer(
+                existing: feed.lineupTalk(for: occurrence)?.thought(by: feed.currentUserID)?.body
+            ) { text in
+                await feed.setLineupThought(text, for: occurrence)
+            }
+        }
+        .sheet(item: $openedThought) { thought in
+            LineupThoughtSheet(feed: feed, occurrence: occurrence, authorID: thought.userID) {
+                showsThoughtComposer = true
+            }
         }
         .fullScreenCover(isPresented: $showEditor) {
             LineupFlowView(feed: feed, occurrence: occurrence, artName: artName) { plan in
@@ -184,7 +229,9 @@ struct LineupTeamPage: View {
             isExpanded: showsPitch,
             sportStyle: sportStyle,
             onSwitch: switchSide,
-            showsLevel: false
+            showsLevel: false,
+            thoughts: feed.lineupThoughtsBySeat(for: occurrence),
+            onThoughtTap: { openedThought = $0 }
         )
         .clipShape(TamrinCard.shape)
         // Keep the switcher's visual structure in place throughout the flight;

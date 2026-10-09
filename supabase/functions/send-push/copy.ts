@@ -102,7 +102,17 @@ export function copyFor(
     case "lineup_published":
       return {
         title: "نزلت التشكيلة🔥",
-        body: "ادخل التطبيق وشف فريقك ومركزك",
+        body: "ادخل التطبيق وشف فريقك ومركزك، واكتب خاطرتك عن التشكيلة",
+      };
+    case "lineup_thought_reacted":
+      return {
+        title: "تفاعلوا مع خاطرتك 🔥",
+        body: `وصلك تفاعل على خاطرتك في تشكيلة ${eventName}`,
+      };
+    case "lineup_thought_replied":
+      return {
+        title: "رد على خاطرتك 💬",
+        body: `وصلك رد على خاطرتك في تشكيلة ${eventName}`,
       };
     case "seat_available":
       return {

@@ -678,6 +678,7 @@ struct EventDetailView: View {
             // defaults key. A member gets nil until the organizer publishes.
             if !occurrence.isCancelled, lineupPlan == nil {
                 lineupPlan = await LineupStore.load(eventID: occurrence.id)
+                if lineupPlan != nil { await feed.loadLineupTalk(for: occurrence) }
             }
         }
         .onDisappear {
@@ -1601,7 +1602,8 @@ struct EventDetailView: View {
                     isExpanded: side == openSide,
                     sportStyle: lineupSportStyle,
                     onOpen: { openLineup(from: .card(side)) },
-                    showsLevel: false
+                    showsLevel: false,
+                    thoughts: feed.lineupThoughtsBySeat(for: occurrence)
                 )
                 .clipShape(TamrinCard.shape)
 

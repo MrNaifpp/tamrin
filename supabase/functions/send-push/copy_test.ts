@@ -153,7 +153,18 @@ Deno.test("lineup_published copy interpolates the event name", () => {
   const c = copyFor("lineup_published", "تمرين الخميس");
   assertEquals(c, {
     title: "نزلت التشكيلة🔥",
-    body: "ادخل التطبيق وشف فريقك ومركزك",
+    body: "ادخل التطبيق وشف فريقك ومركزك، واكتب خاطرتك عن التشكيلة",
+  });
+});
+
+Deno.test("lineup thought copy names the exercise and has no em dash", () => {
+  assertEquals(copyFor("lineup_thought_reacted", "تمرين الخميس"), {
+    title: "تفاعلوا مع خاطرتك 🔥",
+    body: "وصلك تفاعل على خاطرتك في تشكيلة تمرين الخميس",
+  });
+  assertEquals(copyFor("lineup_thought_replied", "تمرين الخميس"), {
+    title: "رد على خاطرتك 💬",
+    body: "وصلك رد على خاطرتك في تشكيلة تمرين الخميس",
   });
 });
 

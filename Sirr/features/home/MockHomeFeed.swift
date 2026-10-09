@@ -433,6 +433,8 @@ final class HomeStore {
     private(set) var avatarUrl: String?
     /// Mapped roster + my status per event id (source for the detail page).
     private var rosterCache: [UUID: [FeedMember]] = [:]
+    /// «خواطر التشكيلة» per exercise, as the server last answered it.
+    var lineupTalkByEvent: [UUID: LineupTalk] = [:]
     #if DEBUG
     private var debugRatingChanges: [UUID: PlayerRatingChange] = [:]
     private var debugLocalTeamIDs: Set<UUID> = []
@@ -484,6 +486,11 @@ final class HomeStore {
         #else
         return false
         #endif
+    }
+
+    /// Lineup talk on a preview or fixture exercise never reaches the server.
+    func usesLocalLineupTalk(for eventID: UUID) -> Bool {
+        isPreview || isDebugMemberFixtureEvent(eventID)
     }
 
     private func isDebugMemberFixtureEvent(_ eventID: UUID) -> Bool {
