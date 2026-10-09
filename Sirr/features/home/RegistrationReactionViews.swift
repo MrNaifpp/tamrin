@@ -25,8 +25,8 @@ struct RegistrationReactionBar: View {
                     .font(TamrinFont.font(size: 12, weight: .bold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(.white.opacity(0.18), in: .capsule)
+                    .padding(.vertical, 5)
+                    .glassEffect(.regular, in: .capsule)
                     .padding(.horizontal, 6)
             }
 
@@ -41,7 +41,7 @@ struct RegistrationReactionBar: View {
                             .frame(width: 46, height: 46)
                             .background {
                                 if mine == emoji {
-                                    Circle().fill(Color.black.opacity(0.1))
+                                    Circle().fill(.white.opacity(0.2))
                                 }
                             }
                             .scaleEffect(mine == emoji ? 1.12 : 1)
@@ -54,8 +54,8 @@ struct RegistrationReactionBar: View {
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(.white, in: .capsule)
-            .shadow(color: .black.opacity(0.22), radius: 12, y: 4)
+            // The page's own Liquid Glass, not a white slab laid over it.
+            .glassEffect(.regular.interactive(), in: .capsule)
         }
     }
 }
@@ -75,15 +75,16 @@ struct RegistrationReactionPill: View {
                 if entry.reactions.count > 1 {
                     Text(entry.reactions.count.formatted(.number.locale(.tamrin)))
                         .font(TamrinFont.font(size: 12, weight: .bold))
-                        .foregroundStyle(.black.opacity(0.7))
+                        .foregroundStyle(.white.opacity(0.85))
                         .padding(.leading, 2)
                 }
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 9)
             .frame(height: 26)
-            .background(mine != nil ? Color(white: 0.9) : .white, in: .capsule)
-            .overlay(Capsule().stroke(.black.opacity(0.06), lineWidth: 1))
-            .shadow(color: .black.opacity(0.18), radius: 4, y: 1)
+            // Glass like the card it hangs from; your own reaction shows as
+            // a faint white wash inside it.
+            .background(.white.opacity(mine != nil ? 0.16 : 0), in: .capsule)
+            .glassEffect(.regular, in: .capsule)
             .contentShape(.capsule)
         }
         .buttonStyle(.plain)

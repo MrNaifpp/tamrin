@@ -497,6 +497,7 @@ struct EventDetailView: View {
             }
         }
         .environment(\.layoutDirection, .tamrin)
+        .colorScheme(.dark)
         .onChange(of: exerciseDetailsTeamID != nil || lineupCardPresentation != nil) { _, hidden in
             schedulePresentation?.setChromeHidden(hidden)
         }
