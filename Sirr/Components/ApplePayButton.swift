@@ -58,8 +58,12 @@ struct ApplePayButton: View {
             action()
         }
         .payWithApplePayButtonStyle(.white)
-        .frame(height: 48)
-        .clipShape(.rect(cornerRadius: 17, style: .continuous))
+        // Apple's own button, sized and shaped like the glass capsules beside
+        // it («سجّل معك أحد») so the stack reads as one set of controls. Those
+        // are glassActionHeight plus the 6pt the regular glass style pads on
+        // each side: 52pt as drawn.
+        .frame(height: TamrinControlMetrics.glassActionHeight + 12)
+        .clipShape(.capsule)
     }
 
     static func present(
