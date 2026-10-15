@@ -24,6 +24,7 @@ struct EventDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showWithdrawConfirm = false
     @State private var showRegisterFlow = false
+    @State private var showRegistrationSettingsOnboarding = false
     /// Adding a companion asks a single question, so it gets the one-field
     /// sheet, paid or free. A paid guest's share is settled later with the
     /// member's own from «دفع القطة».
@@ -494,6 +495,11 @@ struct EventDetailView: View {
             await feed.reloadOccurrence(occurrence.id)
             await feed.reloadRoster(occurrence.id)
             await feed.reloadMemberResponses(occurrence.id)
+            await feed.loadMapLink(for: occurrence.id)
+            // Once, to the organizer, on the first workout of theirs they open.
+            if feed.isCurrentTeamOwner, !isHistorical, !RegistrationSettingsOnboarding.hasSeen {
+                showRegistrationSettingsOnboarding = true
+            }
             #if DEBUG
             if initiallyShowsGuestOnlyRegistration,
                !handledInitialRegistration,
@@ -579,6 +585,21 @@ struct EventDetailView: View {
         }
         .sheet(isPresented: $showExerciseSettings) {
             ExerciseSettingsSheet(feed: feed, occurrence: occurrence)
+        }
+        // On a view of its own: this page already carries many presentations.
+        // Half height, since three short cards do not need the whole screen.
+        // Swiping it away counts as seen, the same as «تخطٍ».
+        .background {
+            Color.clear
+                .sheet(isPresented: $showRegistrationSettingsOnboarding, onDismiss: {
+                    RegistrationSettingsOnboarding.markSeen()
+                }) {
+                    RegistrationSettingsOnboardingSheet {
+                        showRegistrationSettingsOnboarding = false
+                    }
+                    .presentationDetents([.medium])
+                    .presentationDragIndicator(.visible)
+                }
         }
         .task(id: occurrence.registrationOpensAt) {
             // Flip the page the second registration opens, not on the next
@@ -943,6 +964,10 @@ struct EventDetailView: View {
     private func beginPayment() {
         guard !isLoadingQuote, !isConfirmingPayment else { return }
         Haptics.impact(.light)
+        guard CardPayments.isEnabled else {
+            showPaymentReview = true
+            return
+        }
         isLoadingQuote = true
         Task {
             defer { isLoadingQuote = false }
@@ -1067,7 +1092,7 @@ struct EventDetailView: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: TamrinControlMetrics.glassActionHeight)
                 .accessibilityLabel(isConfirmingPayment ? "نتحقق من الدفع" : "جارٍ تجهيز الدفع")
-        } else if ApplePayButton.isAvailable {
+        } else if CardPayments.isEnabled, ApplePayButton.isAvailable {
             // Apple requires the control that starts a payment to be their own
             // button, and that is also what puts the Apple mark on it.
             ApplePayButton { beginPayment() }
@@ -1949,14 +1974,17 @@ struct EventDetailView: View {
     }
 
     private func openDirections(_ provider: EventDirectionsProvider) {
-        let destination = EventDirectionsDestination(
-            latitude: occurrence.latitude,
-            longitude: occurrence.longitude,
-            name: occurrence.locationName
-        )
-        guard let url = provider.url(for: destination) else { return }
         Haptics.impact(.light)
-        UIApplication.shared.open(url)
+        Task {
+            let destination = EventDirectionsDestination(
+                latitude: occurrence.latitude,
+                longitude: occurrence.longitude,
+                name: occurrence.locationName,
+                mapLink: provider == .hudhud ? await feed.loadMapLink(for: occurrence.id) : nil
+            )
+            guard let url = provider.url(for: destination) else { return }
+            await UIApplication.shared.open(url)
+        }
     }
 
     /// A reminder is only meaningful once the exercise is out and still live.
@@ -2762,7 +2790,7 @@ struct RegistrationFlowSheet: View {
             // it. A workspace without a verified Moyasar recipient never sees
             // the button, and the manual flow is unchanged. Asked only in the
             // review step, which is the only place the button can appear.
-            guard reviewOnly else { return }
+            guard reviewOnly, CardPayments.isEnabled else { return }
             if case .ready(let quote) = try? await MoyasarPaymentService.shared.startPayment(eventId: occurrence.id) {
                 cardQuote = quote
             }

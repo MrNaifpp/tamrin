@@ -11,6 +11,7 @@ struct WelcomeView: View {
     @Bindable var feed: HomeStore
     @State private var showCreate: Bool
     @State private var showJoin = false
+    @State private var showLogoutConfirm = false
 
     init(feed: HomeStore, startInCreateFlow: Bool = false) {
         self.feed = feed
@@ -36,12 +37,24 @@ struct WelcomeView: View {
                     }.buttonStyle(SpringCardPressStyle()).padding(.top, 12)
                     Spacer()
                     Text("تمارينك خاصة، ما يدخلها إلا بدعوة").font(TamrinFont.footnote).foregroundStyle(.tertiary)
-                        .frame(maxWidth: .infinity).padding(.bottom, 24)
+                        .frame(maxWidth: .infinity)
+                    // A new account has no group yet, so Settings is out of
+                    // reach; this is the only way back to the sign-in screen.
+                    Button("تسجيل الخروج", role: .destructive) { showLogoutConfirm = true }
+                        .font(TamrinFont.subheadline)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .padding(.top, 4)
+                        .padding(.bottom, 12)
                 }
                 .padding(.horizontal, 22)
             }
             .fullScreenCover(isPresented: $showCreate) { CreateTeamFlow(feed: feed, isPresented: $showCreate) }
             .sheet(isPresented: $showJoin) { JoinTeamView(feed: feed, isPresented: $showJoin) }
+            // Same centred confirmation as Settings.
+            .alert("تسجيل الخروج؟", isPresented: $showLogoutConfirm) {
+                Button("تسجيل الخروج", role: .destructive) { feed.onLogout?() }
+                Button("تراجع", role: .cancel) {}
+            }
         }
     }
 }

@@ -7,6 +7,8 @@ struct EventDirectionsDestination {
     let latitude: Double?
     let longitude: Double?
     let name: String
+    /// The Hudhud place link the organizer pasted, when there is one.
+    var mapLink: String? = nil
 
     var coordinate: (latitude: Double, longitude: Double)? {
         guard let latitude, let longitude,
@@ -31,10 +33,8 @@ enum EventDirectionsProvider {
     func url(for destination: EventDirectionsDestination) -> URL? {
         switch self {
         case .hudhud:
-            // Hudhud's own link: iOS hands it straight to the Hudhud app when
-            // it is installed, and to Hudhud's web map otherwise. A venue known
-            // only by name still opens Hudhud, just without a pin, because the
-            // person chose Hudhud and not another map.
+            // A venue known only by name still opens Hudhud, just without a
+            // pin, because the person chose Hudhud and not another map.
             return hudhudURL(destination)
 
         case .googleMaps:
@@ -46,13 +46,36 @@ enum EventDirectionsProvider {
         }
     }
 
-    /// `https://l.hudhud.sa/directions/{lat},{lon}`: the link the Hudhud app
-    /// itself claims (apple-app-site-association on l.hudhud.sa, every path).
+    /// A pasted Hudhud place link (`l.hudhud.sa/p/{id}`) first, since it opens
+    /// the named place. Then the app's own `hudhud://directions?to={lat},{lon}`
+    /// for a pin, when the app is installed. Hudhud's web map otherwise. A pin
+    /// sent as `l.hudhud.sa/directions/...` is not used: the app answers it
+    /// with its "update the app" screen.
     func hudhudURL(_ destination: EventDirectionsDestination) -> URL? {
+        if let link = destination.mapLink.flatMap(URL.init(string:)),
+           link.host?.lowercased() == "l.hudhud.sa",
+           link.path.hasPrefix("/p/") {
+            return link
+        }
         guard let coordinate = destination.coordinate else {
             return URL(string: "https://l.hudhud.sa/")
         }
-        return URL(string: "https://l.hudhud.sa/directions/\(coordinate.latitude),\(coordinate.longitude)")
+        let pin = "\(coordinate.latitude),\(coordinate.longitude)"
+
+        var app = URLComponents()
+        app.scheme = "hudhud"
+        app.host = "directions"
+        app.queryItems = [URLQueryItem(name: "to", value: pin)]
+        if let appURL = app.url, UIApplication.shared.canOpenURL(appURL) {
+            return appURL
+        }
+
+        var web = URLComponents(string: "https://web.hudhud.sa/preview")
+        web?.queryItems = [
+            URLQueryItem(name: "lat", value: String(coordinate.latitude)),
+            URLQueryItem(name: "lng", value: String(coordinate.longitude))
+        ]
+        return web?.url
     }
 
     private func googleMapsAppURL(_ destination: EventDirectionsDestination) -> URL? {

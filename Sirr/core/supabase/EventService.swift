@@ -1332,6 +1332,27 @@ final class EventService {
         eventLogger.info("API deleteEvent succeeded (eventId: \(eventId))")
     }
 
+    /// The map link the organizer pasted for this workout's venue, shared by
+    /// every occurrence of its series. Nil when there is none.
+    func eventMapLink(eventId: UUID) async throws -> String? {
+        let params: [String: String] = ["p_event_id": eventId.uuidString]
+        let response = try await client
+            .rpc("get_event_map_link", params: params)
+            .execute()
+        return try JSONDecoder().decode(String?.self, from: response.data)
+    }
+
+    /// Saves the pasted map link; an empty string removes it. Owner only.
+    func setEventMapLink(eventId: UUID, url: String) async throws {
+        let params: [String: String] = [
+            "p_event_id": eventId.uuidString,
+            "p_url": url
+        ]
+        try await client
+            .rpc("set_event_map_link", params: params)
+            .execute()
+    }
+
     /// Recurrence template backing a series-linked event.
     func getEventTemplate(templateId: UUID) async throws -> EventTemplateRecord {
         let params: [String: String] = ["p_template_id": templateId.uuidString]

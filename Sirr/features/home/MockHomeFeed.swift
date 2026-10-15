@@ -125,6 +125,9 @@ struct PlanDraft: Identifiable, Hashable {
     /// Custom venues have no map entry, so the organizer may paste a Google
     /// Maps link instead. Optional, and only ever filled for `.custom`.
     var mapsURL = ""
+    /// Set when the organizer edits the link or picks another venue, so an
+    /// edit that never loaded the saved link cannot wipe it.
+    var mapsURLChanged = false
     var venueKind: FeedVenueKind = .custom
     var latitude = 24.7136
     var longitude = 46.6753
@@ -438,6 +441,9 @@ final class HomeStore {
     /// Original records are retained so editing a card opens that exact event,
     /// rather than the first synthesized plan in the workspace.
     private var eventRecordsByID: [UUID: EventRecord] = [:]
+    /// The pasted venue link per event, "" when there is none. Filled when a
+    /// workout's page opens, so the editor and the Hudhud button both have it.
+    private(set) var mapLinksByEventID: [UUID: String] = [:]
     /// A successful empty response is still loaded. Tracking this separately
     /// avoids requesting an empty workspace's history on every presentation.
     private var loadedPastTeamIDs: Set<UUID> = []
@@ -1795,6 +1801,9 @@ final class HomeStore {
                 eventId: eventID,
                 policy: plan.capacityPolicy
             )
+            if plan.mapsURLChanged {
+                await saveMapLink(plan.mapsURL, eventID: eventID)
+            }
         } catch {
             errorMessage = ServerErrorMessage.arabic(for: error)
             await loadSelectedTeamData()
@@ -1907,6 +1916,9 @@ final class HomeStore {
             } else {
                 plansByTeam[teamID, default: []].append(refreshedPlan)
             }
+            if plan.mapsURLChanged {
+                await saveMapLink(plan.mapsURL, eventID: eventID)
+            }
         } catch {
             errorMessage = ServerErrorMessage.arabic(for: error)
             throw error
@@ -1987,7 +1999,7 @@ final class HomeStore {
     ) async throws -> EventRecord {
         var end = combine(day: start, time: plan.endTime, cal: cal)
         if end <= start { end = cal.date(byAdding: .hour, value: 1, to: start) ?? start }
-        return try await EventService.shared.createEvent(
+        let event = try await EventService.shared.createEvent(
             workspaceId: workspaceId,
             name: name,
             location: plan.locationName,
@@ -2004,6 +2016,10 @@ final class HomeStore {
             paymentMethodIds: paymentMethodIds,
             capacityPolicy: plan.capacityPolicy
         )
+        if !plan.mapsURL.isEmpty {
+            await saveMapLink(plan.mapsURL, eventID: event.id)
+        }
+        return event
     }
 
     /// Saves every selected reusable destination and returns the immutable ids
@@ -3256,6 +3272,7 @@ final class HomeStore {
             ?? calendar.date(byAdding: .hour, value: 1, to: event.startDate)
             ?? event.startDate
         draft.locationName = event.location
+        draft.mapsURL = mapLinksByEventID[occurrence.id] ?? ""
         draft.latitude = event.latitude ?? draft.latitude
         draft.longitude = event.longitude ?? draft.longitude
         draft.capacity = event.maxParticipants ?? draft.capacity
@@ -3269,6 +3286,34 @@ final class HomeStore {
             paymentMethodsByTeam[event.workspaceId ?? selectedTeamID]?.first { $0.id == id }
         }.map(PaymentMethodDraft.init(record:))
         return draft
+    }
+
+    /// The venue link the organizer pasted for this workout, or nil. Asked of
+    /// the server once per event; a failed read is not cached, so the next
+    /// tap tries again.
+    @discardableResult
+    func loadMapLink(for eventID: UUID) async -> String? {
+        if let cached = mapLinksByEventID[eventID] { return cached.isEmpty ? nil : cached }
+        guard !isPreview else { return nil }
+        do {
+            let link = try await EventService.shared.eventMapLink(eventId: eventID)
+            mapLinksByEventID[eventID] = link ?? ""
+            return link
+        } catch {
+            return nil
+        }
+    }
+
+    /// Keeps the link the organizer pasted. Best effort: the workout itself is
+    /// already saved, and directions still work from the pin without it.
+    private func saveMapLink(_ url: String, eventID: UUID) async {
+        do {
+            try await EventService.shared.setEventMapLink(eventId: eventID, url: url)
+            // Other occurrences of the series share the link; drop them all.
+            mapLinksByEventID = [eventID: url]
+        } catch {
+            errorMessage = ServerErrorMessage.arabic(for: error)
+        }
     }
 
     /// Resolves a notification deep link into the live Home occurrence,

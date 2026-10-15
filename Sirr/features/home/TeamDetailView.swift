@@ -170,7 +170,7 @@ struct TeamDetailView: View {
                 member: shape,
                 avatarImageData: member.id == feed.currentUserID ? feed.avatarData : nil,
                 share: 0,
-                loadRating: usesFootballFeatures && feed.canRate(shape)
+                loadRating: usesFootballFeatures && shape.userId != nil
                     ? { try await feed.playerRating(for: shape) }
                     : nil,
                 submitRating: usesFootballFeatures && feed.canRate(shape)
@@ -217,6 +217,7 @@ struct TeamDetailView: View {
         d.endTime = plan.endTime
         d.locationName = plan.locationName
         d.locationAddress = plan.locationAddress
+        d.mapsURL = plan.sourceEventID.flatMap { feed.mapLinksByEventID[$0] } ?? ""
         d.latitude = plan.latitude
         d.longitude = plan.longitude
         d.capacity = plan.capacity
@@ -392,14 +393,21 @@ struct TeamDetailView: View {
     }
 
     private func openDirections(_ provider: EventDirectionsProvider, plan: FeedPlan) {
-        let destination = EventDirectionsDestination(
-            latitude: plan.latitude,
-            longitude: plan.longitude,
-            name: plan.locationName
-        )
-        guard let url = provider.url(for: destination) else { return }
         Haptics.impact(.light)
-        UIApplication.shared.open(url)
+        Task {
+            var link: String?
+            if provider == .hudhud, let eventID = plan.sourceEventID {
+                link = await feed.loadMapLink(for: eventID)
+            }
+            let destination = EventDirectionsDestination(
+                latitude: plan.latitude,
+                longitude: plan.longitude,
+                name: plan.locationName,
+                mapLink: link
+            )
+            guard let url = provider.url(for: destination) else { return }
+            await UIApplication.shared.open(url)
+        }
     }
 
     // MARK: - Members

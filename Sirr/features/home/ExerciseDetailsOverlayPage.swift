@@ -180,6 +180,8 @@ struct ExerciseDetailsOverlayPage: View {
         .task {
             await feed.loadGroupDetails(teamID)
             hasLoadedGroupDetails = true
+            // Before the editor can open, so it shows the saved venue link.
+            if let eventID = currentOccurrence?.id { await feed.loadMapLink(for: eventID) }
         }
         .alert("حذف «\(exerciseTitle)»؟", isPresented: $showsDeleteConfirm) {
             Button("حذف التمرين", role: .destructive) {
@@ -246,7 +248,7 @@ struct ExerciseDetailsOverlayPage: View {
                 member: player,
                 avatarImageData: member.id == feed.currentUserID ? feed.avatarData : nil,
                 share: 0,
-                loadRating: usesFootballFeatures && feed.canRate(player)
+                loadRating: usesFootballFeatures && player.userId != nil
                     ? { try await feed.playerRating(for: player) }
                     : nil,
                 submitRating: usesFootballFeatures && feed.canRate(player)
@@ -608,9 +610,15 @@ struct ExerciseDetailsOverlayPage: View {
     }
 
     private func openDirections(_ provider: EventDirectionsProvider) {
-        guard let url = provider.url(for: directionsDestination) else { return }
         Haptics.impact(.light)
-        UIApplication.shared.open(url)
+        Task {
+            var destination = directionsDestination
+            if provider == .hudhud, let eventID = currentOccurrence?.id {
+                destination.mapLink = await feed.loadMapLink(for: eventID)
+            }
+            guard let url = provider.url(for: destination) else { return }
+            await UIApplication.shared.open(url)
+        }
     }
 
     private func rosterShape(of member: FeedTeamMember) -> FeedMember {

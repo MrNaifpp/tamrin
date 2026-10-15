@@ -1256,7 +1256,7 @@ private struct CustomVenueForm: View {
     private var trimmedLink: String { mapsLink.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     private var isLinkValid: Bool {
-        trimmedLink.isEmpty || URL(string: trimmedLink)?.scheme?.hasPrefix("http") == true
+        trimmedLink.isEmpty || URL(string: trimmedLink)?.scheme == "https"
     }
 
     var body: some View {
@@ -1353,6 +1353,7 @@ private struct CustomVenueForm: View {
         plan.venueKind = .custom
         plan.locationName = trimmedName
         plan.locationAddress = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        if plan.mapsURL != trimmedLink { plan.mapsURLChanged = true }
         plan.mapsURL = trimmedLink
         if let coordinate = Self.coordinate(from: trimmedLink) {
             plan.latitude = coordinate.latitude
@@ -1513,8 +1514,10 @@ private struct RentedVenueSearch: View {
         plan.venueKind = .rented
         plan.locationName = name
         plan.locationAddress = address
-        // A rented pitch carries no hand-written directions of its own.
+        // A rented pitch carries no hand-written directions of its own, and
+        // the link saved for the old venue would lead somewhere else.
         plan.mapsURL = ""
+        plan.mapsURLChanged = true
         if let latitude { plan.latitude = latitude }
         if let longitude { plan.longitude = longitude }
         Haptics.impact(.light)

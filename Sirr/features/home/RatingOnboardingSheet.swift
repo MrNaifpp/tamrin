@@ -49,18 +49,43 @@ struct RatingOnboardingSheet: View {
         )
     ]
 
-    private var current: RatingOnboardingStep { Self.steps[step] }
     private var isLast: Bool { step == Self.steps.count - 1 }
 
     var body: some View {
+        NavigationStack {
+            // The system pager, so a swipe moves between cards in both
+            // directions; «التالي» moves the same selection. Same as the
+            // registration settings cards.
+            TabView(selection: $step) {
+                ForEach(Self.steps.indices, id: \.self) { index in
+                    page(Self.steps[index]).tag(index)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .safeAreaInset(edge: .bottom) { controls }
+            .background(TamrinTheme.page.ignoresSafeArea())
+            .toolbar {
+                // A way out that is not the last page. Marked as seen either
+                // way: skipping is a decision about this screen, and showing it
+                // again would read as the app not having listened.
+                if !isLast {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("تخطٍ") { finish() }
+                    }
+                }
+            }
+        }
+        .environment(\.layoutDirection, .tamrin)
+        .environment(\.colorScheme, .dark)
+    }
+
+    private func page(_ card: RatingOnboardingStep) -> some View {
         GeometryReader { proxy in
             VStack(spacing: 0) {
-                skipRow
-
                 Spacer(minLength: 0)
 
                 VStack(spacing: 12) {
-                    Text(current.title)
+                    Text(card.title)
                         .font(TamrinFont.font(size: 27, weight: .bold))
                         .foregroundStyle(.white)
                         .multilineTextAlignment(.center)
@@ -71,14 +96,12 @@ struct RatingOnboardingSheet: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
 
-                    Text(current.body)
+                    Text(card.body)
                         .font(TamrinFont.font(size: 16, weight: .regular))
                         .foregroundStyle(.white.opacity(0.66))
                         .multilineTextAlignment(.center)
                         .lineSpacing(4)
                 }
-                .id(step)
-                .transition(.blurReplace)
                 .padding(.horizontal, 28)
 
                 Spacer(minLength: 0)
@@ -87,22 +110,22 @@ struct RatingOnboardingSheet: View {
                 // on the feature actually running — a rater who has seen the
                 // ruler move needs less convincing about it than any sentence
                 // could manage.
-                RatingOnboardingArtView(art: current.art)
+                RatingOnboardingArtView(art: card.art)
                     .frame(height: proxy.size.height * 0.50)
                     .frame(maxWidth: .infinity)
-                    .id(current.art)
-                    .transition(.blurReplace)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 16) {
-                // With the button rather than above the film: the two are the
-                // controls of this page, and splitting them put a row of dots
-                // in the middle of the picture.
-                progress
+    }
 
-                Button {
+    private var controls: some View {
+        VStack(spacing: 16) {
+            // With the button rather than above the film: the two are the
+            // controls of this page, and splitting them put a row of dots
+            // in the middle of the picture.
+            progress
+
+            Button {
                 if isLast {
                     finish()
                 } else {
@@ -120,42 +143,21 @@ struct RatingOnboardingSheet: View {
                     .frame(height: 52)
                     .background(ratingForward, in: .capsule)
             }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 14)
-            .padding(.bottom, 8)
-            .background {
-                // The film runs behind this, so the controls need the page
-                // under them to stay readable.
-                LinearGradient(
-                    colors: [TamrinTheme.page.opacity(0), TamrinTheme.page],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-            }
-        }
-        .background(TamrinTheme.page.ignoresSafeArea())
-        .environment(\.layoutDirection, .tamrin)
-        .environment(\.colorScheme, .dark)
-    }
-
-    /// A way out that is not the last page. Marked as seen either way: skipping
-    /// is a decision about this screen, and showing it again would read as the
-    /// app not having listened.
-    private var skipRow: some View {
-        HStack {
-            Spacer(minLength: 0)
-            Button("تخطٍ") { finish() }
-                .font(TamrinFont.font(size: 16, weight: .medium))
-                .foregroundStyle(.white.opacity(0.55))
-                .opacity(isLast ? 0 : 1)
-                .disabled(isLast)
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 20)
-        .padding(.top, 8)
-        .animation(.smooth(duration: 0.25), value: isLast)
+        .padding(.top, 14)
+        .padding(.bottom, 8)
+        .background {
+            // The film runs behind this, so the controls need the page
+            // under them to stay readable.
+            LinearGradient(
+                colors: [TamrinTheme.page.opacity(0), TamrinTheme.page],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+        }
     }
 
     private func finish() {
@@ -272,6 +274,13 @@ final class LoopingVideoView: UIView {
         // which is what the fade above is there to finish.
         playerLayer?.videoGravity = .resizeAspectFill
         player.play()
+    }
+
+    /// The pager can take the page off screen and bring it back; the clip
+    /// resumes whenever it is on screen again.
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window != nil { player.play() }
     }
 
     @available(*, unavailable)

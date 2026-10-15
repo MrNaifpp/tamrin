@@ -106,6 +106,17 @@
         }
       }
     },
+    "%@ ريال" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ SAR"
+          }
+        }
+      }
+    },
     "%@ ﷼" : {
 
     },
@@ -267,6 +278,7 @@
       }
     },
     "%@، لا يوجد موعد" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -300,6 +312,7 @@
 
     },
     "%lld أصوات" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "variations" : {
@@ -322,6 +335,7 @@
       }
     },
     "%lld أصوات · شكرًا لكل من شارك" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "variations" : {
@@ -388,6 +402,7 @@
       }
     },
     "%lld ثانية من %lld" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -455,9 +470,6 @@
         }
       }
     },
-    "•" : {
-
-    },
     "⚽" : {
 
     },
@@ -513,6 +525,7 @@
 
     },
     "PNG بخلفية شفافة يعطي أفضل نتيجة داخل البطاقة." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -944,11 +957,22 @@
       }
     },
     "أعلى وأسفل" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Up and Down"
+          }
+        }
+      }
+    },
+    "أُغلق التسجيل لهذا الموعد." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Registration for this session is closed."
           }
         }
       }
@@ -983,6 +1007,17 @@
         }
       }
     },
+    "ألغيت عملية الدفع" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Payment cancelled"
+          }
+        }
+      }
+    },
     "أنا" : {
       "localizations" : {
         "en" : {
@@ -994,6 +1029,7 @@
       }
     },
     "أنت" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1104,6 +1140,7 @@
       }
     },
     "أنشئ بطاقتك" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1134,6 +1171,7 @@
       }
     },
     "أُنشئ موعد جديد" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1159,6 +1197,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Or send it directly with"
+          }
+        }
+      }
+    },
+    "أو بالبطاقة" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Or by card"
           }
         }
       }
@@ -1223,6 +1272,16 @@
         }
       }
     },
+    "إذا حوّلت للمنظم مباشرة، اطلب منه يأكد إنه وصلته." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If you paid the admin directly, ask them to confirm they received it."
+          }
+        }
+      }
+    },
     "إرسال الإشعار" : {
       "localizations" : {
         "en" : {
@@ -1239,6 +1298,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Remove"
+          }
+        }
+      }
+    },
+    "إزالة %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove %@"
           }
         }
       }
@@ -1424,6 +1493,7 @@
       }
     },
     "إعادة التجربة من البداية" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1474,6 +1544,7 @@
       }
     },
     "إعادة ضبط الموضع" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1514,6 +1585,7 @@
       }
     },
     "إغلاق إنشاء البطاقة؟" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1524,6 +1596,7 @@
       }
     },
     "إغلاق البطاقة" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1544,6 +1617,7 @@
       }
     },
     "إغلاق دون حفظ" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1594,6 +1668,7 @@
       }
     },
     "إنستجرام" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1614,6 +1689,7 @@
       }
     },
     "إنشاء المواعيد متاح للمشرف فقط." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1634,6 +1710,7 @@
       }
     },
     "إنشاء موعد" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1644,6 +1721,7 @@
       }
     },
     "إنشاء موعد جديد" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1664,6 +1742,7 @@
       }
     },
     "إنهاء التصويت التجريبي" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1774,6 +1853,7 @@
       }
     },
     "اختر صورة واضحة لشخص واحد." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1894,6 +1974,7 @@
       }
     },
     "اختيار %@ من المشاركة" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1914,6 +1995,7 @@
       }
     },
     "اختيار صورة جديدة للبطاقة" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1963,12 +2045,32 @@
         }
       }
     },
+    "ادفع الآن" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pay now"
+          }
+        }
+      }
+    },
     "ادفع المبلغ للمشرف عند وصولك للملعب" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pay the admin when you arrive at the venue"
+          }
+        }
+      }
+    },
+    "ادفع بالبطاقة" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pay by card"
           }
         }
       }
@@ -2046,6 +2148,7 @@
       }
     },
     "استمر في الضغط" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2516,6 +2619,7 @@
       }
     },
     "الأرقام مبدئية إلى أن يتوفر تقييم زملائك." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2666,6 +2770,7 @@
       }
     },
     "الاحتفاظ باختياري السابق" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2926,6 +3031,7 @@
       }
     },
     "التسديــد" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2946,6 +3052,7 @@
       }
     },
     "التصويت سرّي. النتيجة تظهر بعد 24 ساعة." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2956,6 +3063,7 @@
       }
     },
     "التصويت غير متاح" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2966,6 +3074,7 @@
       }
     },
     "التصويت للمسجلين في الموعد فقط" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3056,6 +3165,7 @@
       }
     },
     "التمريــر" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3262,6 +3372,7 @@
       }
     },
     "الدفــاع" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3277,6 +3388,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Payment"
+          }
+        }
+      }
+    },
+    "الدفع بالبطاقة" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pay by card"
+          }
+        }
+      }
+    },
+    "الدفع بالبطاقة غير متاح لهذه المجموعة بعد." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Card payments aren’t available for this group yet."
+          }
+        }
+      }
+    },
+    "الدفع عبر Apple Pay غير مهيأ في هذه النسخة." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Pay isn’t set up in this version."
           }
         }
       }
@@ -3412,6 +3556,7 @@
       }
     },
     "السرعــة" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3473,6 +3618,7 @@
       }
     },
     "العودة لاختيار صورة أخرى" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3483,6 +3629,7 @@
       }
     },
     "العودة للمواعيد" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3653,6 +3800,7 @@
       }
     },
     "اللمسات الأخيرة…" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3673,6 +3821,7 @@
       }
     },
     "اللياقــة" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3743,7 +3892,6 @@
       }
     },
     "المتابعة عبر Apple" : {
-      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3925,6 +4073,7 @@
       }
     },
     "المواعيد" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3974,7 +4123,11 @@
         }
       }
     },
+    "الموافقة والضيوف" : {
+
+    },
     "الموعد التالي" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -3985,6 +4138,7 @@
       }
     },
     "الموعد السابق" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4054,6 +4208,16 @@
         }
       }
     },
+    "انتهت الجلسة. سجّل الدخول مرة أخرى." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your session has expired. Sign in again."
+          }
+        }
+      }
+    },
     "انتهت جلستك. سجّل الدخول مرة ثانية." : {
       "localizations" : {
         "en" : {
@@ -4085,6 +4249,7 @@
       }
     },
     "انتهى التصويت" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4373,6 +4538,7 @@
       }
     },
     "بانتظار الترشيحات" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4423,6 +4589,7 @@
       }
     },
     "بانتظار ترشيحات المشرف. يلزم وجود ثلاثة لاعبين مسجلين على الأقل." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4448,6 +4615,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "You'll leave the group and its sessions will disappear from your list. You can rejoin anytime with the invite code."
+          }
+        }
+      }
+    },
+    "بدأ التمرين، فلن يُسترجع المبلغ." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The session has started, so the amount won’t be refunded."
           }
         }
       }
@@ -4533,6 +4710,7 @@
       }
     },
     "بطاقة %@، %@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -4549,6 +4727,7 @@
       }
     },
     "بطاقتك جاهزة" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4559,6 +4738,7 @@
       }
     },
     "بطاقتك، بطريقتك" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4609,6 +4789,7 @@
       }
     },
     "بيانات الموعد غير متطابقة." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4628,7 +4809,18 @@
         }
       }
     },
+    "تأخر التحقق من الدفع. سيتأكد مقعدك تلقائيًا عند وصول التأكيد." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verifying the payment is taking longer than usual. Your spot will be confirmed automatically once it arrives."
+          }
+        }
+      }
+    },
     "تأكد من ظهور الوجه والرأس والكتفين بالكامل." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4669,6 +4861,7 @@
       }
     },
     "تأكيد التصويت" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4679,6 +4872,7 @@
       }
     },
     "تأكيد التصويت لهذا اللاعب؟" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4758,6 +4952,9 @@
         }
       }
     },
+    "تتحكم كيف يسجّل اللاعبين في تمرينك." : {
+
+    },
     "تجربــة مثاليـــة" : {
       "localizations" : {
         "en" : {
@@ -4769,6 +4966,7 @@
       }
     },
     "تجربة محلية: نضبط موضع الصورة على جهازك، ولن تُرسل إلى خدمة ذكاء اصطناعي." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4779,6 +4977,7 @@
       }
     },
     "تجربة: إنهاء التصويت وعرض النتيجة" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4819,6 +5018,7 @@
       }
     },
     "تحدد هذا الموعد، وتضيف مواعيد جديدة متى احتجت. تبقى المجموعة وأعضاؤها." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4829,6 +5029,7 @@
       }
     },
     "تحديث" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5091,6 +5292,7 @@
       }
     },
     "تصويتك" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5101,6 +5303,7 @@
       }
     },
     "تصويتك · بانتظار النتائج" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5111,6 +5314,7 @@
       }
     },
     "تصويتك ✓" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5171,6 +5375,7 @@
       }
     },
     "تعديل البطاقة" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5211,6 +5416,7 @@
       }
     },
     "تعديل موضع الصورة" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5420,6 +5626,16 @@
         }
       }
     },
+    "تعذر التحقق من الدفع. لم يُخصم أي مبلغ." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t verify the payment. You weren’t charged."
+          }
+        }
+      }
+    },
     "تعذر التحقق من تسجيلك. حاول مجددًا" : {
       "localizations" : {
         "en" : {
@@ -5470,7 +5686,19 @@
         }
       }
     },
+    "تعذر تجهيز الدفع. حاول مرة أخرى." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t prepare the payment. Try again."
+          }
+        }
+      }
+    },
     "تعذّر تجهيز المشاركة. حاول مرة أخرى." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5501,6 +5729,7 @@
       }
     },
     "تعذّر تحديد الحساب لحفظ البطاقة. حاول مرة أخرى." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5521,6 +5750,7 @@
       }
     },
     "تعذّر تحميل التصويت" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5561,6 +5791,7 @@
       }
     },
     "تعذّر تحميل رجل المباراة. حاول مجددًا." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5701,6 +5932,7 @@
       }
     },
     "تعذّر حفظ البطاقة على الجهاز. حاول مرة ثانية." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5741,6 +5973,7 @@
       }
     },
     "تعذّر حفظ صوتك. قد يكون التصويت انتهى؛ حدّث الصفحة وحاول مجددًا." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5760,6 +5993,17 @@
         }
       }
     },
+    "تعذر فتح Apple Pay. تأكد من إضافة بطاقة في Wallet." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t open Apple Pay. Make sure you’ve added a card in Wallet."
+          }
+        }
+      }
+    },
     "تعذر فتح التمرين" : {
       "localizations" : {
         "en" : {
@@ -5771,6 +6015,7 @@
       }
     },
     "تعذّر فتح الصورة. جرّب صورة أخرى أصغر من 25 ميجابايت." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5831,6 +6076,7 @@
       }
     },
     "تعذّر نشر الترشيحات. حدّث القائمة وحاول مجددًا." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5841,6 +6087,7 @@
       }
     },
     "تعليمات الصورة" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5871,6 +6118,7 @@
       }
     },
     "تغيير اختياري" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5991,6 +6239,7 @@
       }
     },
     "تكبير بطاقة %@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6021,6 +6270,7 @@
       }
     },
     "تم الترشيح وفتح التصويت" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6030,7 +6280,19 @@
         }
       }
     },
+    "تم الدفع وتأكد مقعدك" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paid. Your spot is confirmed"
+          }
+        }
+      }
+    },
     "تم توحيد حجم الوجه وموضعه تلقائيًا. راجع الشعر والكتفين قبل المتابعة." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6171,6 +6433,7 @@
       }
     },
     "ثابت" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6207,6 +6470,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Deleting…"
+          }
+        }
+      }
+    },
+    "جارٍ تجهيز الدفع" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preparing payment"
           }
         }
       }
@@ -6311,6 +6584,17 @@
         }
       }
     },
+    "حاول مرة أخرى" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again"
+          }
+        }
+      }
+    },
     "حاول مرة أخرى." : {
       "localizations" : {
         "en" : {
@@ -6332,6 +6616,7 @@
       }
     },
     "حجم اللاعب" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6400,6 +6685,9 @@
           }
         }
       }
+    },
+    "حدد قبل كم يوم وفي أي ساعة يفتح التسجيل." : {
+
     },
     "حدّد لاعبًا ثم انقله بالزر أو اختر لاعبًا من الفريق الآخر للتبديل." : {
       "localizations" : {
@@ -6602,6 +6890,7 @@
       }
     },
     "حفظ الموعد" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6702,6 +6991,7 @@
       }
     },
     "خلّنا نبدأ" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6732,6 +7022,7 @@
       }
     },
     "خيارات التجربة" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6942,6 +7233,7 @@
       }
     },
     "رجل المباراة" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6972,6 +7264,7 @@
       }
     },
     "رشّح ثلاثة لاعبين" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6982,6 +7275,7 @@
       }
     },
     "رشّح ثلاثة لاعبين، وخلّ الاختيار للفريق." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6992,6 +7286,7 @@
       }
     },
     "رشّح نجوم المباراة" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7192,6 +7487,7 @@
       }
     },
     "ستُضاف الصورة التوضيحية هنا" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7222,6 +7518,7 @@
       }
     },
     "ستوري إنستجرام" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7232,6 +7529,7 @@
       }
     },
     "ستوري سناب" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7412,6 +7710,7 @@
       }
     },
     "سجّل نفسك في الموعد أولًا." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7532,6 +7831,7 @@
       }
     },
     "سناب شات" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7542,6 +7842,7 @@
       }
     },
     "سنجهّز البطاقة بمقاس %@. في هذه النسخة اختر %@ من ورقة المشاركة، أو احفظ الصورة واستخدمها في الستوري." : {
+      "extractionState" : "stale",
       "localizations" : {
         "ar" : {
           "stringUnit" : {
@@ -7614,6 +7915,7 @@
       }
     },
     "سيصل تنبيه للاعبين المسجلين. يستمر التصويت 24 ساعة، ولا يمكن تغيير المرشحين بعد النشر." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7694,6 +7996,7 @@
       }
     },
     "شاركها، وخلّ أصحابك يشوفونها." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7704,6 +8007,7 @@
       }
     },
     "شاهد بطاقتك ثم شاركها مع أصحابك." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7764,6 +8068,7 @@
       }
     },
     "صوت" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7774,6 +8079,7 @@
       }
     },
     "صوّت لـ %@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7784,6 +8090,7 @@
       }
     },
     "صوّت لرجل المباراة" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7794,6 +8101,7 @@
       }
     },
     "صوّت للاعبك" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7804,6 +8112,7 @@
       }
     },
     "صوتك محفوظ" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7814,6 +8123,7 @@
       }
     },
     "صوتك محفوظ، واختيارك يبقى سرّيًا" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7844,6 +8154,7 @@
       }
     },
     "صورة واضحة لك، وبطاقة تحمل اسمك وتقييم زملائك." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7859,6 +8170,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Guest"
+          }
+        }
+      }
+    },
+    "ضيوفك" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your guests"
           }
         }
       }
@@ -7994,6 +8315,7 @@
       }
     },
     "عرض النتيجة" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -8049,6 +8371,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "across %@"
+          }
+        }
+      }
+    },
+    "عليك قطة سابقة" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You have an unpaid split"
+          }
+        }
+      }
+    },
+    "عليك قطة لم تُدفع من تمرين سابق. ادفعها أولاً عشان تسجّل." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You have an unpaid split from an earlier session. Pay it first to register."
           }
         }
       }
@@ -8214,6 +8556,7 @@
       }
     },
     "فتح الموعد بكامل الشاشة" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -8853,6 +9196,16 @@
         }
       }
     },
+    "لا يمكن إزالة هذا المقعد." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This spot can’t be removed."
+          }
+        }
+      }
+    },
     "لا يمكن إعادة فتح دفع هذه القطة." : {
       "localizations" : {
         "en" : {
@@ -8883,6 +9236,17 @@
         }
       }
     },
+    "لا يوجد مبلغ مستحق على هذا الموعد." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing is owed for this session."
+          }
+        }
+      }
+    },
     "لا يوجد مشاركين بعد" : {
       "localizations" : {
         "en" : {
@@ -8899,6 +9263,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No session scheduled"
+          }
+        }
+      }
+    },
+    "لاحقاً" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Later"
           }
         }
       }
@@ -8954,6 +9328,7 @@
       }
     },
     "لاعب" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -9004,6 +9379,7 @@
       }
     },
     "لديك تسجيل قائم في هذا الموعد." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -9054,6 +9430,7 @@
       }
     },
     "لرجل المباراة" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -9084,6 +9461,7 @@
       }
     },
     "لم تُسجّل أصوات هذه المرة." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -9103,7 +9481,40 @@
         }
       }
     },
+    "لم تنجح عملية الدفع." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The payment didn’t go through."
+          }
+        }
+      }
+    },
+    "لم تنجح عملية الدفع. تحقق من البطاقة وحاول مرة أخرى." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The payment didn’t go through. Check your card and try again."
+          }
+        }
+      }
+    },
+    "لم تنجح عملية الدفع. حاول مرة أخرى." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The payment didn’t go through. Try again."
+          }
+        }
+      }
+    },
     "لم نحدّد وجهًا واحدًا بوضوح. اضبط الحجم والموضع قبل المتابعة." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -9305,6 +9716,36 @@
         }
       }
     },
+    "ما دفعت قطتك في %@. ادفعها عشان تقدر تسجّل." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You haven’t paid your split for %@. Pay it so you can register."
+          }
+        }
+      }
+    },
+    "ما دفعت قطتك في تمرين سابق. ادفعها عشان تقدر تسجّل." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You haven’t paid your split for an earlier session. Pay it so you can register."
+          }
+        }
+      }
+    },
+    "ما دفعته بالبطاقة يُسترجع إليها. التحويل البنكي يُرتَّب مع المشرف." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Card payments are refunded to the card. Bank transfers are settled with the admin."
+          }
+        }
+      }
+    },
     "ما فيه اتصال بالإنترنت. تأكد من الشبكة وحاول مرة أخرى." : {
       "localizations" : {
         "en" : {
@@ -9496,11 +9937,22 @@
       }
     },
     "متغير" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Flexible"
+          }
+        }
+      }
+    },
+    "متكرر" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recurring"
           }
         }
       }
@@ -9516,6 +9968,7 @@
       }
     },
     "مثال للصورة المناسبة" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -9625,6 +10078,16 @@
         }
       }
     },
+    "مرة واحدة" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "One-time"
+          }
+        }
+      }
+    },
     "مرحباً" : {
       "localizations" : {
         "en" : {
@@ -9639,6 +10102,7 @@
 
     },
     "مرشّح" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -9709,6 +10173,7 @@
       }
     },
     "مشاركة البطاقة" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -9819,6 +10284,7 @@
       }
     },
     "معاينة بطاقتك" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10025,6 +10491,7 @@
       }
     },
     "من صنع الفارق؟" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10055,6 +10522,7 @@
       }
     },
     "مواعيد التمرين" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10065,6 +10533,7 @@
       }
     },
     "موعد جديد" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10114,6 +10583,9 @@
         }
       }
     },
+    "ميزة جديدة، إعدادات التسجيل ✨" : {
+
+    },
     "ميزة جديدة، تقييم اللاعبين ✨" : {
       "localizations" : {
         "en" : {
@@ -10134,7 +10606,29 @@
         }
       }
     },
+    "نتحقق من الدفع" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verifying payment"
+          }
+        }
+      }
+    },
+    "نتحقق من الدفع…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verifying payment…"
+          }
+        }
+      }
+    },
     "نتيجة رجل المباراة" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10145,6 +10639,7 @@
       }
     },
     "نجمها باختياركم" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10155,6 +10650,7 @@
       }
     },
     "نجهّز بطاقتك" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10165,6 +10661,7 @@
       }
     },
     "نجوم المباراة" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10205,6 +10702,7 @@
       }
     },
     "نرتّب الصورة داخل البطاقة…" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10325,6 +10823,7 @@
       }
     },
     "نشر المرشحين · %lld/3" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10335,6 +10834,7 @@
       }
     },
     "نشر المرشحين الثلاثة؟" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10345,6 +10845,7 @@
       }
     },
     "نشر وفتح التصويت" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10411,6 +10912,7 @@
       }
     },
     "نلعبها سوا" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10690,6 +11192,9 @@
         }
       }
     },
+    "وافق على كل طلب بنفسك، وشغّل أو أوقف الضيوف." : {
+
+    },
     "وجود مناسبة" : {
       "localizations" : {
         "en" : {
@@ -10711,6 +11216,7 @@
       }
     },
     "وسائل الدفع المحفوظة" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10751,6 +11257,7 @@
       }
     },
     "وســط" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10830,6 +11337,16 @@
         }
       }
     },
+    "وصلتني القطة" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "I received the split"
+          }
+        }
+      }
+    },
     "وعي" : {
       "localizations" : {
         "en" : {
@@ -10841,6 +11358,7 @@
       }
     },
     "وعي كروي" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10890,6 +11408,19 @@
         }
       }
     },
+    "وقت فتح التسجيل" : {
+
+    },
+    "وما دفعته عنه بالبطاقة يُسترجع إليها." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What you paid for them by card will be refunded to it."
+          }
+        }
+      }
+    },
     "وين تلعبون؟" : {
       "localizations" : {
         "en" : {
@@ -10911,6 +11442,7 @@
       }
     },
     "يبدأ الترشيح بعد نهاية التمرين بخمس دقائق." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -10961,6 +11493,7 @@
       }
     },
     "يتكرر الموعد تلقائيًا كل أسبوع." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -11016,6 +11549,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Building the lineup and splitting the players…"
+          }
+        }
+      }
+    },
+    "يجهّز الدفع ثم يفتح Apple Pay" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prepares the payment, then opens Apple Pay"
+          }
+        }
+      }
+    },
+    "يجهّز الدفع ويفتح وسيلة الدفع المتاحة" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prepares the payment and opens the available payment method"
           }
         }
       }
@@ -11191,6 +11744,7 @@
       }
     },
     "يُضاف الموعد إلى نفس المجموعة، ويصل تنبيه إلى أعضائها." : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -11271,6 +11825,7 @@
       }
     },
     "يفتح إنشاء موعد إضافي في المجموعة نفسها" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -11321,6 +11876,7 @@
       }
     },
     "يفتح التمرين وأعضاءه" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -11341,6 +11897,7 @@
       }
     },
     "يفتح تأكيد التصويت لهذا اللاعب" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -11481,6 +12038,7 @@
       }
     },
     "يفتح مبلغ القطة ووسائل الدفع المتاحة" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -11491,6 +12049,7 @@
       }
     },
     "يفتح مواعيد التمرين" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -11551,6 +12110,7 @@
       }
     },
     "يمين ويسار" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -11692,406 +12252,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Opens"
-          }
-        }
-      }
-    },
-    "%@ ريال" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ SAR"
-          }
-        }
-      }
-    },
-    "ألغيت عملية الدفع" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Payment cancelled"
-          }
-        }
-      }
-    },
-    "أو بالبطاقة" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Or by card"
-          }
-        }
-      }
-    },
-    "أُغلق التسجيل لهذا الموعد." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Registration for this session is closed."
-          }
-        }
-      }
-    },
-    "إذا حوّلت للمنظم مباشرة، اطلب منه يأكد إنه وصلته." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "If you paid the admin directly, ask them to confirm they received it."
-          }
-        }
-      }
-    },
-    "إزالة %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Remove %@"
-          }
-        }
-      }
-    },
-    "ادفع الآن" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pay now"
-          }
-        }
-      }
-    },
-    "ادفع بالبطاقة" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pay by card"
-          }
-        }
-      }
-    },
-    "الدفع بالبطاقة" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pay by card"
-          }
-        }
-      }
-    },
-    "الدفع بالبطاقة غير متاح لهذه المجموعة بعد." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Card payments aren’t available for this group yet."
-          }
-        }
-      }
-    },
-    "الدفع عبر Apple Pay غير مهيأ في هذه النسخة." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apple Pay isn’t set up in this version."
-          }
-        }
-      }
-    },
-    "انتهت الجلسة. سجّل الدخول مرة أخرى." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Your session has expired. Sign in again."
-          }
-        }
-      }
-    },
-    "بدأ التمرين، فلن يُسترجع المبلغ." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The session has started, so the amount won’t be refunded."
-          }
-        }
-      }
-    },
-    "تأخر التحقق من الدفع. سيتأكد مقعدك تلقائيًا عند وصول التأكيد." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verifying the payment is taking longer than usual. Your spot will be confirmed automatically once it arrives."
-          }
-        }
-      }
-    },
-    "تعذر التحقق من الدفع. لم يُخصم أي مبلغ." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Couldn’t verify the payment. You weren’t charged."
-          }
-        }
-      }
-    },
-    "تعذر تجهيز الدفع. حاول مرة أخرى." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Couldn’t prepare the payment. Try again."
-          }
-        }
-      }
-    },
-    "تعذر فتح Apple Pay. تأكد من إضافة بطاقة في Wallet." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Couldn’t open Apple Pay. Make sure you’ve added a card in Wallet."
-          }
-        }
-      }
-    },
-    "تم الدفع وتأكد مقعدك" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Paid. Your spot is confirmed"
-          }
-        }
-      }
-    },
-    "جارٍ تجهيز الدفع" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Preparing payment"
-          }
-        }
-      }
-    },
-    "حاول مرة أخرى" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Try again"
-          }
-        }
-      }
-    },
-    "ضيوفك" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Your guests"
-          }
-        }
-      }
-    },
-    "عليك قطة سابقة" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "You have an unpaid split"
-          }
-        }
-      }
-    },
-    "عليك قطة لم تُدفع من تمرين سابق. ادفعها أولاً عشان تسجّل." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "You have an unpaid split from an earlier session. Pay it first to register."
-          }
-        }
-      }
-    },
-    "لا يمكن إزالة هذا المقعد." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This spot can’t be removed."
-          }
-        }
-      }
-    },
-    "لا يوجد مبلغ مستحق على هذا الموعد." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nothing is owed for this session."
-          }
-        }
-      }
-    },
-    "لاحقاً" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Later"
-          }
-        }
-      }
-    },
-    "لم تنجح عملية الدفع." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The payment didn’t go through."
-          }
-        }
-      }
-    },
-    "لم تنجح عملية الدفع. تحقق من البطاقة وحاول مرة أخرى." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The payment didn’t go through. Check your card and try again."
-          }
-        }
-      }
-    },
-    "لم تنجح عملية الدفع. حاول مرة أخرى." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The payment didn’t go through. Try again."
-          }
-        }
-      }
-    },
-    "ما دفعت قطتك في %@. ادفعها عشان تقدر تسجّل." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "You haven’t paid your split for %@. Pay it so you can register."
-          }
-        }
-      }
-    },
-    "ما دفعت قطتك في تمرين سابق. ادفعها عشان تقدر تسجّل." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "You haven’t paid your split for an earlier session. Pay it so you can register."
-          }
-        }
-      }
-    },
-    "ما دفعته بالبطاقة يُسترجع إليها. التحويل البنكي يُرتَّب مع المشرف." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Card payments are refunded to the card. Bank transfers are settled with the admin."
-          }
-        }
-      }
-    },
-    "متكرر" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Recurring"
-          }
-        }
-      }
-    },
-    "مرة واحدة" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "One-time"
-          }
-        }
-      }
-    },
-    "نتحقق من الدفع" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verifying payment"
-          }
-        }
-      }
-    },
-    "نتحقق من الدفع…" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verifying payment…"
-          }
-        }
-      }
-    },
-    "وصلتني القطة" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "I received the split"
-          }
-        }
-      }
-    },
-    "وما دفعته عنه بالبطاقة يُسترجع إليها." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "What you paid for them by card will be refunded to it."
-          }
-        }
-      }
-    },
-    "يجهّز الدفع ثم يفتح Apple Pay" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Prepares the payment, then opens Apple Pay"
-          }
-        }
-      }
-    },
-    "يجهّز الدفع ويفتح وسيلة الدفع المتاحة" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Prepares the payment and opens the available payment method"
           }
         }
       }

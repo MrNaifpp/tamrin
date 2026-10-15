@@ -42,30 +42,30 @@ struct JoinSessionSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    selfCard
+            // No ScrollView, the way ManualParticipantSheet is built: measured
+            // inside one, this sheet opened far taller than its content.
+            VStack(alignment: .leading, spacing: 14) {
+                selfCard
 
-                    if offersGuests {
-                        guestsSection
-                    }
-
-                    if let errorMessage {
-                        Label(errorMessage, systemImage: "exclamationmark.circle.fill")
-                            .font(TamrinFont.footnote)
-                            .foregroundStyle(.red)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .transition(.blurReplace)
-                            .accessibilityAddTraits(.isStaticText)
-                    }
+                if offersGuests {
+                    guestsSection
                 }
-                .padding(.horizontal, 22)
-                .padding(.top, 14)
-                .padding(.bottom, 16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .sheetContentHeight()
+
+                if let errorMessage {
+                    Label(errorMessage, systemImage: "exclamationmark.circle.fill")
+                        .font(TamrinFont.footnote)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .transition(.blurReplace)
+                        .accessibilityAddTraits(.isStaticText)
+                }
             }
-            .scrollBounceBehavior(.basedOnSize)
+            .padding(.horizontal, 22)
+            .padding(.top, 14)
+            .padding(.bottom, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .sheetContentHeight()
+            .frame(maxHeight: .infinity, alignment: .top)
             .background(TamrinTheme.sheet)
             .animation(.smooth(duration: 0.28), value: errorMessage)
             .animation(.smooth(duration: 0.28), value: guestNames.count)
