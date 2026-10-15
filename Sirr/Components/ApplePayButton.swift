@@ -9,6 +9,8 @@
 //
 
 import SwiftUI
+
+#if canImport(MoyasarSdk)
 import PassKit
 import MoyasarSdk
 
@@ -165,3 +167,19 @@ struct ApplePayButton: View {
         }
     }
 }
+#else
+/// Stand-in while the Moyasar SDK is out of the project. Without it the app
+/// links no PassKit at all, which App Review requires while Apple Pay is not
+/// offered. Never shown: `isAvailable` is false.
+struct ApplePayButton: View {
+    init(quote: CardPaymentQuote, eventName: String, onResult: @escaping (CardPaymentOutcome) -> Void) {}
+    init(action: @escaping () -> Void) {}
+    static var isAvailable: Bool { false }
+    static func present(
+        quote: CardPaymentQuote,
+        eventName: String,
+        onResult: @escaping (CardPaymentOutcome) -> Void
+    ) {}
+    var body: some View { EmptyView() }
+}
+#endif

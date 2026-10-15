@@ -9,6 +9,8 @@
 //
 
 import SwiftUI
+
+#if canImport(MoyasarSdk)
 import MoyasarSdk
 
 struct CardPaymentSheet: View {
@@ -215,3 +217,13 @@ struct CardPaymentSheet: View {
         }
     }
 }
+#else
+/// Stand-in while the Moyasar SDK is out of the project. Unreachable:
+/// `CardPayments.isEnabled` is false without the SDK.
+struct CardPaymentSheet: View {
+    let eventId: UUID
+    let eventName: String
+    let onSettled: () -> Void
+    var body: some View { EmptyView() }
+}
+#endif

@@ -8,7 +8,9 @@
 //
 
 import Foundation
+#if canImport(MoyasarSdk)
 import MoyasarSdk
+#endif
 
 struct CardPaymentSplit: Decodable, Equatable {
     let recipientId: String
@@ -99,6 +101,7 @@ enum CardPaymentOutcome {
     case cancelled
 }
 
+#if canImport(MoyasarSdk)
 extension CardPaymentQuote {
     /// The SDK request this quote describes, built in one place so the card
     /// form and the Apple Pay sheet cannot drift apart. `manual: true` is the
@@ -130,3 +133,4 @@ extension CardPaymentQuote {
         )
     }
 }
+#endif
