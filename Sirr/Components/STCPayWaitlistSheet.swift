@@ -56,8 +56,8 @@ struct STCPayWaitlistSheet: View {
                     .padding(.top, 4)
 
                 Text(didJoin
-                     ? "أنت الآن في قائمة الانتظار. سنرسل لك تنبيهاً عندما يتوفر مقعد."
-                     : "انضم لقائمة الانتظار، وسنرسل لك تنبيهاً عندما يلغي شخص ما حجزه.")
+                     ? String(localized: "أنت الآن في قائمة الانتظار. سنرسل لك تنبيهاً عندما يتوفر مقعد.")
+                     : String(localized: "انضم لقائمة الانتظار، وسنرسل لك تنبيهاً عندما يلغي شخص ما حجزه."))
                     .font(TamrinFont.font(size: 15))
                     .foregroundStyle(Color(white: 0.85))
                     .multilineTextAlignment(.center)
@@ -82,7 +82,7 @@ struct STCPayWaitlistSheet: View {
                         if isJoining {
                             ProgressView().tint(.black)
                         }
-                        Text(didJoin ? "انضممت" : "انضم لقائمة الانتظار")
+                        Text(didJoin ? String(localized: "انضممت") : String(localized: "انضم لقائمة الانتظار"))
                             .font(TamrinFont.font(size: 17, weight: .bold))
                             .foregroundStyle(.black)
                     }
@@ -99,6 +99,6 @@ struct STCPayWaitlistSheet: View {
                 .padding(.bottom, 32)
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
     }
 }

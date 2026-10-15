@@ -47,7 +47,7 @@ struct ForceUpdateSheet: View {
             // has to be the background colour punched out of that fill, since
             // the style would otherwise keep it white on both.
             TamrinActionButton(
-                title: "حدث التطبيق",
+                title: String(localized: "حدث التطبيق"),
                 tint: .primary,
                 labelColor: Color(uiColor: .systemBackground)
             ) {
@@ -59,7 +59,7 @@ struct ForceUpdateSheet: View {
         .padding(.horizontal, 24)
         .padding(.bottom, 12)
         .frame(maxWidth: .infinity)
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .fittedSheet(background: TamrinTheme.sheet, dragIndicator: .hidden)
         // Nothing behind this sheet is usable on an unsupported build, so the
         // swipe, the tap-outside and the hardware back gesture all stay off.

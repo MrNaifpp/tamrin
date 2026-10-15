@@ -60,7 +60,7 @@ struct STCPaySheet: View {
                     Text("المبلغ")
                         .font(TamrinFont.font(size: 13))
                         .foregroundStyle(Color(white: 0.6))
-                    Text(String(format: "%.0f ر.س", amount * Double(groupSize)))
+                    Text(String(format: String(localized: "%.0f ر.س"), amount * Double(groupSize)))
                         .font(TamrinFont.font(size: 32, weight: .bold))
                         .foregroundStyle(.white)
                 }
@@ -113,10 +113,10 @@ struct STCPaySheet: View {
                 .padding(.top, 16)
 
                 // Steps reminder
-                VStack(alignment: .trailing, spacing: 8) {
-                    stepRow(index: 1, text: "افتح تطبيق STC Pay وأرسل المبلغ للرقم أعلاه.")
-                    stepRow(index: 2, text: "ارجع لتمرين واضغط \"أرسلت المبلغ\".")
-                    stepRow(index: 3, text: "سيؤكد صاحب الفعالية الدفعة، وستظهر لك بحالة \"مؤكد\".")
+                VStack(alignment: .leading, spacing: 8) {
+                    stepRow(index: 1, text: String(localized: "افتح تطبيق STC Pay وأرسل المبلغ للرقم أعلاه."))
+                    stepRow(index: 2, text: String(localized: "ارجع لتمرين واضغط \"أرسلت المبلغ\"."))
+                    stepRow(index: 3, text: String(localized: "سيؤكد صاحب الفعالية الدفعة، وستظهر لك بحالة \"مؤكد\"."))
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 20)
@@ -158,22 +158,24 @@ struct STCPaySheet: View {
                 .transition(.opacity)
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
     }
 
     private func stepRow(index: Int, text: String) -> some View {
+        // Number on the leading edge, text flush with it, in either
+        // direction.
         HStack(alignment: .top, spacing: 10) {
-            Text(text)
-                .font(TamrinFont.font(size: 14))
-                .foregroundStyle(Color(white: 0.85))
-                .multilineTextAlignment(.trailing)
-                .frame(maxWidth: .infinity, alignment: .trailing)
             ZStack {
                 Circle().fill(Color.white.opacity(0.15)).frame(width: 24, height: 24)
-                Text("\(index)")
+                Text(verbatim: "\(index)")
                     .font(TamrinFont.font(size: 13, weight: .bold))
                     .foregroundStyle(.white)
             }
+            Text(text)
+                .font(TamrinFont.font(size: 14))
+                .foregroundStyle(Color(white: 0.85))
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

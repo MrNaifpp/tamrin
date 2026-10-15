@@ -1,4 +1,5 @@
--- Fill milestone notifications to the event owner. Local stack only:
+-- Fill milestone notifications. Since 20260928110000 the group hears them
+-- too, so owner-specific assertions use owner_pushes. Local stack only:
 --   psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
 --     -v ON_ERROR_STOP=1 -f supabase/tests/event_fill_notifications_test.sql
 
@@ -19,12 +20,24 @@ begin
 end;
 $$;
 
--- Counts owner-bound pushes of one type for one event.
+-- Counts pushes of one type for one event, to anyone.
 create or replace function pg_temp.fill_pushes(p_event_id uuid, p_type text)
 returns int
 language sql as $$
   select count(*)::int from public.push_outbox
   where event_id = p_event_id and type = p_type;
+$$;
+
+-- Counts pushes of one type for one event, to its owner only.
+create or replace function pg_temp.owner_pushes(p_event_id uuid, p_type text)
+returns int
+language sql as $$
+  select count(*)::int
+  from public.push_outbox o
+  join public.events e on e.id = o.event_id
+  where o.event_id = p_event_id
+    and o.type = p_type
+    and o.user_id = e.creator_id;
 $$;
 
 insert into auth.users (id, email) values
@@ -277,8 +290,12 @@ begin
   v_result := public.add_manual_participant(v_owner_event_id, 'يدوي 3');
   set constraints all immediate;
 
-  if pg_temp.fill_pushes(v_owner_event_id, 'event_fill_50') <> 0 then
+  if pg_temp.owner_pushes(v_owner_event_id, 'event_fill_50') <> 0 then
     raise exception 'FAIL: the owner was told about their own additions';
+  end if;
+  -- The group still hears it: members B and C.
+  if pg_temp.fill_pushes(v_owner_event_id, 'event_fill_50') <> 2 then
+    raise exception 'FAIL: the group missed an owner-caused half';
   end if;
 
   select fill_notified_pct into v_mark from public.events
@@ -292,7 +309,7 @@ begin
   v_result := public.register_event_seat(p_event_id => v_owner_event_id);
   set constraints all immediate;
 
-  if pg_temp.fill_pushes(v_owner_event_id, 'event_fill_50') <> 0 then
+  if pg_temp.fill_pushes(v_owner_event_id, 'event_fill_50') <> 2 then
     raise exception 'FAIL: a spent milestone fired for a later join';
   end if;
 

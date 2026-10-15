@@ -61,9 +61,9 @@ struct LoginView: View {
                     .buttonStyle(.plain)
                     .onChange(of: selectedItem) { newItem in
                         Task {
-                            if let data = try? await newItem?.loadTransferable(type: Data.self) {
-                                selectedImageData = data
-                            }
+                            guard let newItem,
+                                  let data = await newItem.loadAvatarData() else { return }
+                            selectedImageData = data
                         }
                     }
                     .padding(.top, 16)
@@ -106,7 +106,7 @@ struct LoginView: View {
             // Next: the stock iOS 26 action button, so the fill, press
             // animation and disabled treatment all come from the platform.
             .safeAreaInset(edge: .bottom) {
-                TamrinActionButton(title: "التالي", tint: .black) {
+                TamrinActionButton(title: String(localized: "التالي"), tint: .black) {
                     showsOTP = true
                 }
                 .disabled(!isEmailValid)
@@ -114,7 +114,7 @@ struct LoginView: View {
                 .padding(.bottom, 10)
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .scrollDismissesKeyboard(.interactively)
         .navigationDestination(isPresented: $showsOTP) {
             LoginOTPView(email: trimmedEmail, vm: vm)

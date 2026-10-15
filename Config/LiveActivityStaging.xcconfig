@@ -1,0 +1,4 @@
+#include "Staging.xcconfig"
+
+PRODUCT_BUNDLE_IDENTIFIER = $(TAMRIN_LIVE_ACTIVITY_BUNDLE_IDENTIFIER)
+INFOPLIST_KEY_CFBundleDisplayName = تمرين STG

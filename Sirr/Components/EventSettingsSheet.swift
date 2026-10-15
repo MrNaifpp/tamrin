@@ -42,6 +42,14 @@ struct EventSettingsSheet: View {
         case three = "3"
         case unlimited = "غير محدود"
         var id: String { rawValue }
+
+        var displayName: String {
+            switch self {
+            case .locked: String(localized: "مقفل")
+            case .unlimited: String(localized: "غير محدود")
+            case .one, .two, .three: rawValue
+            }
+        }
     }
 
     var body: some View {
@@ -62,7 +70,7 @@ struct EventSettingsSheet: View {
                 }
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .sheetPresentationHaptic()
         .task {
             guard let templateId = event.templateId else { return }
@@ -125,9 +133,9 @@ struct EventSettingsSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             sectionHeader("اللاعبين")
 
-            menuRow(title: "لاعبين ضيوف", value: guestLimit.rawValue) {
+            menuRow(title: "لاعبين ضيوف", value: guestLimit.displayName) {
                 ForEach(GuestLimit.allCases) { option in
-                    Button(option.rawValue) { guestLimit = option }
+                    Button(option.displayName) { guestLimit = option }
                 }
             }
             caption("حدد عدد الضيوف الذين يمكن للشخص إحضارهم.")
@@ -207,14 +215,14 @@ struct EventSettingsSheet: View {
 
     // MARK: - Reusable rows
 
-    private func sectionHeader(_ title: String) -> some View {
+    private func sectionHeader(_ title: LocalizedStringKey) -> some View {
         Text(title)
             .font(.appBody)
             .foregroundStyle(Color(white: 0.5))
             .padding(.horizontal, 4)
     }
 
-    private func caption(_ text: String) -> some View {
+    private func caption(_ text: LocalizedStringKey) -> some View {
         Text(text)
             .font(.appCaption)
             .foregroundStyle(Color(white: 0.5))
@@ -222,7 +230,7 @@ struct EventSettingsSheet: View {
     }
 
     private func menuRow<Content: View>(
-        title: String,
+        title: LocalizedStringKey,
         value: String,
         @ViewBuilder menu: () -> Content
     ) -> some View {
@@ -252,7 +260,7 @@ struct EventSettingsSheet: View {
         }
     }
 
-    private func toggleRow(title: String, isOn: Binding<Bool>) -> some View {
+    private func toggleRow(title: LocalizedStringKey, isOn: Binding<Bool>) -> some View {
         HStack {
             Text(title)
                 .font(.appBody)
@@ -298,7 +306,7 @@ struct EventSettingsSheet: View {
                 recurrenceEnabled = true
                 onRecurrenceChanged?(template)
             } catch {
-                recurrenceError = "تعذر تفعيل التكرار. حاول مرة أخرى."
+                recurrenceError = String(localized: "تعذر تفعيل التكرار. حاول مرة أخرى.")
             }
         }
     }
@@ -314,7 +322,7 @@ struct EventSettingsSheet: View {
                 recurrenceEnabled = false
                 onRecurrenceChanged?(nil)
             } catch {
-                recurrenceError = "تعذر إنهاء التكرار. حاول مرة أخرى."
+                recurrenceError = String(localized: "تعذر إنهاء التكرار. حاول مرة أخرى.")
             }
         }
     }
@@ -330,7 +338,7 @@ struct EventSettingsSheet: View {
                 onDeleted()
                 dismiss()
             } catch {
-                deleteError = "تعذر حذف المناسبة. حاول مرة أخرى."
+                deleteError = String(localized: "تعذر حذف المناسبة. حاول مرة أخرى.")
             }
         }
     }

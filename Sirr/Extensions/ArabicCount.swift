@@ -12,12 +12,14 @@ struct ArabicNoun {
     let dual: String
     /// لاعبين — the plural, used with the numeral for three through ten.
     let plural: String
+    /// player / players — the English app counts the plain way.
+    let english: (one: String, other: String)
 
-    static let player = ArabicNoun(singular: "لاعب", dual: "لاعبين", plural: "لاعبين")
-    static let member = ArabicNoun(singular: "عضو", dual: "عضوان", plural: "أعضاء")
-    static let seat = ArabicNoun(singular: "مقعد", dual: "مقعدين", plural: "مقاعد")
-    static let session = ArabicNoun(singular: "موعد", dual: "موعدين", plural: "مواعيد")
-    static let rating = ArabicNoun(singular: "تقييم", dual: "تقييمين", plural: "تقييمات")
+    static let player = ArabicNoun(singular: "لاعب", dual: "لاعبين", plural: "لاعبين", english: ("player", "players"))
+    static let member = ArabicNoun(singular: "عضو", dual: "عضوان", plural: "أعضاء", english: ("member", "members"))
+    static let seat = ArabicNoun(singular: "مقعد", dual: "مقعدين", plural: "مقاعد", english: ("seat", "seats"))
+    static let session = ArabicNoun(singular: "موعد", dual: "موعدين", plural: "مواعيد", english: ("session", "sessions"))
+    static let rating = ArabicNoun(singular: "تقييم", dual: "تقييمين", plural: "تقييمات", english: ("rating", "ratings"))
 }
 
 extension Int {
@@ -33,9 +35,14 @@ extension Int {
     /// Past a hundred the same rule applies to the last two digits, so 103 is
     /// «103 لاعبين» while 102 is «102 لاعب».
     ///
-    /// Digits come from `Locale.tamrin`: Arabic wording, Western numerals.
+    /// Digits come from `Locale.tamrin`: Arabic wording, Western numerals. In
+    /// English it is simply «1 player», «2 players».
     func counted(_ noun: ArabicNoun) -> String {
         let digits = formatted(.number.locale(.tamrin).grouping(.never))
+
+        guard AppLanguage.isArabic else {
+            return "\(digits) \(self == 1 ? noun.english.one : noun.english.other)"
+        }
 
         switch self {
         case 1:

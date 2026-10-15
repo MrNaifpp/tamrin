@@ -437,6 +437,27 @@ begin
     raise exception 'FAIL: paid standalone rows were snapshotted too early';
   end if;
 
+  -- An unpaid standalone batch nobody declared a transfer for is only money
+  -- owed. A second one joins it instead of waiting on an organizer who has
+  -- nothing to check.
+  v_result := public.register_event_guest_only(
+    p_event_id => v_paid_event_id,
+    p_guest_names => array['دفعة مستقلة ثانية'],
+    p_expected_payment_method_id => v_method_one_id,
+    p_expected_price_per_person => 100,
+    p_payment_method_id => v_method_one_id
+  );
+  if v_result->>'status' <> 'submitted' then
+    raise exception 'FAIL: an undeclared standalone batch blocked a second one %', v_result;
+  end if;
+  delete from public.event_participants
+  where event_id = v_paid_event_id and guest_name = 'دفعة مستقلة ثانية';
+
+  -- A declared transfer waiting on the organizer still holds new batches back.
+  update public.event_participants set payment_declared_at = now()
+  where event_id = v_paid_event_id and user_id is null
+    and added_by = '45000000-0000-0000-0000-000000000002'
+    and payment_status = 'pending';
   v_result := public.register_event_guest_only(
     p_event_id => v_paid_event_id,
     p_guest_names => array['دفعة مستقلة ثانية'],
@@ -445,32 +466,27 @@ begin
     p_payment_method_id => v_method_one_id
   );
   if v_result->>'status' <> 'pending_guest_request' then
-    raise exception 'FAIL: second paid standalone batch %', v_result;
+    raise exception 'FAIL: a declared standalone transfer did not hold a second batch %', v_result;
   end if;
+  update public.event_participants set payment_declared_at = null
+  where event_id = v_paid_event_id and user_id is null
+    and added_by = '45000000-0000-0000-0000-000000000002'
+    and payment_status = 'pending';
 
-  -- Neither a self seat nor a self waitlist row may start while this payment is
-  -- pending. Modern payment returns a status; legacy participant/waitlist
-  -- inserts are stopped by the shared trigger under the same event lock.
-  v_failed := false;
+  -- A pending guest-only batch no longer stops the member queueing for
+  -- themselves (20260929120000). Probed and rolled back so the fixture below
+  -- still sees the member unqueued.
   begin
     v_result := public.join_waitlist(
       v_paid_event_id,
       '45000000-0000-0000-0000-000000000002'
     );
+    raise exception 'PROBE_OK';
   exception when others then
-    v_failed := sqlerrm =
-      'Pending guest request must be resolved before self registration';
+    if sqlerrm <> 'PROBE_OK' then
+      raise exception 'FAIL: waitlist refused during a guest-only batch: %', sqlerrm;
+    end if;
   end;
-  if not v_failed then
-    raise exception 'FAIL: waitlist joined during standalone payment';
-  end if;
-  perform 1
-  from public.event_waitlist
-  where event_id = v_paid_event_id
-    and user_id = '45000000-0000-0000-0000-000000000002';
-  if found then
-    raise exception 'FAIL: failed waitlist insert left a row';
-  end if;
 
   v_result := public.submit_payment_v2(
     p_event_id => v_paid_event_id,
@@ -481,19 +497,17 @@ begin
   if v_result->>'status' <> 'pending_guest_request' then
     raise exception 'FAIL: self registration merged with standalone batch %', v_result;
   end if;
-  v_failed := false;
   begin
     perform public.join_event(
       v_paid_event_id,
       '45000000-0000-0000-0000-000000000002'
     );
+    raise exception 'PROBE_OK';
   exception when others then
-    v_failed := sqlerrm =
-      'Pending guest request must be resolved before self registration';
+    if sqlerrm <> 'PROBE_OK' then
+      raise exception 'FAIL: legacy join refused during a guest-only batch: %', sqlerrm;
+    end if;
   end;
-  if not v_failed then
-    raise exception 'FAIL: legacy join merged with standalone payment';
-  end if;
 
   perform pg_temp.set_auth('45000000-0000-0000-0000-000000000001');
   v_result := public.confirm_payment(

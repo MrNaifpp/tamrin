@@ -47,7 +47,7 @@ struct GroupsDrawer: View {
             .animation(.spring(response: 0.35, dampingFraction: 0.86), value: isPresented)
         }
         .allowsHitTesting(isPresented)
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
     }
 
     private func close() {

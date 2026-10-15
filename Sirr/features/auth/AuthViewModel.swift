@@ -84,7 +84,7 @@ class AuthViewModel: ObservableObject {
             logger.error("Request OTP failed: \(error.localizedDescription)")
             if let urlError = error as? URLError { logger.error("URLError: \(String(describing: urlError))") }
             if error.localizedDescription.lowercased().contains("magic link") {
-                errorMessage = "تعذر إرسال رمز التفعيل. تأكد من تفعيل البريد في Supabase (SMTP أو Email)."
+                errorMessage = String(localized: "تعذر إرسال رمز التفعيل. تأكد من تفعيل البريد في Supabase (SMTP أو Email).")
             } else {
                 errorMessage = ServerErrorMessage.arabic(for: error)
             }
@@ -143,7 +143,7 @@ class AuthViewModel: ObservableObject {
             if (error as NSError).code == ASAuthorizationError.canceled.rawValue { return }
             logger.error("Apple sign-in failed: \(error.localizedDescription)")
             if let urlError = error as? URLError { logger.error("URLError: \(String(describing: urlError))") }
-            errorMessage = "تعذر تسجيل الدخول عبر Apple. حاول مرة أخرى."
+            errorMessage = String(localized: "تعذر تسجيل الدخول عبر Apple. حاول مرة أخرى.")
         }
     }
 
@@ -201,7 +201,7 @@ class AuthViewModel: ObservableObject {
         do {
             guard let session = try? await AuthService.shared.session() else {
                 logger.error("Complete profile failed: no session")
-                errorMessage = "يجب تسجيل الدخول أولاً"
+                errorMessage = String(localized: "يجب تسجيل الدخول أولاً")
                 return
             }
             var avatarUrl: String?
@@ -241,7 +241,7 @@ class AuthViewModel: ObservableObject {
         errorMessage = nil
         defer { isLoading = false }
         guard let canonical = STCPay.normalize(rawInput) else {
-            errorMessage = "رقم STC Pay غير صالح"
+            errorMessage = String(localized: "رقم STC Pay غير صالح")
             logger.error("Save STC Pay number failed: invalid input")
             return
         }
@@ -272,7 +272,7 @@ class AuthViewModel: ObservableObject {
         do {
             guard let session = try? await AuthService.shared.session() else {
                 logger.error("Update profile failed: no session")
-                errorMessage = "يجب تسجيل الدخول أولاً"
+                errorMessage = String(localized: "يجب تسجيل الدخول أولاً")
                 return
             }
             var avatarUrl: String? = currentProfile?.avatarUrl

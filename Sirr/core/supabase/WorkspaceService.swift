@@ -39,7 +39,7 @@ struct WorkspaceRecord: Codable, Identifiable, Hashable {
     /// Universal invite link (same domain as event links).
     var inviteURL: URL? {
         guard let inviteCode else { return nil }
-        return URL(string: "https://guileless-squirrel-b6537a.netlify.app/join/\(inviteCode)")
+        return AppLinks.joinURL(inviteCode)
     }
 }
 

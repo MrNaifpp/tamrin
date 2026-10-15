@@ -58,9 +58,9 @@ enum ManualPaymentServiceError: Error, LocalizedError {
         case let .invalidDraft(issue):
             issue.localizedDescription
         case .paymentMethodNotSelected:
-            "اختر وسيلة الدفع قبل تأكيد التسجيل."
+            String(localized: "اختر وسيلة الدفع قبل تأكيد التسجيل.")
         case .featureUnavailable:
-            "وسائل الدفع غير متاحة حاليًا. حاول مرة أخرى لاحقًا."
+            String(localized: "وسائل الدفع غير متاحة حاليًا. حاول مرة أخرى لاحقًا.")
         case let .malformedResponse(message):
             message
         }
@@ -255,7 +255,7 @@ final class ManualPaymentService {
             )
             guard destination.status == .free || destination.isAvailable else {
                 throw ManualPaymentServiceError.malformedResponse(
-                    "تعذر تحميل وسيلة الدفع المرتبطة بالموعد."
+                    String(localized: "تعذر تحميل وسيلة الدفع المرتبطة بالموعد.")
                 )
             }
             let groupSize = payload.groupSize ?? max(1, guestNames.count + 1)
@@ -292,7 +292,7 @@ final class ManualPaymentService {
 
         default:
             throw ManualPaymentServiceError.malformedResponse(
-                "استجابة غير معروفة من submit_payment_v2: \(payload.status)"
+                String(localized: "استجابة غير معروفة من submit_payment_v2: \(payload.status)")
             )
         }
     }
@@ -379,7 +379,7 @@ final class ManualPaymentService {
             )
             guard destination.status == .free || destination.isAvailable else {
                 throw ManualPaymentServiceError.malformedResponse(
-                    "تعذر تحميل وسيلة الدفع المرتبطة بالموعد."
+                    String(localized: "تعذر تحميل وسيلة الدفع المرتبطة بالموعد.")
                 )
             }
             let groupSize = payload.groupSize ?? guestNames.count
@@ -407,7 +407,7 @@ final class ManualPaymentService {
         case "cancelled": return .cancelled
         default:
             throw ManualPaymentServiceError.malformedResponse(
-                "استجابة غير معروفة من \(function): \(payload.status)"
+                String(localized: "استجابة غير معروفة من \(function): \(payload.status)")
             )
         }
     }
@@ -418,7 +418,7 @@ final class ManualPaymentService {
         } catch {
             manualPaymentLogger.error("Failed to decode payment response: \(error.localizedDescription, privacy: .public)")
             throw ManualPaymentServiceError.malformedResponse(
-                "تعذر قراءة استجابة وسيلة الدفع."
+                String(localized: "تعذر قراءة استجابة وسيلة الدفع.")
             )
         }
     }

@@ -14,24 +14,24 @@ enum PlayerAttribute: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .pace: return "السرعة"
-        case .passing: return "التمرير"
-        case .shooting: return "التسديد"
-        case .stamina: return "اللياقة"
-        case .defending: return "الدفاع"
-        case .awareness: return "الوعي الكروي"
+        case .pace: return String(localized: "السرعة")
+        case .passing: return String(localized: "التمرير")
+        case .shooting: return String(localized: "التسديد")
+        case .stamina: return String(localized: "اللياقة")
+        case .defending: return String(localized: "الدفاع")
+        case .awareness: return String(localized: "الوعي الكروي")
         }
     }
 
     /// Three letters, the way a player card labels the same six.
     var shortTitle: String {
         switch self {
-        case .pace: return "سرع"
-        case .passing: return "تمر"
-        case .shooting: return "تسد"
-        case .stamina: return "ليا"
-        case .defending: return "دفع"
-        case .awareness: return "وعي"
+        case .pace: return String(localized: "سرع")
+        case .passing: return String(localized: "تمر")
+        case .shooting: return String(localized: "تسد")
+        case .stamina: return String(localized: "ليا")
+        case .defending: return String(localized: "دفع")
+        case .awareness: return String(localized: "وعي")
         }
     }
 
@@ -50,12 +50,12 @@ enum PlayerAttribute: String, CaseIterable, Identifiable {
     /// same thing to everyone filling it in.
     var prompt: String {
         switch self {
-        case .pace: return "كم ينطلق ويسبق اللي حوله؟"
-        case .passing: return "كم تمريراته توصل وتفتح اللعب؟"
-        case .shooting: return "كم تسديداته تصير أهداف؟"
-        case .stamina: return "كم يكمّل التمرين بنفس المستوى؟"
-        case .defending: return "كم يقطع الكرة ويغلق الفراغات؟"
-        case .awareness: return "كم يقرأ اللعب ويختار القرار الصح؟"
+        case .pace: return String(localized: "كم ينطلق ويسبق اللي حوله؟")
+        case .passing: return String(localized: "كم تمريراته توصل وتفتح اللعب؟")
+        case .shooting: return String(localized: "كم تسديداته تصير أهداف؟")
+        case .stamina: return String(localized: "كم يكمّل التمرين بنفس المستوى؟")
+        case .defending: return String(localized: "كم يقطع الكرة ويغلق الفراغات؟")
+        case .awareness: return String(localized: "كم يقرأ اللعب ويختار القرار الصح؟")
         }
     }
 }
@@ -68,6 +68,17 @@ enum PlayerPosition: String, CaseIterable {
     case defender = "دفاع"
     case midfielder = "وسط"
     case forward = "هجوم"
+
+    /// The raw value is what the profile and the server store, in Arabic in
+    /// every language. This is what the screen says.
+    var title: String {
+        switch self {
+        case .goalkeeper: return String(localized: "حارس")
+        case .defender: return String(localized: "دفاع")
+        case .midfielder: return String(localized: "وسط")
+        case .forward: return String(localized: "هجوم")
+        }
+    }
 
     /// Exact stored choice. Callers that are about to submit use this rather
     /// than silently judging a missing/legacy position as something else.
@@ -193,7 +204,7 @@ enum RatingBand {
     /// among friends, not a scouting report.
     static func tint(for value: Int) -> Color {
         switch value {
-        case 85...: return TamrinTheme.lime
+        case 85...: return TamrinTheme.success
         case 70..<85: return TamrinTheme.mint
         case 50..<70: return TamrinTheme.peach
         default: return Color(red: 0.85, green: 0.62, blue: 0.55)
@@ -202,12 +213,12 @@ enum RatingBand {
 
     static func label(for value: Int) -> String {
         switch value {
-        case 90...: return "استثنائي"
-        case 80..<90: return "ممتاز"
-        case 70..<80: return "جيد جدًا"
-        case 60..<70: return "جيد"
-        case 45..<60: return "مقبول"
-        default: return "يحتاج تطوير"
+        case 90...: return String(localized: "استثنائي")
+        case 80..<90: return String(localized: "ممتاز")
+        case 70..<80: return String(localized: "جيد جدًا")
+        case 60..<70: return String(localized: "جيد")
+        case 45..<60: return String(localized: "مقبول")
+        default: return String(localized: "يحتاج تطوير")
         }
     }
 }

@@ -56,7 +56,7 @@ struct SplashView: View {
             }
             .ignoresSafeArea()
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .task {
             await runIntroSequence()
         }

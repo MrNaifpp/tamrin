@@ -87,10 +87,10 @@ enum LineupRow: Int, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .forward: return "هجوم"
-        case .midfield: return "وسط"
-        case .defense: return "دفاع"
-        case .goalkeeper: return "حارس"
+        case .forward: return String(localized: "هجوم")
+        case .midfield: return String(localized: "وسط")
+        case .defense: return String(localized: "دفاع")
+        case .goalkeeper: return String(localized: "حارس")
         }
     }
 
@@ -127,8 +127,8 @@ enum LineupSide: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .first: return "الفريق الأول"
-        case .second: return "الفريق الثاني"
+        case .first: return String(localized: "الفريق الأول")
+        case .second: return String(localized: "الفريق الثاني")
         }
     }
 

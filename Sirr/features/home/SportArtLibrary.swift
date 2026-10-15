@@ -66,6 +66,13 @@ enum SportArtLibrary {
     nonisolated private static let backdropContext = CIContext(
         options: [.cacheIntermediates: false]
     )
+    nonisolated(unsafe) private static let detailFrostCache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 16
+        cache.totalCostLimit = 24 * 1_024 * 1_024
+        return cache
+    }()
+    nonisolated private static let detailFrostCreationLock = NSLock()
 
     /// Large enough for a full-width @3x poster, while preventing an oversized
     /// source photo from being decoded at a resolution the screen cannot show.
@@ -107,6 +114,9 @@ enum SportArtLibrary {
     /// Nil when the sport has no photos yet, which is the caller's cue to fall
     /// back to the artwork the app ships with.
     static func photo(for eventID: UUID, sportKey: String?) -> String? {
+        #if DEBUG
+        if let pinned = HomeDebugMemberFixture.pinnedArt[eventID] { return pinned }
+        #endif
         guard let sportKey else { return nil }
         let all = photos(forSport: sportKey)
         guard !all.isEmpty else { return nil }
@@ -198,6 +208,57 @@ enum SportArtLibrary {
         for name in names where seen.insert(name).inserted {
             guard !Task.isCancelled else { return }
             autoreleasepool { _ = backdropImage(named: name) }
+        }
+    }
+
+    nonisolated private static func detailFrostKey(_ name: String, _ size: CGSize) -> NSString {
+        "\(name):\(Int(size.width.rounded()))x\(Int(size.height.rounded()))" as NSString
+    }
+
+    nonisolated static func cachedDetailFrostImage(named name: String, size: CGSize) -> UIImage? {
+        detailFrostCache.object(forKey: detailFrostKey(name, size))
+    }
+
+    /// Match the detail's aspect-fill crop and 26-point frost at a small render
+    /// size. The mask can move without a live full-screen Gaussian blur pass
+    /// for every neighboring date in the carousel.
+    nonisolated static func detailFrostImage(named name: String, size: CGSize) -> UIImage? {
+        guard size.width > 0, size.height > 0, !Task.isCancelled else { return nil }
+        let key = detailFrostKey(name, size)
+        if let cached = detailFrostCache.object(forKey: key) { return cached }
+        detailFrostCreationLock.lock()
+        defer { detailFrostCreationLock.unlock() }
+        if let cached = detailFrostCache.object(forKey: key) { return cached }
+        guard !Task.isCancelled,
+              let source = (displayImage(named: name) ?? UIImage(named: name))?.cgImage else { return nil }
+
+        let renderScale = min(1, 768 / max(size.width, size.height))
+        let bounds = CGRect(x: 0, y: 0,
+                            width: (size.width * renderScale).rounded(),
+                            height: (size.height * renderScale).rounded())
+        let input = CIImage(cgImage: source)
+        let fill = max(bounds.width / input.extent.width, bounds.height / input.extent.height)
+        let scaled = input.transformed(by: CGAffineTransform(scaleX: fill, y: fill))
+        let cropped = scaled.transformed(by: CGAffineTransform(
+            translationX: (bounds.width - scaled.extent.width) / 2,
+            y: (bounds.height - scaled.extent.height) / 2
+        )).cropped(to: bounds)
+        let blur = CIFilter.gaussianBlur()
+        blur.inputImage = cropped.clampedToExtent()
+        blur.radius = Float(26 * renderScale)
+        guard let output = blur.outputImage?.cropped(to: bounds),
+              let pixels = backdropContext.createCGImage(output, from: bounds,
+                  format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)) else { return nil }
+        let image = UIImage(cgImage: pixels)
+        detailFrostCache.setObject(image, forKey: key, cost: pixels.bytesPerRow * pixels.height)
+        return image
+    }
+
+    nonisolated static func warmDetailFrostImages(_ names: [String], size: CGSize) {
+        var seen: Set<String> = []
+        for name in names where seen.insert(name).inserted {
+            guard !Task.isCancelled else { return }
+            autoreleasepool { _ = detailFrostImage(named: name, size: size) }
         }
     }
 

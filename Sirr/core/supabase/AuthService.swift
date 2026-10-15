@@ -175,6 +175,13 @@ final class AuthService {
         return true
     }
 
+    /// Reads identity from the cached/authenticated session without depending
+    /// on the optional public profile row being reachable.
+    func getCurrentUserID() async throws -> UUID {
+        let session = try await client.auth.session
+        return session.user.id
+    }
+
     /// Fetch the current user's row from public.users. Returns nil if not found or no session.
     func getCurrentUserProfile() async throws -> UserRecord? {
         let session = try await client.auth.session
@@ -256,7 +263,17 @@ final class AuthService {
                 .upload(
                     path,
                     data: imageData,
-                    options: FileOptions(contentType: "image/jpeg", upsert: true)
+                    // A year, not the SDK's one-hour default. Every device
+                    // was re-fetching every avatar it could see once an hour,
+                    // which is what turned a 23 MB bucket into 7.75 GB of
+                    // egress. Safe to cache this hard because the URL below
+                    // carries a version stamp: a replacement is a different
+                    // URL, not a stale one.
+                    options: FileOptions(
+                        cacheControl: "31536000",
+                        contentType: "image/jpeg",
+                        upsert: true
+                    )
                 )
             let url = try? client.storage.from(bucketName).getPublicURL(path: path).absoluteString
             authLogger.info("API uploadAvatar succeeded (url: \(url ?? "nil", privacy: .public))")
@@ -322,7 +339,7 @@ final class AuthService {
     /// the UI turns this into an instruction the user can act on.
     struct OwnsSharedWorkspaceError: LocalizedError {
         var errorDescription: String? {
-            "لديك تمرين فيه أعضاء آخرون. احذف التمرين أو انقل ملكيته أولًا، ثم احذف الحساب."
+            String(localized: "لديك تمرين فيه أعضاء آخرون. احذف التمرين أو انقل ملكيته أولًا، ثم احذف الحساب.")
         }
     }
 

@@ -1,4 +1,4 @@
--- Recurring-payment gate tests. Local stack only:
+-- Recurring-payment gate tests (the block at registration, 20260929120000). Local stack only:
 --   supabase db reset
 --   psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
 --     -v ON_ERROR_STOP=1 -f supabase/tests/recurring_payment_gate_test.sql
@@ -48,6 +48,7 @@ declare
   v_past json;
   v_count integer;
   v_failed boolean;
+  v_hint text;
 begin
   perform pg_temp.set_auth(v_owner);
   v_workspace := public.create_workspace('مجموعة بوابة دفع التكرار');
@@ -235,52 +236,36 @@ begin
     raise exception 'FAIL: live feed did not retain old debt card: %', v_live;
   end if;
 
-  -- One card, not two. While the old exercise is still owed for it is the only
-  -- one this member sees, so the debt is asked about rather than buried under
-  -- next week. The hold is not permanent — declaring lifts it, and so does the
-  -- waiver 24 hours after the old exercise started, which is asserted in
-  -- linger_unpaid_occurrence_test.
+  -- Every workout shows. The debt no longer hides the next occurrence; it
+  -- refuses the registration instead (20260929120000).
   select count(*) into v_count
   from json_array_elements(v_live) item
   where (item->>'id')::uuid = v_next_event_id;
-  if v_count <> 0 then
-    raise exception 'FAIL: the next occurrence showed while the old one was still owed: %', v_live;
+  if v_count <> 1 then
+    raise exception 'FAIL: the next occurrence was hidden from a member who owes: %', v_live;
   end if;
-
-  -- An undeclared debt no longer refuses the next seat. It was refusing on a
-  -- payment the organizer had merely not confirmed yet, and the way to clear it
-  -- was a button on a finished exercise, so a member who had paid could be shut
-  -- out with no visible way back in. The debt is still reported through
-  -- requires_payment_action above; it just no longer stands in the door.
-  -- An undeclared debt no longer refuses the seat. The refusal was lifted so
-  -- that members on builds which show the raw English error, and cannot reach
-  -- the declare button, are not locked out of booking.
-  --
-  -- Registered inside its own block and then rolled back by a sentinel, because
-  -- everything after this still needs the member unjoined: the other half of the
-  -- rule, the withheld invitation, can only be observed from someone who has not
-  -- taken a seat, and actually leaving one would wake the waitlist.
-  begin
-    v_result := public.register_event_seat(p_event_id => v_next_event_id);
-    raise exception 'REGISTRATION_PROBE_OK';
-  exception
-    when others then
-      if sqlerrm = 'Previous event payment is required' then
-        raise exception 'FAIL: an undeclared debt still blocks registration';
-      elsif sqlerrm <> 'REGISTRATION_PROBE_OK' then
-        raise exception 'FAIL: registration failed for another reason: %', sqlerrm;
-      end if;
-  end;
 
   select count(*) into v_count
   from json_array_elements(v_live) item
   where (item->>'id')::uuid = v_other_event_id;
   if v_count <> 1 then
-    raise exception 'FAIL: debt blocked an unrelated recurring template: %', v_live;
+    raise exception 'FAIL: debt hid an unrelated recurring template: %', v_live;
   end if;
 
-  -- Ending the occurrence freezes attendance responses, but must not freeze the
-  -- one action retained by the debt card: declaring the transfer.
+  -- Registering is refused while the old occurrence is owed, and the refusal
+  -- names it so the app can open it.
+  v_failed := false;
+  begin
+    v_result := public.register_event_seat(p_event_id => v_next_event_id);
+  exception when others then
+    get stacked diagnostics v_hint = pg_exception_hint;
+    v_failed := v_hint = 'payment_owed:' || v_old_event_id::text;
+  end;
+  if not v_failed then
+    raise exception 'FAIL: an unpaid ended occurrence did not block registration (hint %)', v_hint;
+  end if;
+
+  -- Ending the occurrence freezes attendance responses.
   v_failed := false;
   begin
     v_result := public.decline_event(v_old_event_id, 'other', 'انتهى الموعد');
@@ -311,159 +296,25 @@ begin
     raise exception 'FAIL: rejected ended action mutated the debt row';
   end if;
 
-  v_result := public.declare_event_payment(v_old_event_id, v_method_id);
-  if v_result->>'status' <> 'declared'
-     or (v_result->>'seats')::integer <> 1 then
-    raise exception 'FAIL: ended occurrence refused payment declaration: %', v_result;
-  end if;
-
-  perform 1
-  from public.event_participants
-  where event_id = v_old_event_id
-    and user_id = v_member
-    and payment_status = 'pending'
-    and payment_declared_at is not null;
-  if not found then
-    raise exception 'FAIL: declaration did not stamp the ended debt row';
-  end if;
-
-  select count(*) into v_count
-  from public.event_member_responses
-  where event_id = v_next_event_id
-    and user_id = v_member
-    and status = 'invited';
-  if v_count <> 1 then
-    raise exception 'FAIL: declaration did not create the delayed next invite';
-  end if;
-
-  select count(*) into v_count
-  from public.push_outbox
-  where event_id = v_next_event_id
-    and user_id = v_member
-    and type = 'event_invited';
-  if v_count <> 1 then
-    raise exception 'FAIL: declaration did not enqueue the delayed next invite';
-  end if;
-
-  v_result := public.register_event_seat(p_event_id => v_next_event_id);
-  if v_result->>'status' <> 'submitted' then
-    raise exception 'FAIL: declared member could not reserve next occurrence: %', v_result;
-  end if;
-  perform 1
-  from public.event_participants
-  where event_id = v_next_event_id
-    and user_id = v_member;
-  if not found then
-    raise exception 'FAIL: next-occurrence seat fixture was not created';
-  end if;
-
-  -- A rejected transfer after the event ended must reopen the debt, not erase
-  -- A rejection after the event ended reopens the debt without erasing the
-  -- historical participant row. It no longer takes anything from the member's
-  -- later occurrences, so nothing is revoked and the count stays at zero.
+  -- The organizer marks it paid; the block lifts at once.
   perform pg_temp.set_auth(v_owner);
-  v_result := public.reject_payment(v_old_event_id, v_member, v_owner);
-  if v_result->>'status' <> 'rejected'
-     or (v_result->>'revoked_future_seats')::integer <> 0 then
-    raise exception 'FAIL: organizer could not reject ended declaration: %', v_result;
+  v_result := public.confirm_payment(v_old_event_id, v_member, v_owner);
+  if v_result->>'status' <> 'confirmed' then
+    raise exception 'FAIL: organizer could not confirm the ended debt: %', v_result;
   end if;
 
   perform pg_temp.set_auth(v_member);
-  perform 1
-  from public.event_participants
-  where event_id = v_old_event_id
-    and user_id = v_member
-    and payment_status = 'pending'
-    and payment_declared_at is null;
-  if not found then
-    raise exception 'FAIL: ended rejection deleted or settled the debt row';
-  end if;
-  perform 1
-  from public.event_participants
-  where event_id = v_next_event_id
-    and (user_id = v_member or added_by = v_member);
-  if not found then
-    raise exception 'FAIL: rejection took away the member''s next seat';
-  end if;
-  -- No seat is taken away, so no seat opens up, so nobody on the waiting list
-  -- is told one did. Telling them would be a lie about a place that is still
-  -- occupied.
-  select count(*) into v_count
-  from public.push_outbox
-  where event_id = v_next_event_id
-    and user_id = v_waiter
-    and type = 'seat_available';
-  if v_count <> 0 then
-    raise exception 'FAIL: waiting list was promised a seat that never opened';
+  v_result := public.register_event_seat(p_event_id => v_next_event_id);
+  if v_result->>'status' <> 'submitted' then
+    raise exception 'FAIL: a settled member could not register: %', v_result;
   end if;
 
   v_live := public.get_workspace_events(v_workspace_id);
-  select count(*) into v_count
-  from json_array_elements(v_live) item
-  where (item->>'id')::uuid = v_old_event_id
-    and (item->>'requires_payment_action')::boolean is true;
-  if v_count <> 1 then
-    raise exception 'FAIL: rejected declaration did not restore the debt card: %', v_live;
-  end if;
-  -- A rejection reopens the debt, so the hold comes back with it and the next
-  -- occurrence drops out of view again until the debt clears one way or the
-  -- other. The member's seat in it is untouched — the rejection stopped taking
-  -- that away — so for this window they hold a place in something they cannot
-  -- see, which the waiver ends a day after the old exercise started.
-  select count(*) into v_count
-  from json_array_elements(v_live) item
-  where (item->>'id')::uuid = v_next_event_id;
-  if v_count <> 0 then
-    raise exception 'FAIL: a reopened debt did not restore the hold: %', v_live;
-  end if;
-
-  v_result := public.declare_event_payment(v_old_event_id, v_method_id);
-  if v_result->>'status' <> 'declared' then
-    raise exception 'FAIL: rejected debt could not be declared again: %', v_result;
-  end if;
-
-  -- The member holds an actual seat here, not an invitation. Taking the seat
-  -- cleared the invite through clear_event_member_response_on_registration,
-  -- and the rejection no longer takes the seat back, so there is nothing left
-  -- for a repeated declaration to restore. A seat outranks an invite.
-  select count(*) into v_count
-  from public.event_member_responses
-  where event_id = v_next_event_id
-    and user_id = v_member
-    and status = 'invited';
-  if v_count <> 0 then
-    raise exception 'FAIL: a seated member was left holding a stale invite';
-  end if;
-  select count(*) into v_count
-  from public.push_outbox
-  where event_id = v_next_event_id
-    and user_id = v_member
-    and type = 'event_invited';
-  if v_count <> 1 then
-    raise exception 'FAIL: repeated declaration duplicated/lost delayed push';
-  end if;
-
-  v_live := public.get_workspace_events(v_workspace_id);
-
   select count(*) into v_count
   from json_array_elements(v_live) item
   where (item->>'id')::uuid = v_old_event_id;
   if v_count <> 0 then
-    raise exception 'FAIL: declared old occurrence remained in live feed: %', v_live;
-  end if;
-
-  select count(*) into v_count
-  from json_array_elements(v_live) item
-  where (item->>'id')::uuid = v_next_event_id;
-  if v_count <> 1 then
-    raise exception 'FAIL: declaration did not release the next occurrence: %', v_live;
-  end if;
-
-  select count(*) into v_count
-  from json_array_elements(v_live) item
-  where (item->>'id')::uuid = v_other_event_id;
-  if v_count <> 1 then
-    raise exception 'FAIL: other template disappeared after declaration: %', v_live;
+    raise exception 'FAIL: settled old occurrence remained in live feed: %', v_live;
   end if;
 
   v_past := public.get_workspace_past_events(

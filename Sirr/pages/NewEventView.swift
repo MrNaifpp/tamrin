@@ -189,12 +189,12 @@ struct NewEventView: View {
                 .padding(.vertical, 6)
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .task { await loadPreviousLocations() }
         .sheet(isPresented: $showPriceDialog) {
             numberInputDialog(
-                title: "قيمة الملعب",
-                subtitle: "قيمة حجز الملعب الإجمالية",
+                title: String(localized: "قيمة الملعب"),
+                subtitle: String(localized: "قيمة حجز الملعب الإجمالية"),
                 value: $tempPriceValue,
                 isPresented: $showPriceDialog,
                 onSave: {
@@ -212,8 +212,8 @@ struct NewEventView: View {
         }
         .sheet(isPresented: $showPeopleDialog) {
             numberInputDialog(
-                title: "العدد",
-                subtitle: "عدد الأشخاص",
+                title: String(localized: "العدد"),
+                subtitle: String(localized: "عدد الأشخاص"),
                 value: $tempPeopleValue,
                 isPresented: $showPeopleDialog,
                 onSave: {
@@ -231,16 +231,16 @@ struct NewEventView: View {
         }
         .sheet(isPresented: $showStartDateDialog) {
             datePickerDialog(
-                title: "يبدأ",
-                subtitle: "تاريخ ووقت البداية",
+                title: String(localized: "يبدأ"),
+                subtitle: String(localized: "تاريخ ووقت البداية"),
                 date: Binding(get: { startDate ?? Date() }, set: { startDate = $0 }),
                 isPresented: $showStartDateDialog
             )
         }
         .sheet(isPresented: $showEndDateDialog) {
             datePickerDialog(
-                title: "ينتهي",
-                subtitle: "تاريخ ووقت النهاية",
+                title: String(localized: "ينتهي"),
+                subtitle: String(localized: "تاريخ ووقت النهاية"),
                 // Default the end selection to 30 minutes after the start time.
                 date: Binding(
                     get: { endDate ?? startDate?.addingTimeInterval(1800) ?? Date() },
@@ -251,8 +251,8 @@ struct NewEventView: View {
         }
         .sheet(isPresented: $showLocationDialog) {
             locationInputDialog(
-                title: "موقع التمرين",
-                subtitle: "أدخل موقع التمرين",
+                title: String(localized: "موقع التمرين"),
+                subtitle: String(localized: "أدخل موقع التمرين"),
                 value: $tempLocationValue,
                 isPresented: $showLocationDialog,
                 onSave: {
@@ -395,7 +395,7 @@ struct NewEventView: View {
                 .padding(.bottom, 32)
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .presentationDetents([.medium, .large])
         .onAppear {
             // Focus the field once the sheet has settled so typing registers.
@@ -430,13 +430,13 @@ struct NewEventView: View {
                     return
                 }
             } catch {
-                createError = "تعذر التحقق من رقم STC Pay الخاص بك"
+                createError = String(localized: "تعذر التحقق من رقم STC Pay الخاص بك")
                 return
             }
         }
 
         guard let workspaceId else {
-            createError = "تعذر تحديد التمرين الحالي. أعد فتح التطبيق وحاول مرة أخرى."
+            createError = String(localized: "تعذر تحديد التمرين الحالي. أعد فتح التطبيق وحاول مرة أخرى.")
             return
         }
 
@@ -474,7 +474,7 @@ struct NewEventView: View {
         guardrailError = nil
         let trimmed = guardrailInput.trimmingCharacters(in: .whitespaces)
         guard let canonical = STCPay.normalize(trimmed) else {
-            guardrailError = "رقم STC Pay غير صالح"
+            guardrailError = String(localized: "رقم STC Pay غير صالح")
             return
         }
         isSavingGuardrailNumber = true
@@ -487,7 +487,7 @@ struct NewEventView: View {
             // Re-attempt event creation now that the number is saved.
             await submitCreateEvent()
         } catch {
-            guardrailError = "تعذر حفظ الرقم. حاول مرة أخرى."
+            guardrailError = String(localized: "تعذر حفظ الرقم. حاول مرة أخرى.")
         }
     }
 
@@ -551,7 +551,7 @@ struct NewEventView: View {
                         .font(TamrinFont.font(size: 32, weight: .bold))
                         .foregroundStyle(.white)
                     // If first row/field selected (field is for الملعب price input)
-                    if title.contains("قيمة الملعب") {
+                    if title.contains(String(localized: "قيمة الملعب")) {
                         Image("riyal")
                             .resizable()
                             .scaledToFit()
@@ -1020,7 +1020,7 @@ struct NewEventView: View {
                     .accentColor(.white)
                     .environment(\.calendar, Calendar(identifier: .gregorian))
                     .environment(\.locale, .tamrin)
-                    .environment(\.layoutDirection, .rightToLeft)
+                    .environment(\.layoutDirection, .tamrin)
                     .padding(.horizontal, 20)
 
                 // Save button
@@ -1285,7 +1285,7 @@ struct LocationInputDialogView: View {
                 .padding(.bottom, 8)
 
                 // Hint
-                Text(selectedCoordinate == nil ? "اضغط على الخريطة لتحديد الموقع" : "الموقع محدّد على الخريطة")
+                Text(selectedCoordinate == nil ? String(localized: "اضغط على الخريطة لتحديد الموقع") : String(localized: "الموقع محدّد على الخريطة"))
                     .font(.appBody)
                     .foregroundStyle(.white.opacity(0.6))
                     .padding(.bottom, 16)

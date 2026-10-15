@@ -2,13 +2,12 @@
 --   psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
 --     -v ON_ERROR_STOP=1 -f supabase/tests/linger_unpaid_occurrence_test.sql
 --
--- While an exercise is still owed for, it is the only one that member sees:
--- the finished card stays and the next occurrence is held back, so the debt is
--- asked about rather than buried under next week. Both end together, because
--- both are the same condition seen from two sides — the debt clears by being
--- declared, or by the waiver 24 hours after the old exercise started.
+-- While an exercise is still owed for, its finished card stays on the shelf.
+-- Next week shows alongside it: since 20260929120000 the debt refuses the
+-- registration instead of hiding the workout. The waiver section below calls
+-- waive_expired_event_debts() directly; the job no longer does.
 --
--- Nobody else is affected. A member who settled sees next week immediately.
+-- A member who paid sees next week and no finished card.
 
 begin;
 
@@ -71,10 +70,14 @@ begin
 
   perform pg_temp.set_auth(v_settled);
   v_result := public.register_event_seat(p_event_id => v_old);
-  v_result := public.declare_event_payment(v_old, v_method);
+
+  -- Settled means paid: the organizer confirms, which writes the same
+  -- 'confirmed' a card payment does. A declared transfer no longer counts
+  -- (20260929120000).
+  perform pg_temp.set_auth(v_owner);
+  v_result := public.confirm_payment(v_old, v_settled, v_owner);
 
   -- It finished two hours ago, and next week has opened.
-  perform pg_temp.set_auth(v_owner);
   update public.events
   set start_date = now() - interval '4 hours', end_date = now() - interval '2 hours'
   where id = v_old;
@@ -107,8 +110,10 @@ begin
     select 1 from json_array_elements(public.get_workspace_events(v_ws)) i
     where (i->>'id')::uuid = v_next
   ) into v_shows;
-  if v_shows then
-    raise exception 'FAIL: next week showed while the old exercise was still owed';
+  -- Next week shows while the old one is owed; the refusal is at registration
+  -- now (20260929120000), not in the feed.
+  if not v_shows then
+    raise exception 'FAIL: next week was hidden from a member who owes';
   end if;
 
   -- A member who settled is not held at all.

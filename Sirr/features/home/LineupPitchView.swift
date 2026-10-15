@@ -9,6 +9,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 /// The part of a lineup that changes with the exercise's sport.
 ///
@@ -112,13 +113,11 @@ struct LineupPitchView: View {
     var onReorder: ((UUID, LineupRow, Int) -> Void)?
     /// Raised while a player is in hand, so the page around the pitch can stop
     /// scrolling. Without it the scroll view claims the vertical part of the
-    /// drag and cancels this gesture — see `reorderGesture`.
+    /// drag and cancels the pickup gesture.
     var onDraggingChanged: ((Bool) -> Void)?
 
-    /// Who was picked up. The full long-press-then-drag gesture belongs to the
-    /// pitch, which never gets re-parented while the bands rearrange beneath
-    /// the carried player. A plain pan fails the long press quickly and remains
-    /// available to the enclosing `ScrollView`.
+    /// The stable pitch owns pickup while its player slots rearrange beneath
+    /// the finger. Touches outside a player are left to the enclosing scroll view.
     @State private var draggingID: UUID?
     @State private var dragLocation: CGPoint?
     /// Where inside the player the finger first held him. Keeping this offset
@@ -279,13 +278,22 @@ struct LineupPitchView: View {
             .allowsHitTesting(false)
         }
         .coordinateSpace(name: Self.space)
-        // A normal vertical pan belongs to the page. The pitch starts claiming
-        // the touch only after a deliberate long press has succeeded; once a
-        // player is actually in hand the page is locked by `onDraggingChanged`.
-        .simultaneousGesture(
-            reorderGesture,
-            including: onReorder == nil ? .none : .all
-        )
+        // Reject empty-pitch touches before recognizing anything: the parent
+        // scroll view owns those pans, while a player lifts without a hold delay.
+        .gesture(ImmediatePlayerDragGesture(
+            hitTest: { point in onReorder != nil && playerFrame(at: point) != nil },
+            onBegan: { point in
+                dragLocation = point
+                _ = beginDragging(at: point)
+            },
+            onChanged: updateDragging,
+            onEnded: { moved, cancelled in
+                let tappedPlayer = dragging
+                finishDragging(commit: moved && !cancelled)
+                if !moved && !cancelled, let tappedPlayer { onSelect?(tappedPlayer) }
+            }
+        ))
+        .onDisappear { finishDragging(commit: false) }
         .onPreferenceChange(LineupNodeFramesKey.self) { nodeFrames = $0 }
         .onPreferenceChange(LineupRowFramesKey.self) { rowFrames = $0 }
     }
@@ -444,40 +452,33 @@ struct LineupPitchView: View {
         return LineupDropSlot(row: band.row, index: proposedIndex)
     }
 
-    /// A scroll-sized movement cancels the first phase before the drag phase
-    /// exists, so swiping from anywhere on the pitch scrolls naturally. Holding
-    /// a player deliberately promotes the same touch into the carrying drag.
-    private var reorderGesture: some Gesture {
-        LongPressGesture(minimumDuration: 0.28, maximumDistance: 10)
-            .sequenced(before: DragGesture(
-                minimumDistance: 0,
-                coordinateSpace: .named(Self.space)
-            ))
-            .onChanged { value in
-                guard case .second(true, let drag?) = value else { return }
-                let player = dragging ?? beginDragging(at: drag.startLocation)
-                guard let player else { return }
-
-                dragLocation = drag.location
-                let next = slot(at: drag.location, dragging: player)
-                guard next != dropSlot else { return }
-                let hadDestination = dropSlot != nil
-                withAnimation(.smooth(duration: 0.18)) {
-                    dropSlot = next
-                }
-                if hadDestination { Haptics.selection() }
-            }
-            .onEnded { _ in
-                finishDragging()
-            }
+    /// Limit pickup to the visible player's name/marker, not the whole flexible
+    /// layout slot. The surrounding pitch remains available for page scrolling.
+    private func playerFrame(at point: CGPoint) -> LineupNodeFrame? {
+        nodeFrames.first { measured in
+            let width = min(measured.frame.width, compact ? 64 : 84)
+            let target = CGRect(x: measured.frame.midX - width / 2,
+                                y: measured.frame.minY,
+                                width: width, height: measured.frame.height)
+            return target.contains(point)
+        }
     }
 
-    /// Starts only when the completed long press began inside a measured player
-    /// node. Holding an empty part of the pitch therefore never invents a drag.
+    private func updateDragging(at point: CGPoint) {
+        guard let player = dragging else { return }
+        dragLocation = point
+        let next = slot(at: point, dragging: player)
+        guard next != dropSlot else { return }
+        let hadDestination = dropSlot != nil
+        withAnimation(.smooth(duration: 0.18)) { dropSlot = next }
+        if hadDestination { Haptics.selection() }
+    }
+
+    /// The native recognizer has already accepted a touch on this player.
     private func beginDragging(at touch: CGPoint) -> LineupPlayer? {
         guard
             onReorder != nil,
-            let measured = nodeFrames.first(where: { $0.frame.contains(touch) }),
+            let measured = playerFrame(at: touch),
             let player = players.first(where: { $0.id == measured.id })
         else { return nil }
 
@@ -496,15 +497,16 @@ struct LineupPitchView: View {
         return player
     }
 
-    private func finishDragging() {
+    private func finishDragging(commit: Bool = true) {
         guard let playerID = draggingID else {
             dragLocation = nil
+            onDraggingChanged?(false)
             return
         }
 
         let destination = dropSlot
         withAnimation(.smooth(duration: 0.20)) {
-            if let destination, let onReorder {
+            if commit, let destination, let onReorder {
                 onReorder(playerID, destination.row, destination.index)
             }
             draggingID = nil
@@ -578,11 +580,11 @@ struct LineupPitchView: View {
                 .accessibilityAddTraits(.isButton)
 
             if onReorder != nil {
-                // The stable pitch owns the long-press drag. Keeping the player
-                // node tappable preserves the existing tap-to-trade action
-                // without installing a second recognizer that competes with
-                // page scrolling.
-                tappable
+                // Pickup and quick-tap selection share one stable recognizer.
+                // VoiceOver keeps a separate explicit selection action.
+                node
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { onSelect(player) }
             } else {
                 tappable.contextMenu {
                     if let onMove {
@@ -594,6 +596,74 @@ struct LineupPitchView: View {
             }
         } else {
             node
+        }
+    }
+}
+
+/// Native touch admission keeps an empty-pitch swipe out of the drag recognizer
+/// entirely. A zero-duration pickup is immediate, with movement used only to
+/// distinguish a quick tap from a committed position change.
+private struct ImmediatePlayerDragGesture: UIGestureRecognizerRepresentable {
+    var hitTest: (CGPoint) -> Bool
+    var onBegan: (CGPoint) -> Void
+    var onChanged: (CGPoint) -> Void
+    var onEnded: (_ moved: Bool, _ cancelled: Bool) -> Void
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator {
+        Coordinator(converter: converter, hitTest: hitTest)
+    }
+
+    func makeUIGestureRecognizer(context: Context) -> UILongPressGestureRecognizer {
+        let recognizer = UILongPressGestureRecognizer()
+        recognizer.minimumPressDuration = 0
+        recognizer.allowableMovement = .greatestFiniteMagnitude
+        recognizer.numberOfTouchesRequired = 1
+        recognizer.delegate = context.coordinator
+        return recognizer
+    }
+
+    func updateUIGestureRecognizer(_ recognizer: UILongPressGestureRecognizer, context: Context) {
+        context.coordinator.hitTest = hitTest
+        context.coordinator.converter = context.converter
+    }
+
+    func handleUIGestureRecognizerAction(_ recognizer: UILongPressGestureRecognizer, context: Context) {
+        let coordinator = context.coordinator
+        let point = context.converter.location(in: .named("lineup.pitch"))
+        switch recognizer.state {
+        case .began:
+            coordinator.moved = false
+            onBegan(coordinator.start ?? point)
+        case .changed:
+            if let start = coordinator.start, hypot(point.x - start.x, point.y - start.y) > 4 {
+                coordinator.moved = true
+            }
+            onChanged(point)
+        case .ended:
+            onEnded(coordinator.moved, false)
+        case .cancelled, .failed:
+            onEnded(false, true)
+        default:
+            break
+        }
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var converter: CoordinateSpaceConverter
+        var hitTest: (CGPoint) -> Bool
+        var start: CGPoint?
+        var moved = false
+
+        init(converter: CoordinateSpaceConverter, hitTest: @escaping (CGPoint) -> Bool) {
+            self.converter = converter
+            self.hitTest = hitTest
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            let point = converter.convert(globalPoint: touch.location(in: nil), to: .named("lineup.pitch"))
+            guard hitTest(point) else { return false }
+            start = point
+            return true
         }
     }
 }

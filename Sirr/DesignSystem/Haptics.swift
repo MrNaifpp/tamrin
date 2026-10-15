@@ -13,6 +13,15 @@ enum Haptics {
         UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true
     }
 
+    // Reuse and prepare the generator so closely spaced beats remain crisp.
+    private static let drumGenerator = UIImpactFeedbackGenerator(style: .rigid)
+
+    static func drumRollPulse(intensity: CGFloat) {
+        guard isEnabled else { return }
+        drumGenerator.impactOccurred(intensity: intensity)
+        drumGenerator.prepare()
+    }
+
     static func selection() {
         guard isEnabled else { return }
         UISelectionFeedbackGenerator().selectionChanged()

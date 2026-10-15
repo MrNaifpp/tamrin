@@ -19,29 +19,35 @@ struct EventReasonSelection: Identifiable, Hashable, Sendable {
 /// Lets a member confirm that they cannot attend and optionally explain why.
 /// The caller owns persistence and any roster refresh after `onConfirm` returns.
 struct MemberDeclineSheet: View {
+    /// What happens to money, said before the slide. Declared ahead of
+    /// `onConfirm` so the trailing closure still binds to the closure.
+    var refundNotice: String? = nil
     let onConfirm: @MainActor (_ reasonCode: String?, _ reasonText: String?) async throws -> Void
 
     private static let reasons = [
-        EventReasonSelection(code: nil, title: "بدون سبب"),
-        EventReasonSelection(code: "traveling", title: "مسافر"),
-        EventReasonSelection(code: "tired", title: "تعبان"),
-        EventReasonSelection(code: "injured", title: "مصاب"),
-        EventReasonSelection(code: "commitment", title: "لدي ارتباط"),
-        EventReasonSelection(code: "other", title: "أخرى", acceptsFreeText: true)
+        EventReasonSelection(code: nil, title: String(localized: "بدون سبب")),
+        EventReasonSelection(code: "traveling", title: String(localized: "مسافر")),
+        EventReasonSelection(code: "tired", title: String(localized: "تعبان")),
+        EventReasonSelection(code: "injured", title: String(localized: "مصاب")),
+        EventReasonSelection(code: "commitment", title: String(localized: "لدي ارتباط")),
+        EventReasonSelection(code: "other", title: String(localized: "أخرى"), acceptsFreeText: true)
     ]
 
     var body: some View {
         EventResponseFlow(
-            title: "الاعتذار عن الموعد",
-            message: "هل أنت متأكد من الاعتذار؟ سيتاح مكانك لبقية أعضاء التمرين، ويمكنك إضافة السبب بشكل اختياري.",
-            confirmationTitle: "نعم، أعتذر",
-            reasonTitle: "سبب الاعتذار",
-            reasonPrompt: "تحب تضيف سبب اعتذارك؟ اختياري، ويساعد المشرف يرتب الموعد.",
-            confirmTitle: "تأكيد الاعتذار",
+            title: String(localized: "الاعتذار عن الموعد"),
+            message: [
+                String(localized: "هل أنت متأكد من الاعتذار؟ سيتاح مكانك لبقية أعضاء التمرين، ويمكنك إضافة السبب بشكل اختياري."),
+                refundNotice
+            ].compactMap { $0 }.joined(separator: "\n\n"),
+            confirmationTitle: String(localized: "نعم، أعتذر"),
+            reasonTitle: String(localized: "سبب الاعتذار"),
+            reasonPrompt: String(localized: "تحب تضيف سبب اعتذارك؟ اختياري، ويساعد المشرف يرتب الموعد."),
+            confirmTitle: String(localized: "تأكيد الاعتذار"),
             reasons: Self.reasons,
             // A member giving up their seat frees it for someone else, so the
             // commitment is deliberate: it takes a slide, not a tap.
-            slideToConfirmTitle: "اسحب لتأكيد الاعتذار",
+            slideToConfirmTitle: String(localized: "اسحب لتأكيد الاعتذار"),
             onConfirm: onConfirm
         )
     }
@@ -53,22 +59,22 @@ struct AdminSkipEventSheet: View {
     let onConfirm: @MainActor (_ reasonCode: String?, _ reasonText: String?) async throws -> Void
 
     private static let reasons = [
-        EventReasonSelection(code: nil, title: "بدون سبب"),
-        EventReasonSelection(code: "weather", title: "ظرف الطقس"),
-        EventReasonSelection(code: "match_or_event_conflict", title: "تعارض مع مباراة أو حدث مهم"),
-        EventReasonSelection(code: "low_attendance", title: "قلة العدد"),
-        EventReasonSelection(code: "occasion", title: "وجود مناسبة"),
-        EventReasonSelection(code: "other", title: "أخرى", acceptsFreeText: true)
+        EventReasonSelection(code: nil, title: String(localized: "بدون سبب")),
+        EventReasonSelection(code: "weather", title: String(localized: "ظرف الطقس")),
+        EventReasonSelection(code: "match_or_event_conflict", title: String(localized: "تعارض مع مباراة أو حدث مهم")),
+        EventReasonSelection(code: "low_attendance", title: String(localized: "قلة العدد")),
+        EventReasonSelection(code: "occasion", title: String(localized: "وجود مناسبة")),
+        EventReasonSelection(code: "other", title: String(localized: "أخرى"), acceptsFreeText: true)
     ]
 
     var body: some View {
         EventResponseFlow(
-            title: "تخطي هذا الموعد",
-            message: "يُتخطّى هذا الموعد وحده، وتستمر المواعيد القادمة كالمعتاد. إضافة السبب اختيارية.",
-            confirmationTitle: "متابعة",
-            reasonTitle: "سبب التخطي",
-            reasonPrompt: "تحب تضيف سبب التخطي؟ اختياري، ويوصل للأعضاء مع الإشعار.",
-            confirmTitle: "تخطي الموعد",
+            title: String(localized: "تخطي هذا الموعد"),
+            message: String(localized: "يُتخطّى هذا الموعد وحده، وتستمر المواعيد القادمة كالمعتاد. إضافة السبب اختيارية."),
+            confirmationTitle: String(localized: "متابعة"),
+            reasonTitle: String(localized: "سبب التخطي"),
+            reasonPrompt: String(localized: "تحب تضيف سبب التخطي؟ اختياري، ويوصل للأعضاء مع الإشعار."),
+            confirmTitle: String(localized: "تخطي الموعد"),
             reasons: Self.reasons,
             onConfirm: onConfirm
         )
@@ -138,7 +144,7 @@ private struct EventResponseFlow: View {
                 }
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .fittedSheet(minHeight: 180, includesNavigationBar: true)
         .sheet(isPresented: $isReasonPresented) {
             EventReasonSheet(
@@ -270,7 +276,7 @@ private struct EventReasonSheet: View {
             }
             .animation(.smooth(duration: 0.2), value: isSubmitting)
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .fittedSheet(minHeight: 200, includesNavigationBar: true)
         .interactiveDismissDisabled(isSubmitting)
     }
@@ -301,8 +307,8 @@ private struct EventReasonSheet: View {
 
 /// Slide-to-confirm, restored from the original decline experience: nothing
 /// happens until the knob is dragged most of the way across, so an accidental
-/// tap can never give up a seat. `leading` is the physical right edge in the
-/// app's RTL environment, so the drag runs right-to-left. The tint carries the
+/// tap can never give up a seat. The drag runs from the leading edge to the
+/// trailing one: right-to-left in Arabic, left-to-right in English. The tint carries the
 /// weight of the action: red where something is given up, blue where it isn't.
 private struct SlideToConfirmButton: View {
     let title: String
@@ -312,6 +318,7 @@ private struct SlideToConfirmButton: View {
     @State private var progress: CGFloat = 0
     @State private var didHaptic = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.layoutDirection) private var layoutDirection
 
     private let knob: CGFloat = 54
     private let threshold: CGFloat = 0.82
@@ -332,7 +339,7 @@ private struct SlideToConfirmButton: View {
                     .fill(tint)
                     .frame(width: knob, height: knob)
                     .overlay {
-                        Image(systemName: progress > 0.78 ? "checkmark" : "chevron.left.2")
+                        Image(systemName: progress > 0.78 ? "checkmark" : (layoutDirection == .rightToLeft ? "chevron.left.2" : "chevron.right.2"))
                             .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(.white)
                             .contentTransition(.symbolEffect(.replace))
@@ -342,7 +349,10 @@ private struct SlideToConfirmButton: View {
                     .gesture(
                         DragGesture(minimumDistance: 0)
                             .onChanged { value in
-                                progress = min(max(-value.translation.width / travel, 0), 1)
+                                // The drag runs from the leading edge toward the trailing one,
+                                // which is physically leftward in RTL.
+                                let dragged = layoutDirection == .rightToLeft ? -value.translation.width : value.translation.width
+                                progress = min(max(dragged / travel, 0), 1)
                                 if progress > threshold, !didHaptic {
                                     Haptics.impact(.rigid)
                                     didHaptic = true
@@ -365,7 +375,9 @@ private struct SlideToConfirmButton: View {
             .contentShape(.capsule)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(title)
-            .accessibilityHint("اسحب من اليمين إلى اليسار للتأكيد")
+            .accessibilityHint(layoutDirection == .rightToLeft
+                ? String(localized: "اسحب من اليمين إلى اليسار للتأكيد")
+                : String(localized: "اسحب من اليسار إلى اليمين للتأكيد"))
             .accessibilityAction { confirm() }
         }
         .frame(height: 62)

@@ -69,7 +69,7 @@ struct CreateWorkspaceSheet: View {
                 Spacer()
             }
         }
-        .environment(\.layoutDirection, .rightToLeft)
+        .environment(\.layoutDirection, .tamrin)
         .sheetPresentationHaptic()
         .onAppear { nameFocused = true }
     }
@@ -85,7 +85,7 @@ struct CreateWorkspaceSheet: View {
                 onCreated(ws)
                 dismiss()
             } catch {
-                errorText = "تعذر إنشاء التمرين. حاول مرة أخرى."
+                errorText = String(localized: "تعذر إنشاء التمرين. حاول مرة أخرى.")
             }
         }
     }
