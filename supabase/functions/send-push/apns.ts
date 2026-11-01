@@ -42,6 +42,30 @@ export async function makeApnsJwt(opts: {
   return `${signingInput}.${b64url(new Uint8Array(sig))}`;
 }
 
+// Apple wants one provider token reused for 20 to 60 minutes, and answers 429
+// TooManyProviderTokenUpdates when it changes more often. Every outbox row is
+// its own send-push call, so a token minted per call meant one new token per
+// recipient of a group push. Instead every call shares the token stored in the
+// database and a new one is made once it is this old.
+export const PROVIDER_TOKEN_MAX_AGE_SECONDS = 50 * 60;
+
+export async function sharedProviderToken(opts: {
+  nowSeconds: number;
+  mint: (nowSeconds: number) => Promise<string>;
+  read: () => Promise<{ token: string; issuedAt: number } | null>;
+  // Stores the token unless a fresh one is already there, and answers with
+  // whichever token is stored. A burst that finds the old token expired then
+  // still ends up on one token. null when the store cannot be used.
+  claim: (token: string, issuedAt: number) => Promise<string | null>;
+}): Promise<string> {
+  const stored = await opts.read();
+  if (stored && opts.nowSeconds - stored.issuedAt < PROVIDER_TOKEN_MAX_AGE_SECONDS) {
+    return stored.token;
+  }
+  const minted = await opts.mint(opts.nowSeconds);
+  return (await opts.claim(minted, opts.nowSeconds)) ?? minted;
+}
+
 export async function sendApns(opts: {
   host: string; // https://api.sandbox.push.apple.com
   deviceToken: string;

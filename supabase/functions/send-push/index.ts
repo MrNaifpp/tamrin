@@ -1,6 +1,11 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { copyFor } from "./copy.ts";
-import { makeApnsJwt, sendApns } from "./apns.ts";
+import {
+  makeApnsJwt,
+  PROVIDER_TOKEN_MAX_AGE_SECONDS,
+  sendApns,
+  sharedProviderToken,
+} from "./apns.ts";
 import { makeWebPushServer, sendWebPush, type WebResult, webPushPayload } from "./webpush.ts";
 
 const SEND_PUSH_SECRET = Deno.env.get("SEND_PUSH_SECRET")!;
@@ -87,7 +92,7 @@ Deno.serve(async (req) => {
   });
   if (!copy) return await fail(`no copy for type ${row.type}`);
 
-  // 6a. Apple: sign once, send to every device.
+  // 6a. Apple: one shared token for every device (see sharedProviderToken).
   // 400 BadDeviceToken means the token belongs to the other environment, not
   // that it is dead — the same token still delivers on the sibling host.
   const isWrongEnvironment = (r: { status: number; text: string }) =>
@@ -115,11 +120,32 @@ Deno.serve(async (req) => {
   };
 
   const appleResults = apple.length === 0 ? [] : await (async () => {
-    const jwt = await makeApnsJwt({
-      keyId: Deno.env.get("APNS_KEY_ID")!,
-      teamId: Deno.env.get("APNS_TEAM_ID")!,
-      authKeyPem: Deno.env.get("APNS_AUTH_KEY")!,
+    // A missing table or function (send-push deployed before the migration)
+    // leaves data null, and the call signs its own token as it used to.
+    const jwt = await sharedProviderToken({
       nowSeconds: Math.floor(Date.now() / 1000),
+      mint: (nowSeconds) =>
+        makeApnsJwt({
+          keyId: Deno.env.get("APNS_KEY_ID")!,
+          teamId: Deno.env.get("APNS_TEAM_ID")!,
+          authKeyPem: Deno.env.get("APNS_AUTH_KEY")!,
+          nowSeconds,
+        }),
+      read: async () => {
+        const { data } = await admin
+          .from("apns_provider_token").select("token, issued_at").eq("id", 1).maybeSingle();
+        return data
+          ? { token: data.token, issuedAt: Math.floor(Date.parse(data.issued_at) / 1000) }
+          : null;
+      },
+      claim: async (token, issuedAt) => {
+        const { data } = await admin.rpc("claim_apns_provider_token", {
+          p_token: token,
+          p_issued_at: new Date(issuedAt * 1000).toISOString(),
+          p_max_age_seconds: PROVIDER_TOKEN_MAX_AGE_SECONDS,
+        });
+        return data ?? null;
+      },
     });
     return await Promise.all(apple.map((t) => deliverApple(jwt, t.apns_token)));
   })();
