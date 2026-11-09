@@ -15,6 +15,9 @@ struct PickPlayersStep: View {
     /// The event's max participants; nil means no limit.
     let seatLimit: Int?
     let isSaving: Bool
+    /// Back to the details step. This step owns the navigation bar, so the
+    /// flow's own header is hidden here.
+    let back: () -> Void
     let confirm: (PlayerPick) -> Void
 
     private enum Route: Hashable {
@@ -28,17 +31,19 @@ struct PickPlayersStep: View {
     var body: some View {
         NavigationStack {
             List {
-                if !sources.pastPlayers.isEmpty {
-                    Section {
-                        NavigationLink(value: Route.newGroup) {
-                            Label("مجموعة جديدة", systemImage: "plus")
-                                .font(TamrinFont.headline)
-                                .foregroundStyle(Color.accentColor)
-                        }
-                    } footer: {
-                        Text("اختر من اللاعبين اللي لعبوا معك قبل")
-                            .font(TamrinFont.font(size: 13))
+                // Always offered: a new, empty group is how the flow worked
+                // before this step existed.
+                Section {
+                    NavigationLink(value: Route.newGroup) {
+                        Label("مجموعة جديدة", systemImage: "plus")
+                            .font(TamrinFont.headline)
+                            .foregroundStyle(Color.accentColor)
                     }
+                } footer: {
+                    Text(sources.pastPlayers.isEmpty
+                         ? "أنشئ مجموعة جديدة وادعُ لاعبيها برابط"
+                         : "اختر من اللاعبين اللي لعبوا معك قبل")
+                        .font(TamrinFont.font(size: 13))
                 }
 
                 if !sources.groups.isEmpty {
@@ -57,6 +62,12 @@ struct PickPlayersStep: View {
             .listStyle(.insetGrouped)
             .navigationTitle("مين بيلعب معك؟")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("رجوع", action: back)
+                        .disabled(isSaving)
+                }
+            }
             .navigationDestination(for: Route.self) { route in
                 switch route {
                 case .newGroup:
@@ -147,9 +158,11 @@ private struct PickPeopleList: View {
         self.maxPicks = maxPicks
         self.isSaving = isSaving
         self.confirm = confirm
-        // A group starts fully ticked (the usual case is "the same people
-        // again"), up to the seats there are. A new group starts empty.
-        let start = sourceGroup == nil ? [] : people.prefix(maxPicks ?? people.count).map(\.id)
+        // A group starts fully ticked when everyone fits (the usual case is
+        // "the same people again"). A group bigger than the seats, and a new
+        // group, start empty, so a new group is never made by accident.
+        let everyoneFits = people.count <= (maxPicks ?? people.count)
+        let start = (sourceGroup != nil && everyoneFits) ? people.map(\.id) : []
         _selected = State(initialValue: Set(start))
     }
 
@@ -259,6 +272,6 @@ private struct PickPeopleList: View {
         ],
         pastPlayers: people
     )
-    return PickPlayersStep(sources: sources, seatLimit: 4, isSaving: false) { _ in }
+    return PickPlayersStep(sources: sources, seatLimit: 4, isSaving: false, back: {}) { _ in }
         .environment(\.layoutDirection, .rightToLeft)
 }

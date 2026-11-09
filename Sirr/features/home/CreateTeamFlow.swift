@@ -139,7 +139,10 @@ struct CreateTeamFlow: View {
                 .offset(x: 150, y: -300).ignoresSafeArea().allowsHitTesting(false)
 
             VStack(spacing: 0) {
-                FlowHeader(step: step, withPlayers: hasPlayersStep, back: goBack)
+                // The pick step brings Apple's own navigation bar; one header.
+                if step != .players {
+                    FlowHeader(step: step, withPlayers: hasPlayersStep, back: goBack)
+                }
                 ZStack {
                     switch step {
                     case .sport:
@@ -168,6 +171,7 @@ struct CreateTeamFlow: View {
                             sources: sources ?? .empty,
                             seatLimit: plan.capacity,
                             isSaving: isCreating,
+                            back: goBack,
                             confirm: { create(pick: $0) }
                         )
                         .transition(stepTransition)
