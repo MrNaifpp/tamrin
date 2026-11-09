@@ -13,9 +13,9 @@ import SwiftUI
 struct PickPlayersStep: View {
     let sources: PickSources
     let isSaving: Bool
-    /// Back to the details step. This step owns the navigation bar, so the
-    /// flow's own header is hidden here.
-    let back: () -> Void
+    /// Owned by the flow, so its header's back button can step out of a
+    /// group's list before leaving this step.
+    @Binding var path: NavigationPath
     let confirm: (PlayerPick) -> Void
 
     private enum Route: Hashable {
@@ -24,7 +24,7 @@ struct PickPlayersStep: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             List {
                 // Always offered: a new, empty group is how the flow worked
                 // before this step existed.
@@ -34,6 +34,7 @@ struct PickPlayersStep: View {
                             .font(TamrinFont.headline)
                             .foregroundStyle(Color.accentColor)
                     }
+                    .listRowBackground(TamrinTheme.card)
                 } footer: {
                     Text(sources.pastPlayers.isEmpty
                          ? "أنشئ مجموعة جديدة وادعُ لاعبيها برابط"
@@ -47,6 +48,7 @@ struct PickPlayersStep: View {
                             NavigationLink(value: Route.group(group)) {
                                 GroupRow(group: group)
                             }
+                            .listRowBackground(TamrinTheme.card)
                         }
                     } header: {
                         Text("مجموعاتك")
@@ -55,14 +57,11 @@ struct PickPlayersStep: View {
                 }
             }
             .listStyle(.insetGrouped)
-            .navigationTitle("مين بيلعب معك؟")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("رجوع", action: back)
-                        .disabled(isSaving)
-                }
-            }
+            // The flow's header already shows this step's title, counter and
+            // back button, so the list's own bar stays out of the way here.
+            .toolbar(.hidden, for: .navigationBar)
+            .scrollContentBackground(.hidden)
+            .containerBackground(TamrinTheme.page, for: .navigation)
             .navigationDestination(for: Route.self) { route in
                 switch route {
                 case .newGroup:
@@ -190,6 +189,7 @@ private struct PickPeopleList: View {
                                     .font(TamrinFont.body)
                             }
                             .tag(person.id)
+                            .listRowBackground(TamrinTheme.card)
                         }
                     } header: {
                         Text("\(selected.count) من \(people.count)")
@@ -200,6 +200,7 @@ private struct PickPeopleList: View {
                     }
                 }
                 .listStyle(.insetGrouped)
+                .scrollContentBackground(.hidden)
                 .environment(\.editMode, .constant(.active))
                 .searchable(text: $query, prompt: Text("ابحث بالاسم"))
                 .overlay {
@@ -211,6 +212,9 @@ private struct PickPeopleList: View {
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+        // One back button: the flow header's, which returns to the groups.
+        .navigationBarBackButtonHidden(true)
+        .containerBackground(TamrinTheme.page, for: .navigation)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 if isSaving {
@@ -253,6 +257,6 @@ private struct PickPeopleList: View {
         ],
         pastPlayers: people
     )
-    return PickPlayersStep(sources: sources, isSaving: false, back: {}) { _ in }
+    return PickPlayersStep(sources: sources, isSaving: false, path: .constant(NavigationPath())) { _ in }
         .environment(\.layoutDirection, .rightToLeft)
 }

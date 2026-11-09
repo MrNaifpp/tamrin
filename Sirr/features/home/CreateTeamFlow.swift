@@ -124,6 +124,8 @@ struct CreateTeamFlow: View {
     /// Who the organizer can pick players from. nil while loading; empty when
     /// there is nobody, or the load failed — then the flow is as it always was.
     @State private var sources: PickSources?
+    /// The pick step's own navigation (groups → a group's people).
+    @State private var pickPath = NavigationPath()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var hasPlayersStep: Bool { sources.map { !$0.isEmpty } ?? false }
@@ -139,10 +141,7 @@ struct CreateTeamFlow: View {
                 .offset(x: 150, y: -300).ignoresSafeArea().allowsHitTesting(false)
 
             VStack(spacing: 0) {
-                // The pick step brings Apple's own navigation bar; one header.
-                if step != .players {
-                    FlowHeader(step: step, withPlayers: hasPlayersStep, back: goBack)
-                }
+                FlowHeader(step: step, withPlayers: hasPlayersStep, back: goBack)
                 ZStack {
                     switch step {
                     case .sport:
@@ -170,7 +169,7 @@ struct CreateTeamFlow: View {
                         PickPlayersStep(
                             sources: sources ?? .empty,
                             isSaving: isCreating,
-                            back: goBack,
+                            path: $pickPath,
                             confirm: { create(pick: $0) }
                         )
                         .transition(stepTransition)
@@ -288,7 +287,13 @@ struct CreateTeamFlow: View {
         case .details:
             move(to: .identity)
         case .players:
-            move(to: .details)
+            // From a group's people, back goes to the groups first.
+            guard !isCreating else { return }
+            if pickPath.isEmpty {
+                move(to: .details)
+            } else {
+                pickPath.removeLast()
+            }
         case .invite:
             // The exercise already exists — there is nothing to go back to.
             break
