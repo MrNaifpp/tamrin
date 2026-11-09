@@ -47,21 +47,28 @@ final class LocationSearchService {
 }
 
 private enum CreationStep: Int, CaseIterable {
-    case sport, identity, details, invite
+    case sport, identity, details, players, invite
 
     var title: String {
         switch self {
         case .sport: String(localized: "نوع التمرين")
         case .identity: String(localized: "اسم التمرين")
         case .details: String(localized: "تفاصيل التمرين")
+        case .players: String(localized: "مين بيلعب معك؟")
         case .invite: String(localized: "دعوة الأعضاء")
         }
     }
 
-    var counter: String {
-        let position = rawValue + 1
-        let total = CreationStep.allCases.count
-        return String(localized: "\(position) من \(total)")
+    /// The steps this organizer goes through: someone with nobody to pick
+    /// from never sees `.players`, so it isn't counted for them either.
+    static func shown(withPlayers: Bool) -> [CreationStep] {
+        allCases.filter { withPlayers || $0 != .players }
+    }
+
+    func counter(withPlayers: Bool) -> String {
+        let steps = CreationStep.shown(withPlayers: withPlayers)
+        let position = (steps.firstIndex(of: self) ?? 0) + 1
+        return String(localized: "\(position) من \(steps.count)")
     }
 }
 
@@ -114,7 +121,12 @@ struct CreateTeamFlow: View {
     @State private var createdTeam: FeedTeam?
     @State private var isCreating = false
     @State private var failureMessage: String?
+    /// Who the organizer can pick players from. nil while loading; empty when
+    /// there is nobody, or the load failed — then the flow is as it always was.
+    @State private var sources: PickSources?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var hasPlayersStep: Bool { sources.map { !$0.isEmpty } ?? false }
 
     private var stepTransition: AnyTransition {
         reduceMotion ? .opacity : .push(from: goingForward ? .trailing : .leading)
@@ -127,7 +139,7 @@ struct CreateTeamFlow: View {
                 .offset(x: 150, y: -300).ignoresSafeArea().allowsHitTesting(false)
 
             VStack(spacing: 0) {
-                FlowHeader(step: step, back: goBack)
+                FlowHeader(step: step, withPlayers: hasPlayersStep, back: goBack)
                 ZStack {
                     switch step {
                     case .sport:
@@ -144,9 +156,19 @@ struct CreateTeamFlow: View {
                         TemplateComposerPage(
                             plan: $plan,
                             showsNameField: false,
-                            actionTitle: String(localized: "أنشئ التمرين"),
+                            actionTitle: hasPlayersStep
+                                ? String(localized: "التالي")
+                                : String(localized: "أنشئ التمرين"),
                             isSaving: isCreating,
-                            save: create
+                            save: advanceFromDetails
+                        )
+                        .transition(stepTransition)
+                    case .players:
+                        PickPlayersStep(
+                            sources: sources ?? .empty,
+                            seatLimit: plan.capacity,
+                            isSaving: isCreating,
+                            confirm: { create(pick: $0) }
                         )
                         .transition(stepTransition)
                     case .invite:
@@ -165,6 +187,10 @@ struct CreateTeamFlow: View {
         }
         .environment(\.layoutDirection, .tamrin)
         .interactiveDismissDisabled()
+        .task {
+            guard sources == nil else { return }
+            sources = (try? await PickPlayersService.shared.getPickSources()) ?? .empty
+        }
         .alert("تعذر إنشاء التمرين", isPresented: Binding(
             get: { failureMessage != nil },
             set: { if !$0 { failureMessage = nil } }
@@ -202,19 +228,40 @@ struct CreateTeamFlow: View {
         move(to: .details)
     }
 
-    /// Creating the exercise is what issues the join link, so it happens when
-    /// the organizer leaves the details step — the invite step then has a real
-    /// link to share instead of a placeholder.
-    private func create() {
+    /// With people to pick from, the details are checked here and the last
+    /// step picks the players; otherwise the exercise is created right away.
+    private func advanceFromDetails() {
+        guard hasPlayersStep else {
+            create(pick: nil)
+            return
+        }
+        if let message = plan.newSessionValidationError() {
+            failureMessage = message
+            Haptics.error()
+            return
+        }
+        move(to: .players)
+    }
+
+    /// Creating the exercise is what issues the join link, so it happens
+    /// before the invite step — that step then has a real link to share
+    /// instead of a placeholder. When the event went into one of the
+    /// organizer's existing groups there is no new link, so the flow closes.
+    private func create(pick: PlayerPick?) {
         guard !isCreating else { return }
         isCreating = true
         draft.plans = [plan]
         Task {
             do {
-                let team = try await feed.createTeam(from: draft)
-                createdTeam = team
-                Haptics.success()
-                move(to: .invite)
+                switch try await feed.createTeam(from: draft, pick: pick, sources: sources ?? .empty) {
+                case .newTeam(let team):
+                    createdTeam = team
+                    Haptics.success()
+                    move(to: .invite)
+                case .existingTeam:
+                    Haptics.success()
+                    isPresented = false
+                }
             } catch {
                 failureMessage = error.localizedDescription
                 Haptics.error()
@@ -231,6 +278,8 @@ struct CreateTeamFlow: View {
             move(to: .sport)
         case .details:
             move(to: .identity)
+        case .players:
+            move(to: .details)
         case .invite:
             // The exercise already exists — there is nothing to go back to.
             break
@@ -242,6 +291,7 @@ struct CreateTeamFlow: View {
 
 private struct FlowHeader: View {
     let step: CreationStep
+    let withPlayers: Bool
     let back: () -> Void
 
     var body: some View {
@@ -272,7 +322,7 @@ private struct FlowHeader: View {
 
                 Spacer()
 
-                Text(step.counter)
+                Text(step.counter(withPlayers: withPlayers))
                     .font(TamrinFont.font(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -281,7 +331,7 @@ private struct FlowHeader: View {
             }
 
             HStack(spacing: 6) {
-                ForEach(CreationStep.allCases, id: \.rawValue) { item in
+                ForEach(CreationStep.shown(withPlayers: withPlayers), id: \.rawValue) { item in
                     Capsule()
                         .fill(item.rawValue <= step.rawValue ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color.primary.opacity(0.09)))
                         .frame(height: 4)
