@@ -80,6 +80,20 @@ struct PickPlayersStep: View {
     }
 }
 
+// MARK: - Wording
+
+/// Arabic counts for players: one and two have their own words, three to ten
+/// take the plural, eleven and up the singular — the rule the push copy
+/// already uses for guests.
+private func playerCount(_ n: Int) -> String {
+    switch n {
+    case 1: String(localized: "لاعب واحد")
+    case 2: String(localized: "لاعبَين")
+    case 3...10: String(localized: "\(n) لاعبين")
+    default: String(localized: "\(n) لاعب")
+    }
+}
+
 // MARK: - Cards
 
 /// Same card as the add sheet's options: a tinted icon tile, title, subtitle.
@@ -129,7 +143,7 @@ private struct GroupCard: View {
                     .font(TamrinFont.font(size: 17, weight: .bold))
                     .foregroundStyle(.primary)
                 HStack(spacing: 4) {
-                    Text("\(group.members.count) لاعب")
+                    Text(playerCount(group.members.count))
                     if let lastPlayedAt = group.lastPlayedAt {
                         Text("·")
                         Text(lastPlayedAt, format: .relative(presentation: .named))
@@ -205,10 +219,11 @@ private struct PickPeopleList: View {
         !isSaving && (sourceGroup == nil || !selected.isEmpty)
     }
 
+    /// They join the group, so the button says "ضمّ".
     private var actionTitle: String {
         selected.isEmpty
             ? String(localized: "أنشئ بدون لاعبين")
-            : String(localized: "ادعُ \(selected.count) لاعب")
+            : String(localized: "ضمّ \(playerCount(selected.count))")
     }
 
     var body: some View {
