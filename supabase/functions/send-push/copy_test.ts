@@ -234,3 +234,13 @@ Deno.test("registration copy has no em dash", () => {
     assertEquals(c.title.includes("—") || c.body.includes("—"), false);
   }
 });
+
+Deno.test("added_to_event names the organizer and the event", () => {
+  const c = copyFor("added_to_event", "تمرين الخميس", { actorName: "نايف" });
+  assertEquals(c, { title: "صار لك مقعد ⚽", body: "نايف أضافك إلى «تمرين الخميس»" });
+});
+
+Deno.test("added_to_event falls back when the organizer has no name", () => {
+  const c = copyFor("added_to_event", "تمرين الخميس", { actorName: "  " });
+  assertEquals(c?.body, "المشرف أضافك إلى «تمرين الخميس»");
+});

@@ -140,6 +140,12 @@ export function copyFor(
           eventName,
         ),
       };
+    // The organizer picked this player while creating the event.
+    case "added_to_event":
+      return {
+        title: "صار لك مقعد ⚽",
+        body: `${details.actorName?.trim() || "المشرف"} أضافك إلى «${eventName}»`,
+      };
     default:
       return null;
   }
