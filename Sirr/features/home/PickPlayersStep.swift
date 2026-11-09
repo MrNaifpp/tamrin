@@ -329,10 +329,6 @@ private struct PersonCard: View {
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(TamrinTheme.card, in: .rect(cornerRadius: 22, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .strokeBorder(Color.accentColor, lineWidth: isSelected ? 2 : 0)
-            }
             .contentShape(.rect(cornerRadius: 22, style: .continuous))
         }
         .buttonStyle(SpringCardPressStyle())
