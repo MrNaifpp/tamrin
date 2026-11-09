@@ -192,6 +192,12 @@ struct CreateTeamFlow: View {
         .environment(\.layoutDirection, .tamrin)
         .interactiveDismissDisabled()
         .task {
+            // Start from the payment options the organizer already uses in
+            // their other groups, unless they've chosen some already.
+            let saved = await feed.savedPaymentMethodDrafts()
+            if plan.paymentMethods.isEmpty { plan.paymentMethods = saved }
+        }
+        .task {
             guard sources == nil else { return }
             sources = (try? await PickPlayersService.shared.getPickSources()) ?? .empty
         }
@@ -1481,7 +1487,12 @@ private struct RentedVenueSearch: View {
 
     var body: some View {
         results
-            .sheetTitle(String(localized: "ملعب مؤجر"), subtitle: String(localized: "سيظهر العنوان لكل الأعضاء"))
+            // The bar's own title, not `sheetTitle`: that one pads its
+            // principal block down by 30pt, which runs it into the search
+            // field pinned right under the bar. The explanatory line moves
+            // under the results instead.
+            .navigationTitle(String(localized: "ملعب مؤجر"))
+            .navigationBarTitleDisplayMode(.inline)
             // Pinned under the bar, not auto-presented: presenting it takes
             // the bar over and hides both the title and the back button.
             .searchable(
@@ -1557,6 +1568,11 @@ private struct RentedVenueSearch: View {
                     .buttonStyle(.plain)
                 }
                 .transition(.blurReplace)
+
+                Text("سيظهر العنوان لكل الأعضاء")
+                    .font(TamrinFont.caption)
+                    .foregroundStyle(.secondary)
+                    .listRowSeparator(.hidden)
             }
             .listStyle(.plain)
             .scrollDismissesKeyboard(.immediately)

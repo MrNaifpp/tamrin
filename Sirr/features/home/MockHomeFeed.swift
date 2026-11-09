@@ -652,6 +652,27 @@ final class HomeStore {
         return newestFirst.filter { seen.insert($0.provider).inserted }
     }
 
+    /// The organizer's payment options across every group they own, newest
+    /// per provider. A brand-new group has none of its own yet, so its first
+    /// exercise starts from what the organizer already uses elsewhere.
+    func savedPaymentMethodDrafts() async -> [PaymentMethodDraft] {
+        guard !isPreview, let uid = currentUserID else { return [] }
+        var all: [PaymentMethodRecord] = []
+        for (teamID, owner) in ownerByTeam where owner == uid && !isDebugMemberFixtureTeam(teamID) {
+            if let loaded = paymentMethodsByTeam[teamID], !loaded.isEmpty {
+                all += loaded
+            } else if let fetched = try? await ManualPaymentService.shared.getMyWorkspaceMethods(workspaceId: teamID) {
+                paymentMethodsByTeam[teamID] = fetched
+                all += fetched
+            }
+        }
+        var seen: Set<PaymentProvider> = []
+        return all
+            .sorted { $0.createdAt > $1.createdAt }
+            .filter { seen.insert($0.provider).inserted }
+            .map(\.asDraft)
+    }
+
     var teamPlans: [FeedPlan] { plans(for: selectedTeamID) }
     var teamMembers: [FeedTeamMember] { members(for: selectedTeamID) }
     func methodsForCurrentTeam() -> [PaymentMethodRecord] {
