@@ -12,8 +12,6 @@ import SwiftUI
 
 struct PickPlayersStep: View {
     let sources: PickSources
-    /// The event's max participants; nil means no limit.
-    let seatLimit: Int?
     let isSaving: Bool
     /// Back to the details step. This step owns the navigation bar, so the
     /// flow's own header is hidden here.
@@ -24,9 +22,6 @@ struct PickPlayersStep: View {
         case newGroup
         case group(PickGroup)
     }
-
-    /// The organizer is seated by the server too, so they take one seat.
-    private var maxPicks: Int? { seatLimit.map { max($0 - 1, 0) } }
 
     var body: some View {
         NavigationStack {
@@ -75,7 +70,6 @@ struct PickPlayersStep: View {
                         title: String(localized: "مجموعة جديدة"),
                         people: sources.pastPlayers,
                         sourceGroup: nil,
-                        maxPicks: maxPicks,
                         isSaving: isSaving,
                         confirm: confirm
                     )
@@ -84,7 +78,6 @@ struct PickPlayersStep: View {
                         title: group.name,
                         people: group.members,
                         sourceGroup: group,
-                        maxPicks: maxPicks,
                         isSaving: isSaving,
                         confirm: confirm
                     )
@@ -137,7 +130,6 @@ private struct PickPeopleList: View {
     let title: String
     let people: [PickPerson]
     let sourceGroup: PickGroup?
-    let maxPicks: Int?
     let isSaving: Bool
     let confirm: (PlayerPick) -> Void
 
@@ -148,21 +140,18 @@ private struct PickPeopleList: View {
         title: String,
         people: [PickPerson],
         sourceGroup: PickGroup?,
-        maxPicks: Int?,
         isSaving: Bool,
         confirm: @escaping (PlayerPick) -> Void
     ) {
         self.title = title
         self.people = people
         self.sourceGroup = sourceGroup
-        self.maxPicks = maxPicks
         self.isSaving = isSaving
         self.confirm = confirm
-        // A group starts fully ticked when everyone fits (the usual case is
-        // "the same people again"). A group bigger than the seats, and a new
-        // group, start empty, so a new group is never made by accident.
-        let everyoneFits = people.count <= (maxPicks ?? people.count)
-        let start = (sourceGroup != nil && everyoneFits) ? people.map(\.id) : []
+        // Picked people are invited, not seated, so there is no seat limit
+        // here. A group starts fully ticked (the usual case is "the same
+        // people again"); a new group starts empty.
+        let start = sourceGroup == nil ? [] : people.map(\.id)
         _selected = State(initialValue: Set(start))
     }
 
@@ -172,13 +161,8 @@ private struct PickPeopleList: View {
         return people.filter { $0.name.localizedStandardContains(q) }
     }
 
-    private var atLimit: Bool {
-        guard let maxPicks else { return false }
-        return selected.count >= maxPicks
-    }
-
     private var allSelected: Bool {
-        selected.count == min(people.count, maxPicks ?? people.count)
+        selected.count == people.count
     }
 
     /// An existing group needs at least one player; a new group may start
@@ -206,16 +190,13 @@ private struct PickPeopleList: View {
                                     .font(TamrinFont.body)
                             }
                             .tag(person.id)
-                            .selectionDisabled(atLimit && !selected.contains(person.id))
                         }
                     } header: {
                         Text("\(selected.count) من \(people.count)")
                             .font(TamrinFont.font(size: 13, weight: .medium))
                     } footer: {
-                        if atLimit, let maxPicks {
-                            Text("اكتمل العدد (\(maxPicks))")
-                                .font(TamrinFont.font(size: 13))
-                        }
+                        Text("يوصلهم إشعار ويسجّلون بأنفسهم")
+                            .font(TamrinFont.font(size: 13))
                     }
                 }
                 .listStyle(.insetGrouped)
@@ -247,7 +228,7 @@ private struct PickPeopleList: View {
                         if allSelected {
                             selected = []
                         } else {
-                            selected = Set(people.prefix(maxPicks ?? people.count).map(\.id))
+                            selected = Set(people.map(\.id))
                         }
                     }
                 }
@@ -272,6 +253,6 @@ private struct PickPeopleList: View {
         ],
         pastPlayers: people
     )
-    return PickPlayersStep(sources: sources, seatLimit: 4, isSaving: false, back: {}) { _ in }
+    return PickPlayersStep(sources: sources, isSaving: false, back: {}) { _ in }
         .environment(\.layoutDirection, .rightToLeft)
 }

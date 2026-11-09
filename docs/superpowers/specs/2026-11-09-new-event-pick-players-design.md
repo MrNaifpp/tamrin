@@ -36,8 +36,11 @@ people in it, each told by push, in one flow.
    - **From + مجموعة جديدة:** the list is everyone who has been in any
      event this organizer ran. The organizer ticks anyone, or nobody. A new
      workspace is made with the picked people, and the event goes there.
-5. **They're in.** Each picked person gets a seat in the event at once,
-   and a push: **«<organizer name> أضافك إلى "<event name>"»**.
+5. **They're invited, not seated (Naif, 2026-11-09).** Each picked person
+   is added to the workspace and gets a push:
+   **«<organizer name> أضافك إلى "<event name>". سجّل مكانك 👍»**.
+   They register themselves, so seats, approval and the unpaid-debt rule
+   apply as for any member.
 6. **They can leave later**, the same way any player leaves an event.
 
 The visual mockups are in `.superpowers/brainstorm/` (not committed):
@@ -53,7 +56,7 @@ The visual mockups are in `.superpowers/brainstorm/` (not committed):
 
 - Start a new event from home without choosing a team first.
 - Bring back people from earlier events in a few taps.
-- Picked people are seated and told who added them, to which event.
+- Picked people are invited and told who added them, to which event.
 - An event made for some people stays hidden from the rest.
 
 ## Non-goals
@@ -93,11 +96,9 @@ The visual mockups are in `.superpowers/brainstorm/` (not committed):
 
 These were not decided in the conversation; they are my defaults.
 
-1. **Added people owe the price** like any player who registers: their
-   seat is held with payment pending, and the usual payment reminders and
-   rules apply.
-2. **Seat limit.** The organizer cannot tick more people than the event
-   has seats.
+1. *(Replaced: picked people are no longer seated, so they owe nothing
+   until they register.)*
+2. *(Replaced: no seat limit on picking, since nobody takes a seat.)*
 3. **New workspace name** = the event name. The owner can rename it later
    in the existing workspace settings.
 4. **Picking nobody** makes a workspace with just the organizer, then shows
@@ -115,13 +116,9 @@ These were not decided in the conversation; they are my defaults.
    first steps, as today. Registration settings use the defaults.
 10. **Publish at once.** The event is published as soon as the flow ends.
     Picked people get only the "added you" push, not the usual
-    `event_invited` push, because they're already in. Picked people skip
-    the group's manual approval and registration window, because the
-    organizer chose them.
-11. **Unpaid debt.** The organizer may add anyone, including someone who
-    owes elsewhere. An added seat that is never paid counts as debt, like
-    any other unpaid seat. The person can leave before the event to avoid
-    that.
+    `event_invited` push as well. They register like any member, so the
+    group's approval and registration window still apply.
+11. *(Replaced: the unpaid-debt rule applies when they register, as usual.)*
 
 12. **No duplicate groups.** If the organizer ticks exactly the same people
     as a group they already own, the event goes into that group instead
@@ -159,8 +156,6 @@ the mockups, these win.
   "٨ من ١٤".
 - **Confirm.** The top-trailing button reads "إضافة" and is disabled
   until the step is valid. No floating bottom button.
-- **Seat limit.** When the seats are full, the unticked rows dim and turn
-  off, and a footer line says why. No alert.
 - **Empty states.** `ContentUnavailableView` when the organizer has no
   groups, or no past players.
 - **Finish.** The sheet closes and opens the new event (the existing

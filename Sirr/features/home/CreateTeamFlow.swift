@@ -169,7 +169,6 @@ struct CreateTeamFlow: View {
                     case .players:
                         PickPlayersStep(
                             sources: sources ?? .empty,
-                            seatLimit: plan.capacity,
                             isSaving: isCreating,
                             back: goBack,
                             confirm: { create(pick: $0) }

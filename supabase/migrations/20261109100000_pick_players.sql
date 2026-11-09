@@ -67,9 +67,11 @@ $$;
 revoke execute on function public.get_my_pick_sources() from public, anon;
 grant execute on function public.get_my_pick_sources() to authenticated;
 
--- Creates the event exactly as create_event does, then seats the picked
--- players, makes them members of the workspace, and tells each one who added
--- them. One transaction: either all of it happens or none of it does.
+-- Makes the picked players members of the workspace, creates the event
+-- exactly as create_event does (which invites every member), and tells each
+-- picked player who added them. They are not seated: each one registers
+-- themselves, so seats, approval and the unpaid-debt rule all apply as usual.
+-- One transaction: either all of it happens or none of it does.
 create or replace function public.create_event_with_players(
   p_creator_id uuid,
   p_workspace_id uuid,
@@ -99,7 +101,6 @@ declare
   v_uid uuid := auth.uid();
   v_ids uuid[];
   v_stranger uuid;
-  v_player uuid;
   v_result json;
   v_event public.events;
 begin
@@ -138,23 +139,10 @@ begin
       hint = 'player_not_pickable';
   end if;
 
-  -- create_event seats the organizer too, so they take one of the seats.
-  if p_max_participants is not null and cardinality(v_ids) + 1 > p_max_participants then
-    raise exception using
-      message = 'عدد اللاعبين أكبر من المقاعد',
-      hint = 'too_many_players';
-  end if;
-
-  -- The seat guard refuses anyone who still owes for an earlier event in this
-  -- group. Say so in words meant for the organizer, not the player.
-  foreach v_player in array v_ids loop
-    if public.unpaid_debt_event(p_workspace_id, v_player) is not null then
-      raise exception using
-        message = format('%s عليه قطة لم تُدفع من تمرين سابق',
-                         coalesce((select name from users where user_id = v_player), 'لاعب')),
-        hint = 'player_owes';
-    end if;
-  end loop;
+  -- Members first, so create_event invites them along with everyone else.
+  insert into workspace_members (workspace_id, user_id)
+  select p_workspace_id, x from unnest(v_ids) as x
+  on conflict do nothing;
 
   -- Picked players get "added you", not also the usual "new event" push.
   perform set_config('tamrin.picked_players', array_to_string(v_ids, ','), true);
@@ -179,20 +167,6 @@ begin
     p_capacity_policy => p_capacity_policy
   );
   select * into v_event from events where id = (v_result->>'id')::uuid;
-
-  insert into workspace_members (workspace_id, user_id)
-  select p_workspace_id, x from unnest(v_ids) as x
-  on conflict do nothing;
-
-  -- Seated the way an approved registration request is.
-  insert into event_participants
-    (event_id, user_id, payment_status, payment_declared_at,
-     paid_price_per_person, payment_group_size)
-  select v_event.id, x,
-         case when coalesce(v_event.total_price, 0) > 0 then 'pending' else 'confirmed' end,
-         case when coalesce(v_event.total_price, 0) > 0 then null else now() end,
-         v_event.price_per_person, 1
-  from unnest(v_ids) as x;
 
   insert into push_outbox (user_id, type, event_id, actor_id)
   select x, 'added_to_event', v_event.id, v_uid

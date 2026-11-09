@@ -140,11 +140,12 @@ export function copyFor(
           eventName,
         ),
       };
-    // The organizer picked this player while creating the event.
+    // The organizer picked this player while creating the event. They are
+    // invited, not seated: registering is still theirs to do.
     case "added_to_event":
       return {
-        title: "صار لك مقعد ⚽",
-        body: `${details.actorName?.trim() || "المشرف"} أضافك إلى «${eventName}»`,
+        title: "دعوة جديدة ⚽",
+        body: `${details.actorName?.trim() || "المشرف"} أضافك إلى «${eventName}». سجّل مكانك 👍`,
       };
     default:
       return null;

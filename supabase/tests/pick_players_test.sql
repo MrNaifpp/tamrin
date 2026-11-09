@@ -132,20 +132,20 @@ begin
 end;
 $$;
 
--- seats picked players
+-- picked players are invited, not seated: they register themselves
 do $$
 declare v_event uuid;
 begin
   perform pg_temp.set_auth('64000000-0000-0000-0000-000000000001');
-  v_event := pg_temp.make_event('مقعد', array['64000000-0000-0000-0000-000000000002'::uuid]);
-  if not exists (select 1 from public.event_participants
-                 where event_id = v_event and user_id = '64000000-0000-0000-0000-000000000002'
-                   and payment_status = 'pending') then
-    raise exception 'seats picked players: P1 not seated as pending';
-  end if;
+  v_event := pg_temp.make_event('دعوة', array['64000000-0000-0000-0000-000000000002'::uuid]);
   if exists (select 1 from public.event_participants
-             where event_id = v_event and user_id = '64000000-0000-0000-0000-000000000003') then
-    raise exception 'seats picked players: P2 was seated without being picked';
+             where event_id = v_event and user_id = '64000000-0000-0000-0000-000000000002') then
+    raise exception 'invited not seated: P1 was given a seat';
+  end if;
+  if not exists (select 1 from public.event_member_responses
+                 where event_id = v_event and user_id = '64000000-0000-0000-0000-000000000002'
+                   and status = 'invited') then
+    raise exception 'invited not seated: P1 is not invited';
   end if;
 end;
 $$;
@@ -186,43 +186,23 @@ begin
                    and user_id = '64000000-0000-0000-0000-000000000005') then
     raise exception 'new member joins workspace: P4 not a member of A';
   end if;
-end;
-$$;
-
--- too many players
-do $$
-declare v_hint text;
-begin
-  perform pg_temp.set_auth('64000000-0000-0000-0000-000000000001');
-  begin
-    perform pg_temp.make_event('زحمة',
-      array['64000000-0000-0000-0000-000000000002', '64000000-0000-0000-0000-000000000003']::uuid[],
-      100, 1);
-    raise exception 'too many players: no error raised';
-  exception when others then
-    get stacked diagnostics v_hint = pg_exception_hint;
-    if v_hint is distinct from 'too_many_players' then raise; end if;
-  end;
-  if exists (select 1 from public.events where name = 'زحمة') then
-    raise exception 'too many players: event was created';
+  if not exists (select 1 from public.event_member_responses r
+                 join public.events e on e.id = r.event_id
+                 where e.name = 'عضو جديد'
+                   and r.user_id = '64000000-0000-0000-0000-000000000005'
+                   and r.status = 'invited') then
+    raise exception 'new member joins workspace: P4 is not invited to the event';
   end if;
 end;
 $$;
 
--- organizer seat counts toward the limit: 2 seats, organizer + 2 players
+-- more people than seats can be invited: nobody takes a seat yet
 do $$
-declare v_hint text;
 begin
   perform pg_temp.set_auth('64000000-0000-0000-0000-000000000001');
-  begin
-    perform pg_temp.make_event('زحمة ٢',
-      array['64000000-0000-0000-0000-000000000002', '64000000-0000-0000-0000-000000000003']::uuid[],
-      100, 2);
-    raise exception 'organizer seat counts: no error raised';
-  exception when others then
-    get stacked diagnostics v_hint = pg_exception_hint;
-    if v_hint is distinct from 'too_many_players' then raise; end if;
-  end;
+  perform pg_temp.make_event('دعوة واسعة',
+    array['64000000-0000-0000-0000-000000000002', '64000000-0000-0000-0000-000000000003']::uuid[],
+    100, 1);
 end;
 $$;
 
@@ -251,33 +231,15 @@ begin
   perform pg_temp.set_auth('64000000-0000-0000-0000-000000000001');
   v_event := pg_temp.make_event('أنا',
     array['64000000-0000-0000-0000-000000000001', '64000000-0000-0000-0000-000000000002']::uuid[]);
-  -- create_event already seats the organizer; picking them adds nothing.
-  if (select count(*) from public.event_participants
-      where event_id = v_event and user_id = '64000000-0000-0000-0000-000000000001') <> 1 then
-    raise exception 'organizer id ignored: organizer seat count is not 1';
-  end if;
   if exists (select 1 from public.push_outbox
              where event_id = v_event and user_id = '64000000-0000-0000-0000-000000000001'
                and type = 'added_to_event') then
     raise exception 'organizer id ignored: organizer was told they were added';
   end if;
-  if not exists (select 1 from public.event_participants
-                 where event_id = v_event and user_id = '64000000-0000-0000-0000-000000000002') then
-    raise exception 'organizer id ignored: P1 not seated';
-  end if;
-end;
-$$;
-
--- free event seats confirmed
-do $$
-declare v_event uuid;
-begin
-  perform pg_temp.set_auth('64000000-0000-0000-0000-000000000001');
-  v_event := pg_temp.make_event('مجاني', array['64000000-0000-0000-0000-000000000002'::uuid], 0);
-  if not exists (select 1 from public.event_participants
+  if not exists (select 1 from public.push_outbox
                  where event_id = v_event and user_id = '64000000-0000-0000-0000-000000000002'
-                   and payment_status = 'confirmed') then
-    raise exception 'free event seats confirmed: P1 not confirmed';
+                   and type = 'added_to_event') then
+    raise exception 'organizer id ignored: P1 was not told';
   end if;
 end;
 $$;
@@ -295,7 +257,7 @@ begin
 end;
 $$;
 
--- debtor refused with a message for the organizer
+-- someone who owes can still be invited
 set local session_replication_role = replica;
 insert into public.events (id, creator_id, workspace_id, name, start_date,
                            total_price, price_per_person, max_participants, published_at) values
@@ -304,22 +266,15 @@ insert into public.events (id, creator_id, workspace_id, name, start_date,
 insert into public.event_participants (event_id, user_id, payment_status) values
   ('64000000-0000-0000-0000-0000000000e3', '64000000-0000-0000-0000-000000000003', 'pending');
 set local session_replication_role = origin;
-
 do $$
-declare v_hint text;
 begin
   if public.unpaid_debt_event('64000000-0000-0000-0000-0000000000a1',
                               '64000000-0000-0000-0000-000000000003') is null then
     raise exception 'debtor fixture: P2 has no debt';
   end if;
   perform pg_temp.set_auth('64000000-0000-0000-0000-000000000001');
-  begin
-    perform pg_temp.make_event('مديون', array['64000000-0000-0000-0000-000000000003'::uuid]);
-    raise exception 'debtor refused: no error raised';
-  exception when others then
-    get stacked diagnostics v_hint = pg_exception_hint;
-    if v_hint is distinct from 'player_owes' then raise; end if;
-  end;
+  -- Being invited isn't a seat, so the debt rule applies only when they register.
+  perform pg_temp.make_event('مديون', array['64000000-0000-0000-0000-000000000003'::uuid]);
 end;
 $$;
 
