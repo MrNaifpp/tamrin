@@ -522,7 +522,8 @@ final class EventService {
         recurrence: String = "none",
         paymentMethodId: UUID? = nil,
         paymentMethodIds: [UUID] = [],
-        capacityPolicy: CapacityPolicy = .waitlist
+        capacityPolicy: CapacityPolicy = .waitlist,
+        playerIds: [UUID] = []
     ) async throws -> EventRecord {
         let session: Session
         do {
@@ -561,10 +562,17 @@ final class EventService {
         if let latitude { params["p_latitude"] = .double(latitude) }
         if let longitude { params["p_longitude"] = .double(longitude) }
 
+        // Picked players are seated, made members and told who added them in
+        // the same transaction that creates the event.
+        let function = playerIds.isEmpty ? "create_event" : "create_event_with_players"
+        if !playerIds.isEmpty {
+            params["p_player_ids"] = .array(playerIds.map { .string($0.uuidString) })
+        }
+
         let response: PostgrestResponse<Void>
         do {
             response = try await client
-                .rpc("create_event", params: params)
+                .rpc(function, params: params)
                 .execute()
         } catch {
             throw Self.translatedPaymentSchemaError(error)

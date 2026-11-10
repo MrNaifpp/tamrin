@@ -114,6 +114,14 @@ struct TeamDraft {
     var startDate = Date.now
 }
 
+/// Where "تمرين جديد" put the new event.
+enum CreateTeamOutcome {
+    /// A new group; the flow goes on to its invite link.
+    case newTeam(FeedTeam)
+    /// Into one of the organizer's existing groups; the flow closes.
+    case existingTeam(UUID)
+}
+
 struct PlanDraft: Identifiable, Hashable {
     var id = UUID()
     var name = ""
@@ -642,6 +650,27 @@ final class HomeStore {
         let newestFirst = (paymentMethodsByTeam[teamID] ?? []).sorted { $0.createdAt > $1.createdAt }
         var seen: Set<PaymentProvider> = []
         return newestFirst.filter { seen.insert($0.provider).inserted }
+    }
+
+    /// The organizer's payment options across every group they own, newest
+    /// per provider. A brand-new group has none of its own yet, so its first
+    /// exercise starts from what the organizer already uses elsewhere.
+    func savedPaymentMethodDrafts() async -> [PaymentMethodDraft] {
+        guard !isPreview, let uid = currentUserID else { return [] }
+        var all: [PaymentMethodRecord] = []
+        for (teamID, owner) in ownerByTeam where owner == uid && !isDebugMemberFixtureTeam(teamID) {
+            if let loaded = paymentMethodsByTeam[teamID], !loaded.isEmpty {
+                all += loaded
+            } else if let fetched = try? await ManualPaymentService.shared.getMyWorkspaceMethods(workspaceId: teamID) {
+                paymentMethodsByTeam[teamID] = fetched
+                all += fetched
+            }
+        }
+        var seen: Set<PaymentProvider> = []
+        return all
+            .sorted { $0.createdAt > $1.createdAt }
+            .filter { seen.insert($0.provider).inserted }
+            .map(\.asDraft)
     }
 
     var teamPlans: [FeedPlan] { plans(for: selectedTeamID) }
@@ -1690,7 +1719,15 @@ final class HomeStore {
     /// dates. A failed date rolls the new exercise back, so the UI never reports
     /// one as ready without its dates and payment methods.
     @discardableResult
-    func createTeam(from draft: TeamDraft) async throws -> FeedTeam {
+    /// Without a pick, this is the original flow: a new group and its events.
+    /// With one, the event goes into an existing group when the picked people
+    /// are exactly that group, and into a new group otherwise; either way the
+    /// picked people are seated and told who added them.
+    func createTeam(
+        from draft: TeamDraft,
+        pick: PlayerPick? = nil,
+        sources: PickSources = .empty
+    ) async throws -> CreateTeamOutcome {
         let name = draft.teamName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
             throw NSError(
@@ -1708,6 +1745,22 @@ final class HomeStore {
                 userInfo: [NSLocalizedDescriptionKey: String(localized: "الإنشاء غير متاح في وضع المعاينة.")]
             )
         }
+        let playerIds = pick.map { Array($0.selected) } ?? []
+
+        if let pick, case .existing(let workspaceId) = pick.destination(ownedGroups: sources.groups) {
+            do {
+                try await createEvents(from: draft.plans, startDate: draft.startDate,
+                                       in: workspaceId, playerIds: playerIds)
+            } catch {
+                errorMessage = ServerErrorMessage.arabic(for: error)
+                throw error
+            }
+            selectedTeamID = workspaceId
+            onSelectWorkspace?(workspaceId)
+            await loadSelectedTeamData()
+            return .existingTeam(workspaceId)
+        }
+
         var createdWorkspace: WorkspaceRecord?
         do {
             let ws = try await WorkspaceService.shared.createWorkspace(
@@ -1716,7 +1769,8 @@ final class HomeStore {
                 color: draft.teamColor.rawValue
             )
             createdWorkspace = ws
-            try await createEvents(from: draft.plans, startDate: draft.startDate, in: ws.id)
+            try await createEvents(from: draft.plans, startDate: draft.startDate,
+                                   in: ws.id, playerIds: playerIds)
 
             let team = mapTeam(ws)
             teams.append(team)
@@ -1725,7 +1779,7 @@ final class HomeStore {
             selectedTeamID = ws.id
             onSelectWorkspace?(ws.id)
             await loadSelectedTeamData()      // pick up the events just created
-            return team
+            return .newTeam(team)
         } catch {
             errorMessage = ServerErrorMessage.arabic(for: error)
             if let workspace = createdWorkspace {
@@ -1931,7 +1985,12 @@ final class HomeStore {
     /// so a recurring plan with multiple weekdays becomes one weekly series per
     /// day; a one-off plan becomes a single non-recurring event.
     @discardableResult
-    private func createEvents(from plans: [PlanDraft], startDate: Date, in workspaceId: UUID) async throws -> [EventRecord] {
+    private func createEvents(
+        from plans: [PlanDraft],
+        startDate: Date,
+        in workspaceId: UUID,
+        playerIds: [UUID] = []
+    ) async throws -> [EventRecord] {
         let cal = Calendar(identifier: .gregorian)
         let base = max(Date(), startDate)
         var createdEvents: [EventRecord] = []
@@ -1956,6 +2015,7 @@ final class HomeStore {
                             recurrence: "none",
                             paymentMethodIds: paymentMethodIds,
                             in: workspaceId,
+                            playerIds: playerIds,
                             cal: cal
                         )
                     )
@@ -1970,6 +2030,7 @@ final class HomeStore {
                                 recurrence: "weekly",
                                 paymentMethodIds: paymentMethodIds,
                                 in: workspaceId,
+                                playerIds: playerIds,
                                 cal: cal
                             )
                         )
@@ -1995,6 +2056,7 @@ final class HomeStore {
         recurrence: String,
         paymentMethodIds: [UUID],
         in workspaceId: UUID,
+        playerIds: [UUID] = [],
         cal: Calendar
     ) async throws -> EventRecord {
         var end = combine(day: start, time: plan.endTime, cal: cal)
@@ -2014,7 +2076,8 @@ final class HomeStore {
             longitude: plan.longitude,
             recurrence: recurrence,
             paymentMethodIds: paymentMethodIds,
-            capacityPolicy: plan.capacityPolicy
+            capacityPolicy: plan.capacityPolicy,
+            playerIds: playerIds
         )
         if !plan.mapsURL.isEmpty {
             await saveMapLink(plan.mapsURL, eventID: event.id)
