@@ -70,6 +70,28 @@ final class ApplePayPaymentService {
         }
     }
 
+    /// Asks the server to check one payment with MyFatoorah now, instead of
+    /// waiting for the payment sweep. Retries briefly, because MyFatoorah can
+    /// take a moment to record a payment after its page closes.
+    func checkPayment(paymentId: UUID, attempts: Int = 3) async throws -> CardPaymentVerification {
+        struct Envelope: Decodable { let status: String }
+        for attempt in 0..<attempts {
+            let data = try await invoke(
+                "check-payment",
+                body: ["payment_id": paymentId.uuidString.lowercased()]
+            )
+            let status = try decoder.decode(Envelope.self, from: data).status
+            paymentLogger.info("check-payment -> \(status, privacy: .public)")
+            switch status {
+            case "paid": return .paid
+            case "failed": return .failed(reason: nil)
+            default:
+                if attempt < attempts - 1 { try await Task.sleep(for: .seconds(2)) }
+            }
+        }
+        return .processing
+    }
+
     /// TEST ONLY (see CardPayments.testCardEnabled): asks the server for a
     /// MyFatoorah test card page for this payment.
     func startTestCardPayment(paymentId: UUID) async throws -> TestCardStart {

@@ -2558,6 +2558,7 @@ struct RegistrationFlowSheet: View {
     @State private var cardQuote: CardPaymentQuote?
     /// TEST ONLY: MyFatoorah's test card page, and the note shown after it.
     @State private var testCardPage: IdentifiableURL?
+    @State private var testCardPaymentId: UUID?
     @State private var testCardNotice: String?
     /// Whether the member has claimed a seat for themselves. Starts off, so
     /// registering is a deliberate tap on your own card rather than something
@@ -2776,9 +2777,26 @@ struct RegistrationFlowSheet: View {
             }
         }
         .sheet(item: $testCardPage, onDismiss: {
+            // Ask now rather than wait for the payment sweep: MyFatoorah has
+            // usually recorded the payment by the time its page is closed.
+            guard let paymentId = testCardPaymentId else { return }
+            testCardPaymentId = nil
+            submitting = true
             Task {
-                await feed.reloadRoster(occurrence.id)
-                testCardNotice = String(localized: "إذا أكملت الدفع التجريبي، سيتأكد مقعدك خلال دقائق.")
+                defer { submitting = false }
+                let verdict = try? await ApplePayPaymentService.shared.checkPayment(paymentId: paymentId)
+                switch verdict {
+                case .paid:
+                    Haptics.success()
+                    await feed.markCardPaid(for: occurrence)
+                    withAnimation { step = .success }
+                case .failed:
+                    Haptics.error()
+                    failureMessage = String(localized: "لم تنجح عملية الدفع.")
+                default:
+                    await feed.reloadRoster(occurrence.id)
+                    testCardNotice = String(localized: "إذا أكملت الدفع التجريبي، سيتأكد مقعدك خلال دقائق.")
+                }
             }
         }) { page in
             SafariView(url: page.url)
@@ -3412,6 +3430,7 @@ struct RegistrationFlowSheet: View {
             do {
                 switch try await ApplePayPaymentService.shared.startTestCardPayment(paymentId: quote.paymentId) {
                 case .ready(let url):
+                    testCardPaymentId = quote.paymentId
                     testCardPage = IdentifiableURL(url: url)
                 case .paid:
                     await feed.markCardPaid(for: occurrence)
