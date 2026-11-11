@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { makeMyFatoorahClient } from "../_shared/myfatoorah.ts";
-import { makeHandler, type PaymentRow } from "./handler.ts";
+import { type ClaimResult, makeHandler } from "./handler.ts";
 
 const url = Deno.env.get("SUPABASE_URL")!;
 const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -17,14 +17,12 @@ Deno.serve(makeHandler({
     const { data } = await asUser.auth.getUser();
     return data.user?.id ?? null;
   },
-  async loadPayment(id) {
-    const { data } = await admin.from("payments")
-      .select("id, user_id, amount, currency, status").eq("id", id).maybeSingle();
-    return (data as PaymentRow | null) ?? null;
-  },
-  async markProcessing(id) {
-    const { error } = await admin.from("payments").update({ status: "processing" }).eq("id", id);
+  async claim(paymentId, userId, attempt) {
+    const { data, error } = await admin.rpc("claim_payment_attempt", {
+      p_payment_id: paymentId, p_user_id: userId, p_attempt: attempt,
+    });
     if (error) throw error;
+    return data as ClaimResult;
   },
   async settle(args) {
     const { data, error } = await admin.rpc("settle_payment", args);

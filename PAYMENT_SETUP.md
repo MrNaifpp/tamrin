@@ -135,8 +135,19 @@ through Tamrin.
     select status, count(*), sum(amount) from public.refunds group by status;
     select * from public.refunds where status in ('failed','waiting_balance') order by created_at desc;
 
-A refund done by hand in the MyFatoorah portal is **not** reflected in seats; mirror it
-by hand.
+**Never refund from the MyFatoorah portal.** A portal refund is not reflected in seats:
+the seat stays confirmed, and a later in-app refund could then send back more than is
+left. Every refund goes through the app (withdraw, remove guest, cancel).
+
+## When you get a push
+
+| Push | What happened | What to do |
+|---|---|---|
+| استرداد متعثر (`refund_failed`) | a refund was refused, cancelled, waited 7 days for balance, or got no answer for 3 hours | check the refund in the portal; if it never went out, refund by hand and mark the row |
+| دفعة تحتاج مراجعة (`payment_problem`) | a second charge landed on an already-paid payment (it is refunded automatically, reason `duplicate_charge`), or the amount charged did not match | check the portal; for a mismatch, refund the charge by hand |
+
+Each Apple Pay attempt is sent to MyFatoorah as ExternalIdentifier `<payment id>:<first 16 of
+Apple's transaction id>`, stored as `payments.current_attempt`. Search the portal by it.
 
 ## Testing (live account, 1-riyal workouts, refund everything)
 

@@ -66,7 +66,7 @@ Deno.test("Refunded right away settles refunded", async () => {
 
 Deno.test("balance refusal → waiting_balance", async () => {
   const { d, settles } = deps({
-    create: async () => { throw new MyFatoorahError(400, '{"Message":"Insufficient available balance"}'); },
+    create: async () => { throw new MyFatoorahError(400, '{"IsSuccess":false,"Message":"Insufficient available balance"}', true); },
   });
   await makeHandler(d)(post({ refund_id: "ref-1" }));
   assertEquals(settles[0].p_status, "waiting_balance");
@@ -122,6 +122,13 @@ Deno.test("network error (not MyFatoorahError) → row left as is, 200", async (
   const { d, settles } = deps({ create: async () => { throw new TypeError("network down"); } });
   const res = await makeHandler(d)(post({ refund_id: "ref-1" }));
   assertEquals(res.status, 200);
+  assertEquals(await res.json(), { status: "retry" });
+  assertEquals(settles.length, 0);
+});
+
+Deno.test("a gateway error on createRefund is not a refusal: the row is left for the sweep", async () => {
+  const { d, settles } = deps({ create: async () => { throw new MyFatoorahError(502, "<html>Bad Gateway</html>"); } });
+  const res = await makeHandler(d)(post({ refund_id: "ref-1" }));
   assertEquals(await res.json(), { status: "retry" });
   assertEquals(settles.length, 0);
 });

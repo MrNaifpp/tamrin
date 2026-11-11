@@ -14,7 +14,7 @@ Deno.serve(makeHandler({
   async loadStuck() {
     const cutoff = new Date(Date.now() - 3 * 60_000).toISOString();
     const { data, error } = await admin.from("payments")
-      .select("id, provider_payment_id, amount, currency, updated_at")
+      .select("id, provider_payment_id, current_attempt, amount, currency, updated_at")
       .eq("status", "processing")
       .eq("provider", "myfatoorah")
       .lt("updated_at", cutoff)

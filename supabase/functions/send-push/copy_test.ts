@@ -179,6 +179,13 @@ Deno.test("refund_failed copy tells ops which workout to look at", () => {
   });
 });
 
+Deno.test("payment_problem copy tells ops which workout to check", () => {
+  assertEquals(copyFor("payment_problem", "تمرين كرة قدم"), {
+    title: "دفعة تحتاج مراجعة",
+    body: "وصل مبلغ لـ تمرين كرة قدم يحتاج مراجعة. راجع لوحة MyFatoorah.",
+  });
+});
+
 Deno.test("member_registered alone names the player", () => {
   assertEquals(
     copyFor("member_registered", "تمرين الخميس", { actorName: "فهد", guestCount: 0 }),

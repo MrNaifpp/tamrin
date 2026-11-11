@@ -78,7 +78,7 @@ export function makeHandler(deps: RefundDeps) {
       });
       return json({ status: r.status });
     } catch (error) {
-      if (error instanceof MyFatoorahError) {
+      if (error instanceof MyFatoorahError && error.definitive) {
         // MyFatoorah answered no. Not enough balance yet is a "try tomorrow";
         // anything else is final and alerts ops through settle_refund.
         console.error("refund-payment refused:", error.status, error.body.slice(0, 300));
@@ -90,7 +90,9 @@ export function makeHandler(deps: RefundDeps) {
         });
         return json({ status: r.status });
       }
-      // No answer. The row stays where it is and the sweep comes back for it.
+      // No clear answer (network, 5xx, gateway page). The refund may exist, so
+      // the row stays where it is; the sweep resends with the same key while
+      // MyFatoorah still remembers it, and gives up after three hours.
       console.error("refund-payment got no answer:", error);
       return json({ status: "retry" });
     }

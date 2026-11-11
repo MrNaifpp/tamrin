@@ -9,6 +9,8 @@ import type { SettleArgs } from "../pay-apple-pay/handler.ts";
 export type StuckPayment = {
   id: string;
   provider_payment_id: string | null;
+  /// The Apple Pay attempt in flight; MyFatoorah knows it as ExternalIdentifier.
+  current_attempt: string | null;
   amount: number;
   currency: string;
   updated_at: string;
@@ -40,7 +42,7 @@ export function makeHandler(deps: SweepDeps) {
       try {
         const remote = row.provider_payment_id
           ? await deps.mf.getPayment(row.provider_payment_id)
-          : await deps.mf.findPaymentByExternalIdentifier(row.id);
+          : await deps.mf.findPaymentByExternalIdentifier(row.current_attempt ?? row.id);
 
         if (!remote) {
           const age = deps.now().getTime() - new Date(row.updated_at).getTime();
@@ -48,6 +50,7 @@ export function makeHandler(deps: SweepDeps) {
           await deps.settle({
             p_payment_id: row.id, p_provider_payment_id: null, p_outcome: "failed",
             p_payment_method: "applepay", p_amount: row.amount, p_currency: row.currency,
+            p_attempt: row.current_attempt,
           });
           settled++;
           continue;
@@ -61,6 +64,7 @@ export function makeHandler(deps: SweepDeps) {
           p_payment_method: "applepay",
           p_amount: remote.amountHalalas,
           p_currency: remote.currency,
+          p_attempt: row.current_attempt,
         });
         settled++;
       } catch (error) {

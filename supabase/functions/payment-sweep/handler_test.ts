@@ -32,7 +32,8 @@ function deps(rows: StuckPayment[], opts: {
 
 const post = (auth = "Bearer s") => new Request("http://x/payment-sweep", { method: "POST", headers: { authorization: auth } });
 const row = (over: Partial<StuckPayment> = {}): StuckPayment => ({
-  id: "pay-1", provider_payment_id: "0707-1", amount: 6000, currency: "SAR", updated_at: minutesAgo(5), ...over,
+  id: "pay-1", provider_payment_id: "0707-1", current_attempt: "pay-1:att", amount: 6000, currency: "SAR",
+  updated_at: minutesAgo(5), ...over,
 });
 
 Deno.test("401 without secret", async () => {
@@ -46,7 +47,7 @@ Deno.test("processing with id → getPayment → settle paid", async () => {
   assertEquals(await res.json(), { checked: 1, settled: 1 });
   assertEquals(settles, [{
     p_payment_id: "pay-1", p_provider_payment_id: "0707-1", p_outcome: "paid",
-    p_payment_method: "applepay", p_amount: 6000, p_currency: "SAR",
+    p_payment_method: "applepay", p_amount: 6000, p_currency: "SAR", p_attempt: "pay-1:att",
   }]);
 });
 
@@ -56,11 +57,16 @@ Deno.test("still processing → no settle", async () => {
   assertEquals(settles.length, 0);
 });
 
-Deno.test("no provider id, found by external identifier → settle paid", async () => {
-  const { d, settles } = deps([row({ provider_payment_id: null })], { find: async () => mf("paid", "0707-9") });
+Deno.test("no provider id, found by the current attempt → settle paid", async () => {
+  const looked: string[] = [];
+  const { d, settles } = deps([row({ provider_payment_id: null })], {
+    find: async (ext) => { looked.push(ext); return mf("paid", "0707-9"); },
+  });
   await makeHandler(d)(post());
   assertEquals(settles[0].p_outcome, "paid");
   assertEquals(settles[0].p_provider_payment_id, "0707-9");
+  assertEquals(looked, ["pay-1:att"]);
+  assertEquals(settles[0].p_attempt, "pay-1:att");
 });
 
 Deno.test("no provider id, not found, older than 30 min → failed", async () => {

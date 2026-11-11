@@ -18,11 +18,11 @@ async function sign(message: string, secret = SECRET): Promise<string> {
 }
 
 const paymentData = {
-  Invoice: { Id: "inv-1", Status: "PAID", ExternalIdentifier: "pay-1" },
+  Invoice: { Id: "inv-1", Status: "PAID", ExternalIdentifier: "pay-1:att" },
   Transaction: { Status: "SUCCESS", PaymentId: "0707-1" },
 };
 const refundData = {
-  Refund: { Id: "R1", Status: "REFUNDED", ExternalIdentifier: "ref-1" },
+  Refund: { Id: "R1", Status: "REFUNDED", InvoiceId: "inv-r" },
   Amount: { ValueInBaseCurrency: 30 },
   ReferencedInvoice: { Id: "inv-1" },
 };
@@ -47,12 +47,16 @@ async function refundEvent(data = refundData, reference = "evt-r1") {
 
 function mfPayment(outcome: MfPayment["outcome"]): MfPayment {
   return {
-    paymentId: "0707-1", invoiceId: "inv-1", externalIdentifier: "pay-1", outcome,
+    paymentId: "0707-1", invoiceId: "inv-1", externalIdentifier: "pay-1:att", outcome,
     amountHalalas: 6000, currency: "SAR", method: "Apple Pay", errorMessage: null,
   };
 }
 
-function deps(opts: { remote?: MfPayment; refund?: MfRefund; knownPayment?: boolean; knownRefund?: boolean } = {}) {
+function deps(opts: {
+  remote?: MfPayment; refund?: MfRefund; knownPayment?: boolean; knownRefund?: boolean;
+  settleThrowsOnce?: boolean;
+} = {}) {
+  let throwNext = opts.settleThrowsOnce ?? false;
   const seen = new Set<string>();
   const log: string[] = [];
   const payArgs: unknown[] = [];
@@ -66,8 +70,9 @@ function deps(opts: { remote?: MfPayment; refund?: MfRefund; knownPayment?: bool
       return "new";
     },
     linkEvent: async () => {},
+    forgetEvent: async (reference) => { seen.delete(reference); log.push(`forget:${reference}`); },
     findPaymentById: async (id) => (opts.knownPayment === false || id !== "pay-1" ? null : { id }),
-    findRefundById: async (id) => (opts.knownRefund === false || id !== "ref-1" ? null : { id }),
+    findRefundByProviderId: async (id) => (opts.knownRefund === false || id !== "R1" ? null : { id: "ref-1" }),
     mf: {
       getPayment: async (id) => { log.push(`get:${id}`); return opts.remote ?? mfPayment("paid"); },
       getRefund: async (id) => {
@@ -75,7 +80,11 @@ function deps(opts: { remote?: MfPayment; refund?: MfRefund; knownPayment?: bool
         return opts.refund ?? { refundId: "R1", status: "refunded", amountHalalas: 3000 };
       },
     },
-    settlePayment: async (args) => { payArgs.push(args); return { status: "settled" }; },
+    settlePayment: async (args) => {
+      if (throwNext) { throwNext = false; throw new Error("db down"); }
+      payArgs.push(args);
+      return { status: "settled" };
+    },
     settleRefund: async (args) => { refundArgs.push(args); return { status: "settled" }; },
   };
   return { d, log, payArgs, refundArgs };
@@ -104,12 +113,12 @@ Deno.test("payment event re-fetches and settles from GET, not from the body", as
   assertEquals(log, ["record:evt-1", "get:0707-1"]);
   assertEquals(payArgs, [{
     p_payment_id: "pay-1", p_provider_payment_id: "0707-1", p_outcome: "failed",
-    p_payment_method: "applepay", p_amount: 6000, p_currency: "SAR",
+    p_payment_method: "applepay", p_amount: 6000, p_currency: "SAR", p_attempt: "pay-1:att",
   }]);
 });
 
 Deno.test("re-fetched payment for another order is ignored", async () => {
-  const { d, payArgs } = deps({ remote: { ...mfPayment("paid"), externalIdentifier: "pay-2" } });
+  const { d, payArgs } = deps({ remote: { ...mfPayment("paid"), externalIdentifier: "pay-2:att" } });
   const res = await makeHandler(d)(await paymentEvent());
   assertEquals((await res.json()).status, "ignored");
   assertEquals(payArgs.length, 0);
@@ -151,4 +160,21 @@ Deno.test("other event codes → 200 ignored", async () => {
   assertEquals(res.status, 200);
   assertEquals((await res.json()).status, "ignored");
   assertEquals(log, []);
+});
+
+Deno.test("a failure while settling forgets the event so MyFatoorah's retry is processed", async () => {
+  const { d, log, payArgs } = deps({ settleThrowsOnce: true });
+  const h = makeHandler(d);
+  const first = await h(await paymentEvent());
+  assertEquals(first.status, 500);
+  assertEquals(log.includes("forget:evt-1"), true);
+  const retry = await h(await paymentEvent());
+  assertEquals(retry.status, 200);
+  assertEquals(payArgs.length, 1);
+});
+
+Deno.test("refund event is matched by MyFatoorah's refund id", async () => {
+  const { d, refundArgs } = deps();
+  await makeHandler(d)(await refundEvent());
+  assertEquals((refundArgs[0] as { p_refund_id: string }).p_refund_id, "ref-1");
 });

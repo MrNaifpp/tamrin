@@ -24,8 +24,12 @@ Deno.serve(makeHandler({
     const { data } = await admin.from("payments").select("id").eq("id", id).maybeSingle();
     return (data as { id: string } | null) ?? null;
   },
-  async findRefundById(id) {
-    const { data } = await admin.from("refunds").select("id").eq("id", id).maybeSingle();
+  async forgetEvent(reference) {
+    await admin.from("payment_webhook_events").delete().eq("id", reference);
+  },
+  async findRefundByProviderId(providerRefundId) {
+    const { data } = await admin.from("refunds").select("id")
+      .eq("provider_refund_id", providerRefundId).maybeSingle();
     return (data as { id: string } | null) ?? null;
   },
   async settlePayment(args) {
