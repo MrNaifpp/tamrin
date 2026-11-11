@@ -39,7 +39,7 @@ Deno.test("payWithApplePay posts v3 payments with PAY and riyal amount", async (
     Data: { InvoiceId: "7323767", PaymentId: "0707-1", TransactionDetails: transaction("PAID", "SUCCESS") },
   });
   const mf = makeMyFatoorahClient("k", base, impl);
-  await mf.payWithApplePay({ amountHalalas: 6000, tokenJson: "{\"a\":1}", externalIdentifier: "pay-1", idempotencyKey: "key-1" });
+  await mf.payWithApplePay({ amountHalalas: 6000, currency: "SAR", tokenJson: "{\"a\":1}", externalIdentifier: "pay-1", idempotencyKey: "key-1" });
 
   assertEquals(seen.length, 1);
   assertEquals(seen[0].url, `${base}/v3/payments`);
@@ -49,7 +49,7 @@ Deno.test("payWithApplePay posts v3 payments with PAY and riyal amount", async (
   assertEquals(seen[0].body, {
     PaymentMethod: "APPLE_PAY",
     OperationType: "PAY",
-    Order: { Amount: 60, ExternalIdentifier: "pay-1" },
+    Order: { Amount: 60, Currency: "SAR", ExternalIdentifier: "pay-1" },
     SourceOfFund: { Token: "{\"a\":1}" },
   });
 });
@@ -161,4 +161,37 @@ Deno.test("IsSuccess false is an error too, and a balance refusal is flagged", a
     MyFatoorahError,
   );
   assertEquals(err.isBalanceRefusal, true);
+});
+
+Deno.test("only a clear answer is definitive: 4xx or IsSuccess false; 5xx and garbage are not", async () => {
+  const cases: Array<[number, string, boolean]> = [
+    [400, JSON.stringify({ IsSuccess: false, Message: "Invalid token" }), true],
+    [200, JSON.stringify({ IsSuccess: false, Message: "Declined" }), true],
+    [502, JSON.stringify({ IsSuccess: false, Message: "Bad gateway" }), false],
+    [504, "<html>Gateway Timeout</html>", false],
+    [200, "<html>not json</html>", false],
+  ];
+  for (const [status, body, want] of cases) {
+    const impl = (async () => new Response(body, { status })) as typeof fetch;
+    const err = await assertRejects(() => makeMyFatoorahClient("k", base, impl).getPayment("x"), MyFatoorahError);
+    assertEquals(err.definitive, want, `${status} ${body}`);
+  }
+});
+
+Deno.test("lookup by external identifier: a clear 'no invoice' answer of any 4xx is null; a 5xx throws", async () => {
+  const noMatch = fakeFetch(400, { IsSuccess: false, Message: "No invoices match the provided external identifier" });
+  assertEquals(await makeMyFatoorahClient("k", base, noMatch.impl).findPaymentByExternalIdentifier("x"), null);
+  const down = fakeFetch(503, { IsSuccess: false });
+  await assertRejects(() => makeMyFatoorahClient("k", base, down.impl).findPaymentByExternalIdentifier("x"), MyFatoorahError);
+});
+
+Deno.test("payWithApplePay states the currency", async () => {
+  const { seen, impl } = fakeFetch(200, {
+    IsSuccess: true,
+    Data: { InvoiceId: "1", PaymentId: "p", TransactionDetails: transaction("PAID", "SUCCESS") },
+  });
+  await makeMyFatoorahClient("k", base, impl).payWithApplePay({
+    amountHalalas: 100, currency: "SAR", tokenJson: "{}", externalIdentifier: "e", idempotencyKey: "i",
+  });
+  assertEquals((seen[0].body as { Order: { Currency: string } }).Order.Currency, "SAR");
 });

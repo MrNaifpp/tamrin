@@ -32,7 +32,6 @@ declare
   v_payment public.payments;
   v_event public.events;
   v_total int;
-  v_ops uuid;
 begin
   if p_status not in ('refunded', 'pending', 'waiting_balance', 'failed') then
     raise exception 'Unknown refund status %', p_status;
@@ -73,16 +72,19 @@ begin
            failure_message = left(coalesce(p_failure_message, p_status), 500)
      where id = p_refund_id;
 
-    select nullif(decrypted_secret, '')::uuid into v_ops
-      from vault.decrypted_secrets where name = 'ops_user_id';
-    if v_ops is not null then
-      insert into public.push_outbox (user_id, type, event_id)
-      values (v_ops, 'refund_failed', v_refund.event_id);
-    end if;
+    perform public.notify_ops('refund_failed', v_refund.event_id);
     return json_build_object('status', 'failed');
   end if;
 
-  -- refunded
+  -- refunded. A second charge's refund is its own money: it never touches the
+  -- payment's refund totals or its seats.
+  if v_refund.reason = 'duplicate_charge' then
+    update public.refunds set status = 'done' where id = p_refund_id;
+    insert into public.push_outbox (user_id, type, event_id)
+    values (v_refund.user_id, 'refund_issued', v_refund.event_id);
+    return json_build_object('status', 'settled');
+  end if;
+
   select * into v_payment from public.payments
    where id = v_refund.payment_id for update;
 
@@ -151,6 +153,7 @@ begin
     into v_open_amount, v_open_seats
   from public.refunds
   where payment_id = p_payment_id
+    and reason <> 'duplicate_charge'
     and status in ('pending', 'processing', 'waiting_balance');
 
   v_amount := least(coalesce(p_amount, 0),
@@ -184,6 +187,18 @@ declare
   v_row public.refunds;
   v_count int := 0;
 begin
+  -- Sent, and no answer for three hours. MyFatoorah keeps an idempotency key for
+  -- 250 minutes, so resending past that could refund twice: stop, fail it, and
+  -- let ops check the portal.
+  for v_row in
+    select * from public.refunds
+    where status = 'processing' and provider_refund_id is null
+      and created_at < now() - interval '3 hours'
+  loop
+    perform public.settle_refund(v_row.id, 'failed', null,
+                                 'No answer from MyFatoorah for 3 hours; check the portal before retrying');
+  end loop;
+
   for v_row in
     select * from public.refunds
     where (status = 'pending' and attempts < 5

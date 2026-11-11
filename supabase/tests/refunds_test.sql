@@ -545,4 +545,55 @@ begin
 end;
 $$;
 
+-- ============================================================
+-- Section 8: duplicate-charge refunds and giving up on silence.
+-- ============================================================
+do $$
+declare
+  v json;
+  v_id uuid;
+  v_amount int;
+  v_status text;
+  v_count int;
+begin
+  delete from public.refunds;
+  delete from public.push_outbox;
+  update public.payments set refunded_amount = 0, refunded_seats = 0, status = 'paid'
+   where id = '84000000-0000-0000-0000-0000000000f1';
+
+  -- 1. a duplicate-charge refund settles without touching the real payment
+  insert into public.refunds (payment_id, event_id, user_id, seats, amount, reason, provider_payment_id)
+  values ('84000000-0000-0000-0000-0000000000f1', '81000000-0000-0000-0000-0000000000e1',
+          '81000000-0000-0000-0000-000000000002', 1, 12000, 'duplicate_charge', 'mf_dup')
+  returning id into v_id;
+  -- …and it does not eat into what the real payment can still refund
+  if public.request_refund('84000000-0000-0000-0000-0000000000f1', 1, 6000, 'withdrew') is null then
+    raise exception 'FAIL 8.1: a duplicate-charge refund must not count against the cap';
+  end if;
+  v := public.settle_refund(v_id, 'refunded', 'RD', null);
+  select refunded_amount, status into v_amount, v_status
+    from public.payments where id = '84000000-0000-0000-0000-0000000000f1';
+  if v_amount <> 0 or v_status <> 'paid' then
+    raise exception 'FAIL 8.1: duplicate refund touched the payment: %/%', v_amount, v_status;
+  end if;
+  raise notice 'PASS 8.1 duplicate-charge refund is kept apart';
+
+  -- 2. no answer for 3 hours: stop resending, fail it, tell ops
+  delete from public.refunds;
+  insert into public.refunds (payment_id, event_id, user_id, seats, amount, reason,
+                              provider_payment_id, status, created_at)
+  values ('84000000-0000-0000-0000-0000000000f1', '81000000-0000-0000-0000-0000000000e1',
+          '81000000-0000-0000-0000-000000000002', 1, 100, 'withdrew', 'mf_pay_7',
+          'processing', now() - interval '4 hours')
+  returning id into v_id;
+  v_count := public.retry_pending_refunds();
+  select status into v_status from public.refunds where id = v_id;
+  select count(*) into v_count from public.push_outbox where type = 'refund_failed';
+  if v_status <> 'failed' or v_count <> 1 then
+    raise exception 'FAIL 8.2: silent refund should fail with one ops push, got % / %', v_status, v_count;
+  end if;
+  raise notice 'PASS 8.2 silent refund gives up after 3 hours';
+end;
+$$;
+
 rollback;

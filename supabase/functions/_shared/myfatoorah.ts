@@ -28,9 +28,14 @@ export class MyFatoorahError extends Error {
   /// low, which excludes money received the same day. That is a "try again
   /// later", not a "no", so the refund pipeline treats it apart.
   readonly isBalanceRefusal: boolean;
-  constructor(public status: number, public body: string) {
+  /// True only when MyFatoorah clearly answered "no": a 4xx, or a well-formed
+  /// `IsSuccess: false`. A 5xx, a gateway page or an unreadable body says
+  /// nothing about whether money moved, so callers must treat it as "unknown".
+  readonly definitive: boolean;
+  constructor(public status: number, public body: string, wellFormed = false) {
     super(`MyFatoorah ${status}: ${body.slice(0, 300)}`);
     this.isBalanceRefusal = /balance/i.test(body);
+    this.definitive = status >= 400 && status < 500 ? true : status < 400 && wellFormed;
   }
 }
 
@@ -108,13 +113,14 @@ export function makeMyFatoorahClient(
     } catch {
       throw new MyFatoorahError(res.status, text);
     }
-    if (parsed?.IsSuccess === false) throw new MyFatoorahError(res.status, text);
+    if (parsed?.IsSuccess === false) throw new MyFatoorahError(res.status, text, true);
     return parsed?.Data;
   }
 
   return {
     async payWithApplePay(args: {
       amountHalalas: number;
+      currency: string;
       tokenJson: string;
       externalIdentifier: string;
       idempotencyKey: string;
@@ -122,7 +128,11 @@ export function makeMyFatoorahClient(
       const data = await call("POST", "/v3/payments", {
         PaymentMethod: "APPLE_PAY",
         OperationType: "PAY",
-        Order: { Amount: toRiyals(args.amountHalalas), ExternalIdentifier: args.externalIdentifier },
+        Order: {
+          Amount: toRiyals(args.amountHalalas),
+          Currency: args.currency,
+          ExternalIdentifier: args.externalIdentifier,
+        },
         SourceOfFund: { Token: args.tokenJson },
       }, args.idempotencyKey);
       const d = data?.TransactionDetails ?? {};
@@ -144,7 +154,8 @@ export function makeMyFatoorahClient(
       try {
         d = await call("GET", `/v3/invoices/externalIdentifier/${encodeURIComponent(externalIdentifier)}`);
       } catch (e) {
-        if (e instanceof MyFatoorahError && e.status === 404) return null;
+        // "No invoice for this identifier" arrives as a clear no; a 5xx does not.
+        if (e instanceof MyFatoorahError && e.definitive) return null;
         throw e;
       }
       const txs: Json[] = Array.isArray(d?.Transactions) ? d.Transactions : [];

@@ -164,14 +164,14 @@ begin
   end if;
   raise notice 'PASS 5 processing, failed, retry, already_settled';
 
-  -- 6. provider id cannot change once paid
-  begin
-    perform public.settle_payment(v_pay, 'mf-other', 'paid', 'applepay', 12000, 'SAR');
-    raise exception 'FAIL 6: changing the provider id of a paid payment should raise';
-  exception when others then
-    if sqlerrm like 'FAIL 6%' then raise; end if;
-  end;
-  raise notice 'PASS 6 provider id cannot change';
+  -- 6. a different charge on a paid payment keeps the seats with the first
+  --    and is refunded, never raised (raising lost the money)
+  v := public.settle_payment(v_pay, 'mf-other', 'paid', 'applepay', 12000, 'SAR');
+  select provider_payment_id into v_status from public.payments where id = v_pay;
+  if v ->> 'status' <> 'duplicate_refunded' or v_status <> 'mf-5b' then
+    raise exception 'FAIL 6: expected duplicate_refunded keeping mf-5b, got % / %', v, v_status;
+  end if;
+  raise notice 'PASS 6 provider id of a paid payment never changes';
 
   -- 7. stale quote is replaced
   perform pg_temp.seed_owed();
@@ -204,6 +204,101 @@ begin
 end;
 $$;
 
+-- 10-14. attempts, duplicates, cancellation, mismatch
+do $$
+declare
+  v json;
+  v_pay uuid;
+  v_n int;
+  v_status text;
+  v_prov text;
+begin
+  perform vault.create_secret('82000000-0000-0000-0000-000000000001', 'ops_user_id');
+
+  -- 10. claim is atomic and answers by state
+  perform pg_temp.seed_owed();
+  v_pay := (pg_temp.quote() ->> 'payment_id')::uuid;
+  v := public.claim_payment_attempt(v_pay, '82000000-0000-0000-0000-000000000002', 'att-A');
+  if v ->> 'status' <> 'claimed' or (v ->> 'amount')::int <> 12000 or v ->> 'currency' <> 'SAR' then
+    raise exception 'FAIL 10: expected claimed 12000 SAR, got %', v;
+  end if;
+  v := public.claim_payment_attempt(v_pay, '82000000-0000-0000-0000-000000000002', 'att-B');
+  if v ->> 'status' <> 'processing' then raise exception 'FAIL 10: second claim should say processing, got %', v; end if;
+  v := public.claim_payment_attempt(v_pay, '82000000-0000-0000-0000-000000000001', 'att-C');
+  if v ->> 'status' <> 'not_found' then raise exception 'FAIL 10: other user should get not_found, got %', v; end if;
+  select current_attempt into v_prov from public.payments where id = v_pay;
+  if v_prov <> 'att-A' then raise exception 'FAIL 10: current attempt should stay att-A, got %', v_prov; end if;
+  raise notice 'PASS 10 claim is atomic';
+
+  -- 11. a stale failure cannot fail the attempt in flight
+  perform public.settle_payment(v_pay, 'mf-A', 'failed', 'applepay', 12000, 'SAR', 'att-A');
+  v := public.claim_payment_attempt(v_pay, '82000000-0000-0000-0000-000000000002', 'att-B');
+  select provider_payment_id into v_prov from public.payments where id = v_pay;
+  if v ->> 'status' <> 'claimed' or v_prov is not null then
+    raise exception 'FAIL 11: retry should claim and clear the old provider id, got % / %', v, v_prov;
+  end if;
+  v := public.settle_payment(v_pay, 'mf-A', 'failed', 'applepay', 12000, 'SAR', 'att-A');
+  select status into v_status from public.payments where id = v_pay;
+  if v ->> 'status' <> 'stale' or v_status <> 'processing' then
+    raise exception 'FAIL 11: stale failure should be ignored, got % / %', v, v_status;
+  end if;
+  raise notice 'PASS 11 stale failure ignored';
+
+  -- 12. a stale success is honoured, and the second charge is refunded with an alert
+  delete from public.push_outbox;
+  v := public.settle_payment(v_pay, 'mf-A', 'paid', 'applepay', 12000, 'SAR', 'att-A');
+  if v ->> 'status' <> 'settled' then raise exception 'FAIL 12: a late success must settle, got %', v; end if;
+  v := public.settle_payment(v_pay, 'mf-B', 'paid', 'applepay', 12000, 'SAR', 'att-B');
+  if v ->> 'status' <> 'duplicate_refunded' then
+    raise exception 'FAIL 12: second charge should be refunded, got %', v;
+  end if;
+  select count(*) into v_n from public.refunds
+   where payment_id = v_pay and reason = 'duplicate_charge' and amount = 12000 and provider_payment_id = 'mf-B';
+  if v_n <> 1 then raise exception 'FAIL 12: expected one duplicate_charge refund of 12000 on mf-B, got %', v_n; end if;
+  v := public.settle_payment(v_pay, 'mf-B', 'paid', 'applepay', 12000, 'SAR', 'att-B');
+  select count(*) into v_n from public.refunds where reason = 'duplicate_charge';
+  if v_n <> 1 then raise exception 'FAIL 12: a replay must not refund twice, got %', v_n; end if;
+  select count(*) into v_n from public.push_outbox
+   where type = 'payment_problem' and user_id = '82000000-0000-0000-0000-000000000001';
+  if v_n <> 1 then raise exception 'FAIL 12: ops should get one payment_problem push, got %', v_n; end if;
+  raise notice 'PASS 12 duplicate charge refunded once with an alert';
+
+  -- 13. money arriving after the event was cancelled goes straight back
+  perform pg_temp.seed_owed();
+  v_pay := (pg_temp.quote() ->> 'payment_id')::uuid;
+  perform public.claim_payment_attempt(v_pay, '82000000-0000-0000-0000-000000000002', 'att-C');
+  update public.events set cancelled_at = now() where id = '82000000-0000-0000-0000-0000000000e1';
+  v := public.settle_payment(v_pay, 'mf-C', 'paid', 'applepay', 12000, 'SAR', 'att-C');
+  select count(*) into v_n from public.event_participants
+   where event_id = '82000000-0000-0000-0000-0000000000e1' and payment_status = 'confirmed';
+  if v_n <> 0 then raise exception 'FAIL 13: no seat should be confirmed on a cancelled event, got %', v_n; end if;
+  select count(*) into v_n from public.refunds
+   where payment_id = v_pay and reason = 'event_cancelled' and amount = 12000 and seats = 2;
+  if v_n <> 1 then raise exception 'FAIL 13: expected a full event_cancelled refund, got %', v_n; end if;
+  update public.events set cancelled_at = null where id = '82000000-0000-0000-0000-0000000000e1';
+  raise notice 'PASS 13 cancelled event refunds in full';
+
+  -- 13b. a cancelled event cannot be claimed
+  perform pg_temp.seed_owed();
+  v_pay := (pg_temp.quote() ->> 'payment_id')::uuid;
+  update public.events set cancelled_at = now() where id = '82000000-0000-0000-0000-0000000000e1';
+  v := public.claim_payment_attempt(v_pay, '82000000-0000-0000-0000-000000000002', 'att-D');
+  if v ->> 'status' <> 'event_closed' then raise exception 'FAIL 13b: expected event_closed, got %', v; end if;
+  update public.events set cancelled_at = null where id = '82000000-0000-0000-0000-0000000000e1';
+  raise notice 'PASS 13b cancelled event cannot be claimed';
+
+  -- 14. an amount mismatch alerts ops
+  perform pg_temp.seed_owed();
+  v_pay := (pg_temp.quote() ->> 'payment_id')::uuid;
+  v := public.settle_payment(v_pay, 'mf-E', 'paid', 'applepay', 11000, 'SAR', null);
+  select count(*) into v_n from public.push_outbox where type = 'payment_problem';
+  if v ->> 'status' <> 'amount_mismatch' or v_n <> 1 then
+    raise exception 'FAIL 14: mismatch should alert ops once, got % / %', v, v_n;
+  end if;
+  raise notice 'PASS 14 amount mismatch alerts ops';
+end;
+$$;
+
 -- 9. authenticated cannot write
 set local role authenticated;
 select pg_temp.set_auth('82000000-0000-0000-0000-000000000002');
@@ -223,7 +318,7 @@ begin
   exception when insufficient_privilege then null;
   end;
   begin
-    perform public.settle_payment(gen_random_uuid(), 'x', 'paid', 'applepay', 1, 'SAR');
+    perform public.settle_payment(gen_random_uuid(), 'x', 'paid', 'applepay', 1, 'SAR', null);
     raise exception 'FAIL 9: authenticated called settle_payment';
   exception when insufficient_privilege then null;
   end;

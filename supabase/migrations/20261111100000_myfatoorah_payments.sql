@@ -18,12 +18,21 @@ alter table public.payments rename column last_moyasar_status to last_provider_s
 alter table public.payments drop column if exists split_recipient_id;
 alter table public.payments drop column if exists given_id;
 alter table public.payments add column provider text not null default 'myfatoorah';
+-- The Apple Pay attempt in flight, as sent to MyFatoorah's ExternalIdentifier.
+-- A late answer about an earlier attempt is recognised by not matching it.
+alter table public.payments add column current_attempt text;
 
 alter table public.refunds rename column moyasar_payment_id to provider_payment_id;
 alter table public.refunds add column provider_refund_id text unique;
 alter table public.refunds add column next_attempt_at timestamptz;
 
 alter table public.moyasar_webhook_events rename to payment_webhook_events;
+
+-- A second charge for an already-paid payment is refunded in full, apart from
+-- the payment's own refund accounting.
+alter table public.refunds drop constraint refunds_reason_check;
+alter table public.refunds add constraint refunds_reason_check
+  check (reason in ('withdrew', 'guest_removed', 'event_cancelled', 'duplicate_charge'));
 
 drop table if exists public.workspace_moyasar_recipients;
 
@@ -195,20 +204,40 @@ begin
 end;
 $$;
 
--- 5. Settle ------------------------------------------------------------------
+-- 5. Ops alerts -------------------------------------------------------------
 
-drop function if exists public.settle_payment(uuid, text, text, text, int, text, int);
-drop function if exists public.settle_payment(uuid, text, text, text, int, text);
+-- Pushes the ops user (vault `ops_user_id`) when money needs a person to look at
+-- it. Unset vault entry: nothing, as with the other vault-held settings.
+create or replace function public.notify_ops(p_type text, p_event_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_ops uuid;
+begin
+  select nullif(decrypted_secret, '')::uuid into v_ops
+    from vault.decrypted_secrets where name = 'ops_user_id';
+  if v_ops is not null then
+    insert into public.push_outbox (user_id, type, event_id) values (v_ops, p_type, p_event_id);
+  end if;
+end;
+$$;
 
--- p_outcome is already ours ('paid' | 'failed' | 'processing'): the Edge
--- Functions translate MyFatoorah's statuses, so this never learns them.
-create function public.settle_payment(
+revoke execute on function public.notify_ops(text, uuid) from public, anon, authenticated;
+grant execute on function public.notify_ops(text, uuid) to service_role;
+
+-- 6. Claim -------------------------------------------------------------------
+
+-- The one door into charging a payment. Locks the row, and only a pending or
+-- declined payment on an open event moves to `processing`, with this attempt
+-- as the current one and the previous attempt's provider id cleared. Two
+-- requests racing for the same row: one claims, the other is told it is moving.
+create or replace function public.claim_payment_attempt(
   p_payment_id uuid,
-  p_provider_payment_id text,
-  p_outcome text,
-  p_payment_method text,
-  p_amount int,
-  p_currency text
+  p_user_id uuid,
+  p_attempt text
 )
 returns json
 language plpgsql
@@ -218,10 +247,76 @@ as $$
 declare
   v_payment public.payments;
   v_event public.events;
-  v_seats int;
+begin
+  select * into v_payment from public.payments where id = p_payment_id for update;
+  if v_payment.id is null or v_payment.user_id <> p_user_id then
+    return json_build_object('status', 'not_found');
+  end if;
+  if v_payment.status = 'paid' then return json_build_object('status', 'paid'); end if;
+  if v_payment.status = 'processing' then return json_build_object('status', 'processing'); end if;
+  if v_payment.status not in ('pending', 'failed') then
+    return json_build_object('status', 'not_payable');
+  end if;
+
+  select * into v_event from public.events where id = v_payment.event_id;
+  if v_event.cancelled_at is not null or v_event.published_at is null then
+    update public.payments set status = 'cancelled' where id = p_payment_id;
+    return json_build_object('status', 'event_closed');
+  end if;
+
+  update public.payments
+     set status = 'processing',
+         provider_payment_id = null,
+         current_attempt = p_attempt
+   where id = p_payment_id;
+
+  return json_build_object('status', 'claimed',
+                           'amount', v_payment.amount,
+                           'currency', v_payment.currency);
+end;
+$$;
+
+revoke execute on function public.claim_payment_attempt(uuid, uuid, text) from public, anon, authenticated;
+grant execute on function public.claim_payment_attempt(uuid, uuid, text) to service_role;
+
+-- 7. Settle ------------------------------------------------------------------
+
+drop function if exists public.settle_payment(uuid, text, text, text, int, text, int);
+drop function if exists public.settle_payment(uuid, text, text, text, int, text);
+drop function if exists public.settle_payment(uuid, text, text, text, int, text, text);
+
+-- p_outcome is already ours ('paid' | 'failed' | 'processing'): the Edge
+-- Functions translate MyFatoorah's statuses, so this never learns them.
+-- p_attempt names the Apple Pay attempt the answer is about (null when the
+-- caller cannot tell). Rules, in order:
+--   * already paid, and a DIFFERENT charge reports paid → refund that charge in
+--     full and alert ops; the seats stay with the first charge
+--   * an answer about an earlier attempt: a success still counts (the money
+--     moved), anything else is ignored so it cannot fail the attempt in flight
+--   * the event was cancelled by the time the money arrived → confirm nothing,
+--     refund everything
+create function public.settle_payment(
+  p_payment_id uuid,
+  p_provider_payment_id text,
+  p_outcome text,
+  p_payment_method text,
+  p_amount int,
+  p_currency text,
+  p_attempt text default null
+)
+returns json
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_payment public.payments;
+  v_event public.events;
+  v_seats int := 0;
   v_missing_seats int;
   v_missing_amount int;
   v_refund uuid;
+  v_stale boolean;
 begin
   if p_outcome not in ('paid', 'failed', 'processing') then
     raise exception 'Unknown outcome %', p_outcome;
@@ -229,16 +324,33 @@ begin
 
   select * into v_payment from public.payments where id = p_payment_id for update;
   if v_payment.id is null then raise exception 'Payment not found'; end if;
+  select * into v_event from public.events where id = v_payment.event_id;
 
   if v_payment.status in ('paid', 'refunded') then
-    if p_provider_payment_id is distinct from v_payment.provider_payment_id then
-      raise exception 'Provider payment id does not match this payment';
+    if p_outcome = 'paid' and p_provider_payment_id is not null
+       and p_provider_payment_id is distinct from v_payment.provider_payment_id then
+      select id into v_refund from public.refunds
+       where payment_id = p_payment_id and reason = 'duplicate_charge'
+         and provider_payment_id = p_provider_payment_id;
+      if v_refund is null then
+        insert into public.refunds
+          (payment_id, event_id, user_id, seats, amount, reason, provider_payment_id)
+        values
+          (p_payment_id, v_payment.event_id, v_payment.user_id, 1, p_amount,
+           'duplicate_charge', p_provider_payment_id)
+        returning id into v_refund;
+        perform public.notify_ops('payment_problem', v_payment.event_id);
+      end if;
+      return json_build_object('status', 'duplicate_refunded', 'refund_id', v_refund);
     end if;
     return json_build_object('status', 'already_settled');
   end if;
 
-  -- Until it is paid, each Apple Pay attempt is a new MyFatoorah payment, so
-  -- the id follows the latest attempt.
+  v_stale := p_attempt is not null and p_attempt is distinct from v_payment.current_attempt;
+  if v_stale and p_outcome <> 'paid' then
+    return json_build_object('status', 'stale');
+  end if;
+
   update public.payments
      set provider_payment_id = coalesce(p_provider_payment_id, provider_payment_id),
          last_provider_status = p_outcome,
@@ -265,33 +377,37 @@ begin
                                     v_payment.amount, v_payment.currency,
                                     p_amount, p_currency)
      where id = p_payment_id;
+    perform public.notify_ops('payment_problem', v_payment.event_id);
     return json_build_object('status', 'amount_mismatch');
   end if;
 
-  with mine as (
-    update public.event_participants ep
-       set payment_status = 'confirmed',
-           payment_id = p_payment_id,
-           payment_declared_at = coalesce(ep.payment_declared_at, now())
-      from public.payment_seats s
-     where s.payment_id = p_payment_id
-       and ep.id = s.participant_id
-       and ep.payment_status = 'pending'
-    returning 1
-  )
-  select count(*) into v_seats from mine;
+  if v_event.cancelled_at is null then
+    with mine as (
+      update public.event_participants ep
+         set payment_status = 'confirmed',
+             payment_id = p_payment_id,
+             payment_declared_at = coalesce(ep.payment_declared_at, now())
+        from public.payment_seats s
+       where s.payment_id = p_payment_id
+         and ep.id = s.participant_id
+         and ep.payment_status = 'pending'
+      returning 1
+    )
+    select count(*) into v_seats from mine;
+  end if;
 
   update public.payments
      set status = 'paid', paid_at = now(), failure_code = null, failure_message = null
    where id = p_payment_id;
 
-  select * into v_event from public.events where id = v_payment.event_id;
-  insert into public.push_outbox (user_id, type, event_id)
-  values (v_event.creator_id, 'payment_paid', v_payment.event_id);
+  if v_seats > 0 then
+    insert into public.push_outbox (user_id, type, event_id)
+    values (v_event.creator_id, 'payment_paid', v_payment.event_id);
+  end if;
 
-  -- Covered seats this payment did not confirm (gone, or settled some other
-  -- way while the money was moving) were paid for and are not held: give that
-  -- money back.
+  -- Covered seats this payment did not confirm (gone, settled some other way
+  -- while the money was moving, or the event was cancelled) were paid for and
+  -- are not held: give that money back.
   select count(*), coalesce(sum(s.price), 0)
     into v_missing_seats, v_missing_amount
   from public.payment_seats s
@@ -313,5 +429,5 @@ begin
 end;
 $$;
 
-revoke execute on function public.settle_payment(uuid, text, text, text, int, text) from public, anon, authenticated;
-grant execute on function public.settle_payment(uuid, text, text, text, int, text) to service_role;
+revoke execute on function public.settle_payment(uuid, text, text, text, int, text, text) from public, anon, authenticated;
+grant execute on function public.settle_payment(uuid, text, text, text, int, text, text) to service_role;
