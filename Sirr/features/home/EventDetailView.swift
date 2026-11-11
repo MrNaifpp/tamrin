@@ -2799,8 +2799,10 @@ struct RegistrationFlowSheet: View {
                 }
             }
         }) { page in
-            SafariView(url: page.url)
-                .ignoresSafeArea()
+            PaymentWebSheet(url: page.url) {
+                // Closing the sheet runs onDismiss above, which checks the payment.
+                testCardPage = nil
+            }
         }
         .alert("دفع تجريبي", isPresented: Binding(
             get: { testCardNotice != nil },
