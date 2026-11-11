@@ -3,7 +3,7 @@
 // sweep can find. It asks MyFatoorah what really happened and settles that.
 // Called every few minutes by pg_cron through pg_net, with a shared secret.
 import { json } from "../_shared/cors.ts";
-import type { MfPayment } from "../_shared/myfatoorah.ts";
+import { type MfPayment, methodLabel } from "../_shared/myfatoorah.ts";
 import type { SettleArgs } from "../pay-apple-pay/handler.ts";
 
 export type StuckPayment = {
@@ -61,7 +61,7 @@ export function makeHandler(deps: SweepDeps) {
           p_payment_id: row.id,
           p_provider_payment_id: remote.paymentId || row.provider_payment_id,
           p_outcome: remote.outcome,
-          p_payment_method: "applepay",
+          p_payment_method: methodLabel(remote.method),
           p_amount: remote.amountHalalas,
           p_currency: remote.currency,
           p_attempt: row.current_attempt,

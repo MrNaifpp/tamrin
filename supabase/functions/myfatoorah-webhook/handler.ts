@@ -3,7 +3,7 @@
 // payment or refund is fetched again with our key. Whatever MyFatoorah answers
 // to that GET is what gets settled; the body only says where to look.
 import { json } from "../_shared/cors.ts";
-import type { MfPayment, MfRefund } from "../_shared/myfatoorah.ts";
+import { type MfPayment, type MfRefund, methodLabel } from "../_shared/myfatoorah.ts";
 import {
   paymentSignatureFields,
   refundSignatureFields,
@@ -69,7 +69,7 @@ export function makeHandler(deps: WebhookDeps) {
         p_payment_id: row.id,
         p_provider_payment_id: remote.paymentId,
         p_outcome: remote.outcome,
-        p_payment_method: "applepay",
+        p_payment_method: methodLabel(remote.method),
         p_amount: remote.amountHalalas,
         p_currency: remote.currency,
         p_attempt: attempt,

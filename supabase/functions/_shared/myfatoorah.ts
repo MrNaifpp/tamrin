@@ -11,8 +11,15 @@ export type MfPayment = {
   invoiceId: string;
   externalIdentifier: string | null;
   outcome: PaymentOutcome;
+  /// In the currency we asked for (riyals). On MyFatoorah's test server the
+  /// account works in KWD and converts, so this is read from the "display"
+  /// fields, falling back to the account's own when they are absent.
   amountHalalas: number;
   currency: string;
+  /// The account's own currency and the value MyFatoorah holds in it. Refunds
+  /// are sent in this currency.
+  baseCurrency: string;
+  baseValue: number;
   method: string | null;
   errorMessage: string | null;
 };
@@ -57,16 +64,41 @@ function outcomeOf(invoiceStatus: string | undefined, txStatus: string | undefin
   return "processing";
 }
 
+/// Our payment method label for MyFatoorah's: Apple Pay or a card.
+export function methodLabel(method: string | null | undefined): "applepay" | "creditcard" {
+  if (!method || /apple/i.test(method)) return "applepay";
+  return "creditcard";
+}
+
+/// What to refund, in the account's own currency, for `halalas` of a payment.
+/// Live in Saudi Arabia the two currencies are the same riyals. On the test
+/// server the account is in KWD, so the refund is that share of what the
+/// account received, to three places, and never more than the whole.
+export function refundInBaseCurrency(
+  halalas: number,
+  p: Pick<MfPayment, "amountHalalas" | "currency" | "baseCurrency" | "baseValue">,
+): number {
+  if (p.baseCurrency === p.currency || p.amountHalalas <= 0) return toRiyals(halalas);
+  const baseThousandths = Math.round(p.baseValue * 1000);
+  const share = Math.round((baseThousandths * Math.min(halalas, p.amountHalalas)) / p.amountHalalas);
+  return share / 1000;
+}
+
 function paymentFrom(invoice: Json, tx: Json, amount: Json): MfPayment {
   const outcome = outcomeOf(invoice?.Status, tx?.Status);
   const message = tx?.Error?.Message;
+  const baseCurrency = String(amount?.BaseCurrency ?? "");
+  const baseValue = Number(amount?.ValueInBaseCurrency ?? 0);
+  const hasDisplay = amount?.DisplayCurrency != null && amount?.ValueInDisplayCurrency != null;
   return {
     paymentId: String(tx?.PaymentId ?? ""),
     invoiceId: String(invoice?.Id ?? ""),
     externalIdentifier: invoice?.ExternalIdentifier ? String(invoice.ExternalIdentifier) : null,
     outcome,
-    amountHalalas: toHalalas(amount?.ValueInBaseCurrency ?? 0),
-    currency: String(amount?.BaseCurrency ?? ""),
+    amountHalalas: toHalalas(hasDisplay ? amount.ValueInDisplayCurrency : baseValue),
+    currency: hasDisplay ? String(amount.DisplayCurrency) : baseCurrency,
+    baseCurrency,
+    baseValue,
     method: tx?.PaymentMethod ? String(tx.PaymentMethod) : null,
     errorMessage: outcome === "failed" && message ? String(message) : null,
   };
@@ -165,15 +197,37 @@ export function makeMyFatoorahClient(
       return paymentFrom(d?.Invoice, tx, d?.Amount);
     },
 
+    async createCardPayment(args: {
+      amountHalalas: number;
+      currency: string;
+      externalIdentifier: string;
+      idempotencyKey: string;
+      redirectUrl: string;
+    }): Promise<{ invoiceId: string; paymentUrl: string }> {
+      const d = await call("POST", "/v3/payments", {
+        PaymentMethod: "CARD",
+        Order: {
+          Amount: toRiyals(args.amountHalalas),
+          Currency: args.currency,
+          ExternalIdentifier: args.externalIdentifier,
+        },
+        IntegrationUrls: { Redirection: args.redirectUrl },
+      }, args.idempotencyKey);
+      const paymentUrl = String(d?.PaymentURL ?? "");
+      if (!paymentUrl) throw new MyFatoorahError(200, JSON.stringify(d ?? null));
+      return { invoiceId: String(d?.InvoiceId ?? ""), paymentUrl };
+    },
+
+    /// `baseAmount` is in the account's own currency (see refundInBaseCurrency).
     async createRefund(args: {
       paymentId: string;
-      amountHalalas: number;
+      baseAmount: number;
       externalIdentifier: string;
       idempotencyKey: string;
     }): Promise<MfRefund> {
       const d = await call("POST", "/v3/refunds", {
         PaymentId: args.paymentId,
-        Amount: toRiyals(args.amountHalalas),
+        Amount: args.baseAmount,
         ExternalIdentifier: args.externalIdentifier,
       }, args.idempotencyKey);
       return refundFrom(d);

@@ -9,7 +9,7 @@
 //   processing without one    → an earlier send got no answer; send again
 //                               with the same idempotency key
 import { json } from "../_shared/cors.ts";
-import { type MfRefund, MyFatoorahError } from "../_shared/myfatoorah.ts";
+import { type MfPayment, type MfRefund, MyFatoorahError, refundInBaseCurrency } from "../_shared/myfatoorah.ts";
 import { refundStatusFor, type SettleRefundArgs } from "../myfatoorah-webhook/handler.ts";
 
 export type RefundRow = {
@@ -26,9 +26,10 @@ export type RefundDeps = {
   loadRefund(id: string): Promise<RefundRow | null>;
   markProcessing(id: string): Promise<void>;
   mf: {
+    getPayment(paymentId: string): Promise<MfPayment>;
     createRefund(args: {
       paymentId: string;
-      amountHalalas: number;
+      baseAmount: number;
       externalIdentifier: string;
       idempotencyKey: string;
     }): Promise<MfRefund>;
@@ -63,9 +64,12 @@ export function makeHandler(deps: RefundDeps) {
       }
 
       await deps.markProcessing(row.id);
+      // Refunds are sent in the account's own currency. Live that is riyals;
+      // on the test server it is KWD, so the original payment sets the rate.
+      const original = await deps.mf.getPayment(row.provider_payment_id);
       const remote = await deps.mf.createRefund({
         paymentId: row.provider_payment_id,
-        amountHalalas: row.amount,
+        baseAmount: refundInBaseCurrency(row.amount, original),
         externalIdentifier: row.id,
         // attempts only moves when a balance refusal schedules a retry, so a
         // resend after no answer reuses the key and cannot refund twice.

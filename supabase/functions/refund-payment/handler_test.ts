@@ -1,6 +1,6 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { makeHandler, type RefundDeps, type RefundRow } from "./handler.ts";
-import { type MfRefund, MyFatoorahError } from "../_shared/myfatoorah.ts";
+import { type MfPayment, type MfRefund, MyFatoorahError } from "../_shared/myfatoorah.ts";
 
 type CreateArgs = Parameters<RefundDeps["mf"]["createRefund"]>[0];
 
@@ -8,6 +8,7 @@ function deps(opts: {
   row?: Partial<RefundRow>;
   create?: (a: CreateArgs) => Promise<MfRefund>;
   get?: (id: string) => Promise<MfRefund>;
+  payment?: Partial<MfPayment>;
 } = {}) {
   const log: string[] = [];
   const creates: CreateArgs[] = [];
@@ -24,7 +25,15 @@ function deps(opts: {
       createRefund: async (a) => {
         creates.push(a);
         log.push("create");
-        return opts.create ? opts.create(a) : { refundId: "R1", status: "pending", amountHalalas: a.amountHalalas };
+        return opts.create ? opts.create(a) : { refundId: "R1", status: "pending", amountHalalas: 0 };
+      },
+      getPayment: async (id) => {
+        log.push(`payment:${id}`);
+        return {
+          paymentId: id, invoiceId: "inv", externalIdentifier: "pay-1:a", outcome: "paid",
+          amountHalalas: 6000, currency: "SAR", baseCurrency: "SAR", baseValue: 60,
+          method: "MADA", errorMessage: null, ...(opts.payment ?? {}),
+        };
       },
       getRefund: async (id) => {
         log.push(`get:${id}`);
@@ -52,9 +61,9 @@ Deno.test("pending row → createRefund with idempotency key refund:<id>:<attemp
   const { d, creates, settles, log } = deps();
   await makeHandler(d)(post({ refund_id: "ref-1" }));
   assertEquals(creates, [{
-    paymentId: "0707-1", amountHalalas: 3000, externalIdentifier: "ref-1", idempotencyKey: "refund:ref-1:0",
+    paymentId: "0707-1", baseAmount: 30, externalIdentifier: "ref-1", idempotencyKey: "refund:ref-1:0",
   }]);
-  assertEquals(log[0], "processing");
+  assertEquals(log.slice(0, 2), ["processing", "payment:0707-1"]);
   assertEquals(settles, [{ p_refund_id: "ref-1", p_status: "pending", p_provider_refund_id: "R1", p_failure_message: null }]);
 });
 
@@ -131,4 +140,10 @@ Deno.test("a gateway error on createRefund is not a refusal: the row is left for
   const res = await makeHandler(d)(post({ refund_id: "ref-1" }));
   assertEquals(await res.json(), { status: "retry" });
   assertEquals(settles.length, 0);
+});
+
+Deno.test("on a KWD test account the refund is sent in dinars, as the paid share", async () => {
+  const { d, creates } = deps({ payment: { baseCurrency: "KWD", baseValue: 4.917 } });
+  await makeHandler(d)(post({ refund_id: "ref-1" }));
+  assertEquals(creates[0].baseAmount, 2.459);
 });

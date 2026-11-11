@@ -1,5 +1,7 @@
 import { assert, assertEquals, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { makeMyFatoorahClient, MyFatoorahError, toHalalas, toRiyals } from "./myfatoorah.ts";
+import {
+  makeMyFatoorahClient, methodLabel, MyFatoorahError, refundInBaseCurrency, toHalalas, toRiyals,
+} from "./myfatoorah.ts";
 
 type Seen = { url: string; method: string; headers: Headers; body: unknown };
 
@@ -97,7 +99,7 @@ Deno.test("createRefund posts v3 refunds", async () => {
     Data: { Refund: { Id: "309962", Status: "Pending" }, Amount: { ValueInBaseCurrency: 30 } },
   });
   const r = await makeMyFatoorahClient("k", base, impl).createRefund({
-    paymentId: "0707-1", amountHalalas: 3000, externalIdentifier: "ref-1", idempotencyKey: "refund:ref-1:0",
+    paymentId: "0707-1", baseAmount: 30, externalIdentifier: "ref-1", idempotencyKey: "refund:ref-1:0",
   });
   assertEquals(seen[0].url, `${base}/v3/refunds`);
   assertEquals(seen[0].body, { PaymentId: "0707-1", Amount: 30, ExternalIdentifier: "ref-1" });
@@ -156,7 +158,7 @@ Deno.test("IsSuccess false is an error too, and a balance refusal is flagged", a
   const { impl } = fakeFetch(200, { IsSuccess: false, Message: "Insufficient available Balance to refund" });
   const err = await assertRejects(
     () => makeMyFatoorahClient("k", base, impl).createRefund({
-      paymentId: "p", amountHalalas: 100, externalIdentifier: "r", idempotencyKey: "i",
+      paymentId: "p", baseAmount: 1, externalIdentifier: "r", idempotencyKey: "i",
     }),
     MyFatoorahError,
   );
@@ -194,4 +196,61 @@ Deno.test("payWithApplePay states the currency", async () => {
     amountHalalas: 100, currency: "SAR", tokenJson: "{}", externalIdentifier: "e", idempotencyKey: "i",
   });
   assertEquals((seen[0].body as { Order: { Currency: string } }).Order.Currency, "SAR");
+});
+
+Deno.test("amount and currency are the ones we asked for; the account's own are kept apart", async () => {
+  const { impl } = fakeFetch(200, {
+    IsSuccess: true,
+    Data: transaction("PAID", "SUCCESS", {
+      Amount: {
+        BaseCurrency: "KWD", ValueInBaseCurrency: "4.917",
+        DisplayCurrency: "SAR", ValueInDisplayCurrency: "60",
+      },
+    }),
+  });
+  const p = await makeMyFatoorahClient("k", base, impl).getPayment("0707-1");
+  assertEquals(p.amountHalalas, 6000);
+  assertEquals(p.currency, "SAR");
+  assertEquals(p.baseCurrency, "KWD");
+  assertEquals(p.baseValue, 4.917);
+});
+
+Deno.test("without display fields the base amount is the amount", async () => {
+  const { impl } = fakeFetch(200, { IsSuccess: true, Data: transaction("PAID", "SUCCESS") });
+  const p = await makeMyFatoorahClient("k", base, impl).getPayment("0707-1");
+  assertEquals([p.amountHalalas, p.currency, p.baseCurrency, p.baseValue], [6000, "SAR", "SAR", 60]);
+});
+
+Deno.test("refundInBaseCurrency: riyals stay riyals; dinars are the paid share, to 3 places, never more", () => {
+  const sar = { amountHalalas: 6000, currency: "SAR", baseCurrency: "SAR", baseValue: 60 };
+  assertEquals(refundInBaseCurrency(3000, sar), 30);
+  const kwd = { amountHalalas: 6000, currency: "SAR", baseCurrency: "KWD", baseValue: 4.917 };
+  assertEquals(refundInBaseCurrency(3000, kwd), 2.459);
+  assertEquals(refundInBaseCurrency(6000, kwd), 4.917);
+  assertEquals(refundInBaseCurrency(9000, kwd), 4.917);
+});
+
+Deno.test("methodLabel: Apple Pay is applepay, every card is creditcard", () => {
+  assertEquals(methodLabel("Apple Pay"), "applepay");
+  assertEquals(methodLabel("MADA"), "creditcard");
+  assertEquals(methodLabel("VISA/MASTER"), "creditcard");
+  assertEquals(methodLabel(null), "applepay");
+});
+
+Deno.test("createCardPayment asks for a hosted card page and returns its link", async () => {
+  const { seen, impl } = fakeFetch(200, {
+    IsSuccess: true, Data: { InvoiceId: "61", PaymentId: null, PaymentURL: "https://demo.example/pay/61" },
+  });
+  const r = await makeMyFatoorahClient("k", base, impl).createCardPayment({
+    amountHalalas: 6000, currency: "SAR", externalIdentifier: "pay-1:card1", idempotencyKey: "card:pay-1:card1",
+    redirectUrl: "https://tamrien.app/",
+  });
+  assertEquals(seen[0].url, `${base}/v3/payments`);
+  assertEquals(seen[0].headers.get("idempotency-key"), "card:pay-1:card1");
+  assertEquals(seen[0].body, {
+    PaymentMethod: "CARD",
+    Order: { Amount: 60, Currency: "SAR", ExternalIdentifier: "pay-1:card1" },
+    IntegrationUrls: { Redirection: "https://tamrien.app/" },
+  });
+  assertEquals(r, { invoiceId: "61", paymentUrl: "https://demo.example/pay/61" });
 });

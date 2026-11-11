@@ -8,7 +8,7 @@ const minutesAgo = (m: number) => new Date(NOW.getTime() - m * 60_000).toISOStri
 function mf(outcome: MfPayment["outcome"], id = "0707-1"): MfPayment {
   return {
     paymentId: id, invoiceId: "inv", externalIdentifier: "pay-1", outcome,
-    amountHalalas: 6000, currency: "SAR", method: "Apple Pay", errorMessage: null,
+    amountHalalas: 6000, currency: "SAR", baseCurrency: "SAR", baseValue: 60, method: "Apple Pay", errorMessage: null,
   };
 }
 
@@ -89,4 +89,10 @@ Deno.test("one row failing does not stop the others", async () => {
   const res = await makeHandler(d)(post());
   assertEquals(await res.json(), { checked: 2, settled: 1 });
   assertEquals(settles.map((s) => s.p_payment_id), ["b"]);
+});
+
+Deno.test("a card payment is labelled creditcard", async () => {
+  const { d, settles } = deps([row()], { get: async () => ({ ...mf("paid"), method: "MADA" }) });
+  await makeHandler(d)(post());
+  assertEquals(settles[0].p_payment_method, "creditcard");
 });

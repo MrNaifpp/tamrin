@@ -12,7 +12,7 @@ const ATT_A = "pay-1:0123456789abcdef";
 function mfPayment(outcome: MfPayment["outcome"], over: Partial<MfPayment> = {}): MfPayment {
   return {
     paymentId: "0707-1", invoiceId: "inv-1", externalIdentifier: ATT_A, outcome,
-    amountHalalas: 6000, currency: "SAR", method: "Apple Pay",
+    amountHalalas: 6000, currency: "SAR", baseCurrency: "SAR", baseValue: 60, method: "Apple Pay",
     errorMessage: outcome === "failed" ? "DECLINED : Do not honour" : null, ...over,
   };
 }

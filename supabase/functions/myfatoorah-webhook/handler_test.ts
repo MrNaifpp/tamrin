@@ -48,7 +48,7 @@ async function refundEvent(data = refundData, reference = "evt-r1") {
 function mfPayment(outcome: MfPayment["outcome"]): MfPayment {
   return {
     paymentId: "0707-1", invoiceId: "inv-1", externalIdentifier: "pay-1:att", outcome,
-    amountHalalas: 6000, currency: "SAR", method: "Apple Pay", errorMessage: null,
+    amountHalalas: 6000, currency: "SAR", baseCurrency: "SAR", baseValue: 60, method: "Apple Pay", errorMessage: null,
   };
 }
 
@@ -177,4 +177,10 @@ Deno.test("refund event is matched by MyFatoorah's refund id", async () => {
   const { d, refundArgs } = deps();
   await makeHandler(d)(await refundEvent());
   assertEquals((refundArgs[0] as { p_refund_id: string }).p_refund_id, "ref-1");
+});
+
+Deno.test("a card payment is labelled creditcard", async () => {
+  const { d, payArgs } = deps({ remote: { ...mfPayment("paid"), method: "VISA/MASTER" } });
+  await makeHandler(d)(await paymentEvent());
+  assertEquals((payArgs[0] as { p_payment_method: string }).p_payment_method, "creditcard");
 });
