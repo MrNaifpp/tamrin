@@ -346,6 +346,11 @@ verify_jwt = true
 [functions.pay-apple-pay]
 verify_jwt = true
 
+[functions.pay-card-test]
+# TEST ONLY: refuses unless ALLOW_TEST_CARD_PAYMENTS=true and the MyFatoorah
+# base URL is the test server. Never deploy the switch to production.
+verify_jwt = true
+
 [functions.myfatoorah-webhook]
 # MyFatoorah cannot present a Supabase JWT. The function checks the
 # MyFatoorah-Signature HMAC itself and re-fetches every payment or refund from
