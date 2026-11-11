@@ -1,161 +1,155 @@
-# Payment setup — Moyasar
+# Payment setup — MyFatoorah Apple Pay
 
-Design: docs/superpowers/specs/2026-09-06-moyasar-payments-design.md
-Plan:   docs/superpowers/plans/2026-09-19-moyasar-payments.md
+Design: docs/superpowers/specs/2026-11-11-myfatoorah-apple-pay-design.md
+Plan:   docs/superpowers/plans/2026-11-11-myfatoorah-apple-pay.md
 
-## Moyasar Dashboard
+Apple Pay only. The app shows Apple's own sheet and sends the token to
+`pay-apple-pay`; the server charges it through MyFatoorah with a key the app never
+holds. Members without Apple Pay keep the manual transfer. All money lands in
+Tamrin's MyFatoorah account.
 
-Take three things from Settings → API Keys:
-- `sk_test_…` / `sk_live_…` — secret key. Server only. Never in Swift, xcconfig or git.
-- `pk_test_…` / `pk_live_…` — publishable key. Also stored server-side; create-payment
-  returns it to the app per request, so rotation needs no App Store release.
-- Confirm which payment methods are enabled on the account (mada, Visa, Mastercard, Apple Pay).
+## MyFatoorah portal (sa.myfatoorah.com)
 
-Check the account before trusting it: `./scripts/moyasar-account-check.sh`, then
-`./scripts/moyasar-splits-probe.sh` once you have a real recipient id.
+**API key** — Integration Settings → API Keys → Add. Permissions: create payments,
+get payment details, refunds. Nothing else. Set an expiry date. Copy it into the
+password manager; it never goes in Swift, xcconfig, git or chat.
+
+**Check what the account has** (asks for the key without showing it):
+
+    read -rs MF_KEY && curl -s https://api-sa.myfatoorah.com/v3/payment-methods -H "Authorization: Bearer $MF_KEY"; unset MF_KEY
+
+Apple Pay must be in the list.
+
+**Ask MyFatoorah's tech team (tech@myfatoorah.com)** to confirm in writing:
+1. Apple Pay native (in-app) integration, and send the **CSR file**.
+2. Auto Refund — on or off. Off means every refund waits for their finance team.
+3. Webhook V2 enabled.
+
+## Apple Pay certificate
+
+Merchant ID `merchant.com.businessech.tmrin`, already on both App IDs
+(`com.businessech.tmrin`, `com.businessech.tmrin.staging`) since 2026-09-20.
+
+1. Get the CSR file from MyFatoorah (email, not the portal).
+2. Apple Developer → Identifiers → Merchant IDs → `merchant.com.businessech.tmrin` →
+   Apple Pay Payment Processing Certificate → Create Certificate → "China Mainland?" **No**
+   → upload MyFatoorah's CSR → download `apple_pay.cer`.
+3. Email `apple_pay.cer` back to MyFatoorah and wait for them to confirm it is installed.
+4. Do not revoke the old Moyasar certificate until that confirmation arrives.
+
+Until step 3 is confirmed, real Apple Pay payments are declined. Everything else works.
+
+The id reaches the app through `APPLE_PAY_MERCHANT_ID` in `Config/Base.xcconfig` and the
+`ApplePayMerchantID` placeholder in `Sirr/Info.plist`. The capability is
+`com.apple.developer.in-app-payments` in `Sirr/Sirr.entitlements`.
 
 ## Supabase secrets
 
-Two projects, two sets. Never cross them.
+Two projects, two sets. Never cross them. While testing (option A, 2026-11-11) the
+**live** key goes on the **sandbox** only; production gets it at go-live.
 
-    # sandbox — test keys
-    supabase secrets set --project-ref kpcdinxusxycenfnitjc MOYASAR_SECRET_KEY=sk_test_…
-    supabase secrets set --project-ref kpcdinxusxycenfnitjc MOYASAR_PUBLISHABLE_KEY=pk_test_…
-    supabase secrets set --project-ref kpcdinxusxycenfnitjc MOYASAR_WEBHOOK_SECRET=$(openssl rand -hex 32)
+    supabase secrets set --project-ref kpcdinxusxycenfnitjc \
+      MYFATOORAH_API_KEY='…' \
+      MYFATOORAH_BASE_URL='https://api-sa.myfatoorah.com' \
+      MYFATOORAH_WEBHOOK_SECRET='…the portal webhook secret key…' \
+      PAYMENT_SWEEP_SECRET="$(openssl rand -hex 32)" \
+      REFUND_PAYMENT_SECRET='…same value as the vault refund_payment_secret…'
 
-    # production — live keys, same three names
-    supabase secrets set --project-ref hzsxwnmbdkrmipjtfzlp …
+Remove the Moyasar ones once the switch is live:
 
-Deploy: `supabase functions deploy create-payment verify-payment moyasar-webhook --project-ref <ref>`
+    supabase secrets unset --project-ref kpcdinxusxycenfnitjc MOYASAR_SECRET_KEY MOYASAR_PUBLISHABLE_KEY MOYASAR_WEBHOOK_SECRET ALLOW_PAYMENTS_WITHOUT_RECIPIENT
+
+## Vault (SQL editor)
+
+The refund trigger and the two sweeps read their URL and secret from the vault. Without
+them they do nothing, silently.
+
+    select vault.create_secret('https://<ref>.supabase.co/functions/v1/refund-payment', 'refund_payment_url');
+    select vault.create_secret('<REFUND_PAYMENT_SECRET>', 'refund_payment_secret');
+    select vault.create_secret('https://<ref>.supabase.co/functions/v1/payment-sweep', 'payment_sweep_url');
+    select vault.create_secret('<PAYMENT_SWEEP_SECRET>', 'payment_sweep_secret');
+    select vault.create_secret('<your auth.users id>', 'ops_user_id');  -- who gets "refund failed" pushes
+
+The refund ones already exist on the sandbox from the Moyasar work; only add what is
+missing (`select name from vault.secrets;`).
+
+A function secret and its vault twin must match. The vault is readable, function
+secrets are not, so compare digests instead of retyping:
+
+    select name, encode(sha256(convert_to(decrypted_secret,'UTF8')),'hex')
+    from vault.decrypted_secrets where name in ('refund_payment_secret','payment_sweep_secret');
+
+against the DIGEST column of `supabase secrets list --project-ref <ref>`.
+
+## Migrations and functions
+
+Migrations, applied by hand in the SQL editor in this order (never `db push` from a branch):
+
+    supabase/migrations/20261111100000_myfatoorah_payments.sql
+    supabase/migrations/20261111110000_myfatoorah_refunds.sql
+    supabase/migrations/20261111120000_payment_sweep.sql
+
+Functions:
+
+    supabase functions deploy create-payment pay-apple-pay myfatoorah-webhook refund-payment payment-sweep send-push --project-ref <ref>
+
+Then delete the old ones from the dashboard: `verify-payment`, `moyasar-webhook`.
 
 ## Webhook
 
-Moyasar Dashboard → Settings → Webhooks → add endpoint:
+Portal → Integration Settings → Webhook Settings:
+- Enable, URL `https://<ref>.supabase.co/functions/v1/myfatoorah-webhook`
+- Version **V2**, events: Payment Status Changed, Refund Status Changed
+- Retries 5, delay up to 180 s
+- Copy the **secret key** into `MYFATOORAH_WEBHOOK_SECRET`
 
-    https://<project-ref>.supabase.co/functions/v1/moyasar-webhook
+The function checks the `MyFatoorah-Signature` HMAC and re-fetches every payment or
+refund before acting, so a forged body cannot settle anything.
 
-Secret token: the exact value set as `MOYASAR_WEBHOOK_SECRET`. Events: payment_paid,
-payment_captured, payment_faild, payment_voided, payment_refunded. The function
-re-fetches every payment with the secret key, so a forged body cannot settle anything.
+## How a payment can end
 
-## Onboarding a workspace for card payments
+| Where it stops | What finishes it |
+|---|---|
+| `pay-apple-pay` gets MyFatoorah's answer | settles at once |
+| app closes, timeout, no answer | row stays `processing`; webhook, or `payment-sweep` within ~5 min |
+| MyFatoorah never created a payment | sweep marks it `failed` after 30 min (nothing was charged) |
 
-There is no API for this. Once Moyasar gives you a recipient id for an organizer:
-
-    insert into public.workspace_moyasar_recipients
-      (workspace_id, moyasar_recipient_id, recipient_type, status, verified_at)
-    values ('<workspace uuid>', '<recipient uuid>', 'Beneficiary', 'verified', now());
-
-Run it as service_role (SQL editor). The card button appears for that workspace on the
-next app launch. Every other workspace keeps the manual transfer flow.
-
-### Testing before Moyasar issues a recipient id
-
-Splits need a recipient id and Moyasar has not given us one, so without help the whole
-card and Apple Pay flow cannot be exercised at all. The escape hatch is one secret, set
-on the **sandbox only**:
-
-    supabase secrets set --project-ref kpcdinxusxycenfnitjc ALLOW_PAYMENTS_WITHOUT_RECIPIENT=true
-
-With it, `begin_card_payment` prices the seat even when the workspace has no verified
-recipient, `create-payment` sends no splits array, and the payment settles into
-**Tamrin's own Moyasar account** rather than the organizer's. Everything else is
-unchanged: the amount is still computed on the server, still compared with the secret
-key, and still captured or voided by `verify-payment`.
-
-**Never set this on production.** Without a split the organizer receives nothing and
-Tamrin becomes the merchant of record, which is question 8 in
-`docs/moyasar-support-questions.md` and is unanswered. The SQL parameter defaults to
-false and the secret is absent in production, so production behaves exactly as designed.
-Remove the secret the day a real recipient id exists.
-
-## Apple Pay — done on 2026-09-20, kept here for the next account or renewal
-
-1. Apple Developer → Identifiers → Merchant IDs → `merchant.com.businessech.tmrin`. **Done.**
-2. Apple Pay Payment Processing enabled on App IDs `com.businessech.tmrin` **and**
-   `com.businessech.tmrin.staging`, both selecting that Merchant ID. **Done** — both
-   provisioning profiles carry `com.apple.developer.in-app-payments`.
-3. Moyasar Dashboard → Settings → Apple Pay - Certificate → Add Certificate → Download CSR. **Done.**
-4. Apple Developer → the Merchant ID → Apple Pay Payment Processing Certificate → Create
-   Certificate → "China Mainland?" **No** → upload Moyasar's CSR → download `apple_pay.cer`. **Done.**
-5. Moyasar → Upload File → `apple_pay.cer` → shows "Activated". **Done.**
-6. The id lives in `Config/Base.xcconfig` as `APPLE_PAY_MERCHANT_ID` and reaches the app
-   through the `ApplePayMerchantID` placeholder in `Sirr/Info.plist` (the same route as
-   `SUPABASE_HOST`; `INFOPLIST_KEY_` settings do not work for custom keys). Empty hides
-   the button.
-7. The capability is the `com.apple.developer.in-app-payments` array in
-   `Sirr/Sirr.entitlements`, listing the same id. It was added by editing that file, so
-   `project.pbxproj` did not change; Xcode shows it under Signing & Capabilities anyway.
-
-Certificates expire every **25 months**: this one around **2028-10**. Renew by uploading
-the new certificate to Moyasar *before* activating it at Apple; never revoke the old one
-first. The production profile also lists an older `merchant.businessech.com.test` id —
-harmless, detach it from the App ID if it is not in use.
-
-## Testing (Moyasar test mode)
-
-Cards (any two-word name, any future expiry, any 3-digit CVC):
-- `4111111111111111` Visa — paid
-- `4201320111111010` mada — paid
-- `4123120000000000` Visa — unspecified failure
-- `5105105105105100` Mastercard — unspecified failure
-
-Apple Pay: real device, real card in Wallet, result chosen by **amount**:
-- 200–300 SAR → paid · 1101–1200 → insufficient funds · 1301–1400 → declined
-- Use a 250 SAR workout; a 60 SAR seat falls outside every range.
-
-Plan:
-1. Successful card → seat confirmed, `payments.status = paid`, organizer push.
-2. Failed card → seat stays pending, `payments.status = failed`.
-3. Cancelled → `cancelled` state in the sheet, nothing changes server-side.
-4. Duplicate webhook → replay Moyasar's delivery from the dashboard; `moyasar_webhook_events`
-   has one row, seat confirmed once.
-5. Tampered amount → run `verify-payment` against a payment authorized for a different
-   amount (curl with the SDK-created id); expect `{"status":"failed","reason":"amount"}`,
-   Moyasar shows `voided`.
-6. Already paid → tap card again on the same seat; `create-payment` returns `already_paid`
-   before contacting Moyasar.
-
-SQL suites: `supabase/tests/moyasar_payments_schema_test.sql`, `card_payment_rpcs_test.sql`.
-Deno suites: `supabase/functions/_shared/`, `create-payment/`, `verify-payment/`, `moyasar-webhook/`.
+    select status, count(*) from public.payments group by status;
+    select jobname, schedule from cron.job where jobname in ('retry-processing-payments','retry-pending-refunds');
 
 ## Refunds
 
-Money goes back automatically in three cases: a player withdraws before the
-workout starts, a player removes a guest they paid for, or the organizer cancels.
-Card payments only. A bank transfer never passed through Tamrin, so there is
-nothing for the app to send back.
+Automatic in three cases: a player withdraws before the start, a player removes a
+guest they paid for, the organizer cancels. Also when a paid seat was already gone by
+the time the money arrived. Apple Pay payments only; a bank transfer never passed
+through Tamrin.
 
-A refund is a row in `public.refunds` before it is an API call. The amount is
-worked out in the same transaction that frees the seat, because freeing it
-destroys the evidence of what it cost. An `AFTER INSERT` trigger posts the row id
-to the `refund-payment` function, which holds the secret key and calls
-`POST /v1/payments/{id}/refund`.
-
-Two secrets, and they must match:
-
-    supabase secrets set --project-ref <ref> REFUND_PAYMENT_SECRET=<value>
-
-    select vault.create_secret('https://<ref>.supabase.co/functions/v1/refund-payment',
-                               'refund_payment_url');
-    select vault.create_secret('<the same value>', 'refund_payment_secret');
-
-Without the vault entries the trigger silently does nothing, which keeps a local
-stack green but means **no refund is ever sent**. If refunds sit `pending` on a
-deployed project, check the vault first.
-
-The sweep `retry_pending_refunds()` re-fires anything still waiting after three
-minutes, up to five attempts. Its pg_cron schedule is created by
-`20260922120000_schedule_refund_sweep.sql`, so there is nothing to schedule by
-hand on any environment. Confirm it with:
-
-    select jobname, schedule from cron.job where jobname = 'retry-pending-refunds';
-
-To see what is stuck:
+| Refund status | Meaning |
+|---|---|
+| `pending` | row written, request not sent yet |
+| `processing` | sent; MyFatoorah said Pending (finance team, unless Auto Refund) |
+| `waiting_balance` | refused for balance (same-day money isn't refundable yet); retried daily for 7 days |
+| `done` | money returned; the payer got a push |
+| `failed` | refused, cancelled by MyFatoorah, or 7 days without balance; `ops_user_id` got a push |
 
     select status, count(*), sum(amount) from public.refunds group by status;
-    select * from public.refunds where status = 'failed' order by created_at desc;
+    select * from public.refunds where status in ('failed','waiting_balance') order by created_at desc;
 
-A `failed` row carries Moyasar's own message. The commonest causes are a payment
-already refunded in full, and a split whose share has already been settled to the
-organizer.
+A refund done by hand in the MyFatoorah portal is **not** reflected in seats; mirror it
+by hand.
+
+## Testing (live account, 1-riyal workouts, refund everything)
+
+Before the certificate is confirmed:
+- Deno suites: `supabase/functions/_shared/`, `create-payment/`, `pay-apple-pay/`,
+  `myfatoorah-webhook/`, `refund-payment/`, `payment-sweep/`, `send-push/copy_test.ts`.
+- SQL suites: `supabase/tests/myfatoorah_payments_test.sql`, `refunds_test.sql`.
+- `payment-sweep` answers `{"checked":0,"settled":0}` when called with its secret.
+
+After MyFatoorah confirms the certificate, on a phone, sandbox-pinned build:
+1. Pay 1 SAR with a real mada card in Wallet → seat confirmed, organizer push.
+2. Withdraw → refund row; note how long until `done` (expect `waiting_balance` same day).
+3. Pay for yourself + a guest, remove the guest → partial refund.
+4. Organizer cancels → full refund.
+5. Kill the app right after Face ID → seat still confirms (webhook or sweep).
+6. Add a guest while paying → that guest stays unpaid and owes their own payment.
