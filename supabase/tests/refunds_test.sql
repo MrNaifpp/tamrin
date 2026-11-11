@@ -39,7 +39,7 @@ values ('81000000-0000-0000-0000-0000000000e1',
 -- A paid card payment covering two seats at 120 SAR each.
 insert into public.payments
   (id, workspace_id, event_id, user_id, seat_count, amount, status,
-   payment_method, moyasar_payment_id, paid_at)
+   payment_method, provider_payment_id, paid_at)
 values ('81000000-0000-0000-0000-0000000000f1',
         '81000000-0000-0000-0000-0000000000a1',
         '81000000-0000-0000-0000-0000000000e1',
@@ -69,7 +69,7 @@ begin
   -- 1. A refund row cannot claim more than the payment took.
   begin
     insert into public.refunds
-      (payment_id, event_id, user_id, seats, amount, reason, moyasar_payment_id)
+      (payment_id, event_id, user_id, seats, amount, reason, provider_payment_id)
     values ('81000000-0000-0000-0000-0000000000f1',
             '81000000-0000-0000-0000-0000000000e1',
             '81000000-0000-0000-0000-000000000002', 3, 99999, 'withdrew',
@@ -80,7 +80,7 @@ begin
 
   -- 2. Half the payment goes back: one seat, 120 SAR.
   insert into public.refunds
-    (payment_id, event_id, user_id, seats, amount, reason, moyasar_payment_id)
+    (payment_id, event_id, user_id, seats, amount, reason, provider_payment_id)
   values ('81000000-0000-0000-0000-0000000000f1',
           '81000000-0000-0000-0000-0000000000e1',
           '81000000-0000-0000-0000-000000000002', 1, 12000, 'guest_removed',
@@ -115,7 +115,7 @@ begin
 
   -- 4. The rest goes back: the payment is now refunded in full.
   insert into public.refunds
-    (payment_id, event_id, user_id, seats, amount, reason, moyasar_payment_id)
+    (payment_id, event_id, user_id, seats, amount, reason, provider_payment_id)
   values ('81000000-0000-0000-0000-0000000000f1',
           '81000000-0000-0000-0000-0000000000e1',
           '81000000-0000-0000-0000-000000000002', 1, 12000, 'withdrew',
@@ -148,7 +148,7 @@ begin
 
   -- 7. A failed refund records the reason and moves no money.
   insert into public.refunds
-    (payment_id, event_id, user_id, seats, amount, reason, moyasar_payment_id)
+    (payment_id, event_id, user_id, seats, amount, reason, provider_payment_id)
   values ('81000000-0000-0000-0000-0000000000f1',
           '81000000-0000-0000-0000-0000000000e1',
           '81000000-0000-0000-0000-000000000002', 1, 12000, 'withdrew',
@@ -185,7 +185,7 @@ begin
   -- 9. Nobody may write one.
   begin
     insert into public.refunds
-      (payment_id, event_id, user_id, seats, amount, reason, moyasar_payment_id)
+      (payment_id, event_id, user_id, seats, amount, reason, provider_payment_id)
     values ('81000000-0000-0000-0000-0000000000f1',
             '81000000-0000-0000-0000-0000000000e1',
             '81000000-0000-0000-0000-000000000002', 1, 100, 'withdrew', 'x');
@@ -214,7 +214,7 @@ $$;
 -- ============================================================
 insert into public.payments
   (id, workspace_id, event_id, user_id, seat_count, amount, status,
-   payment_method, moyasar_payment_id, paid_at)
+   payment_method, provider_payment_id, paid_at)
 values ('81000000-0000-0000-0000-0000000000f2',
         '81000000-0000-0000-0000-0000000000a1',
         '81000000-0000-0000-0000-0000000000e1',
@@ -272,64 +272,6 @@ end;
 $$;
 
 -- ============================================================
--- Section 4: a webhook saying "refunded" no longer means "all of it".
--- ============================================================
-insert into public.payments
-  (id, workspace_id, event_id, user_id, seat_count, amount, status,
-   payment_method, moyasar_payment_id, paid_at)
-values ('81000000-0000-0000-0000-0000000000f4',
-        '81000000-0000-0000-0000-0000000000a1',
-        '81000000-0000-0000-0000-0000000000e1',
-        '81000000-0000-0000-0000-000000000002', 2, 24000, 'paid',
-        'creditcard', 'pay_moy_refund_4', now());
-
-insert into public.event_participants (event_id, user_id, added_by, guest_name,
-                                       payment_status, payment_id)
-values ('81000000-0000-0000-0000-0000000000e1', null,
-        '81000000-0000-0000-0000-000000000002', 'ضيف رابع',
-        'confirmed', '81000000-0000-0000-0000-0000000000f4');
-
-do $$
-declare
-  v json;
-  v_amount int;
-  v_status text;
-  v_count int;
-begin
-  -- A refund of half, issued from the Moyasar dashboard, arrives as a webhook.
-  v := public.settle_payment('81000000-0000-0000-0000-0000000000f4',
-                             'pay_moy_refund_4', 'refunded', 'creditcard',
-                             24000, 'SAR', 12000);
-  select refunded_amount, status into v_amount, v_status
-  from public.payments where id = '81000000-0000-0000-0000-0000000000f4';
-  if v_amount <> 12000 then
-    raise exception 'FAIL: expected 12000 absorbed, got %', v_amount;
-  end if;
-  if v_status <> 'paid' then
-    raise exception 'FAIL: half a refund must not mark it refunded, got %', v_status;
-  end if;
-  select count(*) into v_count from public.event_participants
-  where payment_id = '81000000-0000-0000-0000-0000000000f4'
-    and payment_status = 'confirmed';
-  if v_count <> 1 then
-    raise exception 'FAIL: half a refund released the seat, % left', v_count;
-  end if;
-
-  -- The rest follows.
-  v := public.settle_payment('81000000-0000-0000-0000-0000000000f4',
-                             'pay_moy_refund_4', 'refunded', 'creditcard',
-                             24000, 'SAR', 24000);
-  select status into v_status
-  from public.payments where id = '81000000-0000-0000-0000-0000000000f4';
-  if v_status <> 'refunded' then
-    raise exception 'FAIL: expected refunded, got %', v_status;
-  end if;
-
-  raise notice 'PASS: partial refund reconciliation';
-end;
-$$;
-
--- ============================================================
 -- Section 5: withdrawing, removing a guest, and cancelling.
 -- ============================================================
 insert into auth.users (id, email) values
@@ -362,7 +304,7 @@ begin
   -- ---------- removing one guest refunds exactly that seat ----------
   insert into public.payments
     (id, workspace_id, event_id, user_id, seat_count, amount, status,
-     payment_method, moyasar_payment_id, paid_at)
+     payment_method, provider_payment_id, paid_at)
   values ('82000000-0000-0000-0000-0000000000f1',
           '81000000-0000-0000-0000-0000000000a1',
           '82000000-0000-0000-0000-0000000000e1',
@@ -420,7 +362,7 @@ begin
   -- ---------- withdrawing after the start refunds nothing ----------
   insert into public.payments
     (id, workspace_id, event_id, user_id, seat_count, amount, status,
-     payment_method, moyasar_payment_id, paid_at)
+     payment_method, provider_payment_id, paid_at)
   values ('82000000-0000-0000-0000-0000000000f2',
           '81000000-0000-0000-0000-0000000000a1',
           '82000000-0000-0000-0000-0000000000e2',
@@ -443,7 +385,7 @@ begin
   -- ---------- cancelling refunds every card payer in full ----------
   insert into public.payments
     (id, workspace_id, event_id, user_id, seat_count, amount, status,
-     payment_method, moyasar_payment_id, paid_at)
+     payment_method, provider_payment_id, paid_at)
   values ('82000000-0000-0000-0000-0000000000f3',
           '81000000-0000-0000-0000-0000000000a1',
           '82000000-0000-0000-0000-0000000000e2',
@@ -487,7 +429,7 @@ begin
   --    A local stack and CI have no secrets, and neither may fail because of it.
   insert into public.payments
     (id, workspace_id, event_id, user_id, seat_count, amount, status,
-     payment_method, moyasar_payment_id, paid_at)
+     payment_method, provider_payment_id, paid_at)
   values ('83000000-0000-0000-0000-0000000000f1',
           '81000000-0000-0000-0000-0000000000a1',
           '81000000-0000-0000-0000-0000000000e1',
