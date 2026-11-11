@@ -91,7 +91,7 @@ Migrations, applied by hand in the SQL editor in this order (never `db push` fro
 
 Functions:
 
-    supabase functions deploy create-payment pay-apple-pay myfatoorah-webhook refund-payment payment-sweep send-push --project-ref <ref>
+    supabase functions deploy create-payment pay-apple-pay pay-card-test myfatoorah-webhook refund-payment payment-sweep send-push --project-ref <ref>
 
 Then delete the old ones from the dashboard: `verify-payment`, `moyasar-webhook`.
 
@@ -148,6 +148,41 @@ left. Every refund goes through the app (withdraw, remove guest, cancel).
 
 Each Apple Pay attempt is sent to MyFatoorah as ExternalIdentifier `<payment id>:<first 16 of
 Apple's transaction id>`, stored as `payments.current_attempt`. Search the portal by it.
+
+## Test mode — no real money (do this first)
+
+MyFatoorah's test server with its public test key and test cards. Nothing is charged.
+Sandbox project only.
+
+    supabase secrets set --project-ref kpcdinxusxycenfnitjc \
+      MYFATOORAH_BASE_URL='https://apitest.myfatoorah.com' \
+      MYFATOORAH_API_KEY='SK_KWT_vVZlnnAqu8jRByOWaRPNId4ShzEDNt256dvnjebuyzo52dXjAfRx2ixW5umjWSUx' \
+      ALLOW_TEST_CARD_PAYMENTS=true
+
+(That key is MyFatoorah's published demo key, not ours.) Deploy `pay-card-test` along with
+the other functions. Skip the webhook step: the public key has no portal, so the payment
+sweep confirms seats instead — expect 3–8 minutes, and refunds within ~10.
+
+In a sandbox build the pay button opens the review step, which shows
+**ادفع بالبطاقة (تجربة)**. It opens MyFatoorah's test card page. Test cards (any two-word
+name, e.g. "test test"):
+
+| Card | Number | Expiry | CVV | Result |
+|---|---|---|---|---|
+| mada | 4464040000000007 | 02/29 | 123 | paid |
+| mada | 5297412542005689 | 05/25 | 350 | expect a decline |
+| Visa/Mastercard | 5123450000000008 | 01/39 | 100 | paid |
+
+The test server works in KWD: MyFatoorah converts our riyals, and the server reads the
+amount back in riyals and sends refunds in dinars at the same rate. On the live Saudi
+account both are riyals.
+
+What it checks: create-payment, the claim, MyFatoorah, the sweep, seat confirmation,
+refunds (withdraw, remove a guest, cancel). What it does not: the Apple Pay token.
+
+Leaving test mode: `supabase secrets unset ALLOW_TEST_CARD_PAYMENTS`, then set the live key
+and `https://api-sa.myfatoorah.com`. Never set `ALLOW_TEST_CARD_PAYMENTS` on production
+(the function also refuses unless the base URL is the test server).
 
 ## Testing (live account, 1-riyal workouts, refund everything)
 
