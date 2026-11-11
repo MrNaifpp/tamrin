@@ -346,6 +346,9 @@ verify_jwt = true
 [functions.pay-apple-pay]
 verify_jwt = true
 
+[functions.check-payment]
+verify_jwt = true
+
 [functions.pay-card-test]
 # TEST ONLY: refuses unless ALLOW_TEST_CARD_PAYMENTS=true and the MyFatoorah
 # base URL is the test server. Never deploy the switch to production.
