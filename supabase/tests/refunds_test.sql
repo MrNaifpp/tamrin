@@ -87,7 +87,7 @@ begin
           'pay_moy_refund_1')
   returning id into v_refund_a;
 
-  v := public.settle_refund(v_refund_a, 'refunded', 12000, null);
+  v := public.settle_refund(v_refund_a, 'refunded', null, null);
   if v ->> 'status' <> 'settled' then
     raise exception 'FAIL: expected settled, got %', v;
   end if;
@@ -103,7 +103,7 @@ begin
   end if;
 
   -- 3. Settling the same refund twice moves nothing.
-  v := public.settle_refund(v_refund_a, 'refunded', 12000, null);
+  v := public.settle_refund(v_refund_a, 'refunded', null, null);
   if v ->> 'status' <> 'already_settled' then
     raise exception 'FAIL: replay should say already_settled, got %', v;
   end if;
@@ -122,7 +122,7 @@ begin
           'pay_moy_refund_1')
   returning id into v_refund_b;
 
-  v := public.settle_refund(v_refund_b, 'refunded', 24000, null);
+  v := public.settle_refund(v_refund_b, 'refunded', null, null);
   select refunded_amount, refunded_seats, status
     into v_amount, v_seats, v_status
   from public.payments where id = '81000000-0000-0000-0000-0000000000f1';
@@ -154,7 +154,7 @@ begin
           '81000000-0000-0000-0000-000000000002', 1, 12000, 'withdrew',
           'pay_moy_refund_1')
   returning id into v_refund_b;
-  v := public.settle_refund(v_refund_b, 'failed', 24000, 'already fully refunded');
+  v := public.settle_refund(v_refund_b, 'failed', null, 'already fully refunded');
   if v ->> 'status' <> 'failed' then
     raise exception 'FAIL: expected failed, got %', v;
   end if;
@@ -249,7 +249,7 @@ begin
   if v_amount <> 12000 then
     raise exception 'FAIL: expected 12000, got %', v_amount;
   end if;
-  v := public.settle_refund(v_id, 'refunded', 12000, null);
+  v := public.settle_refund(v_id, 'refunded', null, null);
 
   -- 3. Asking for more than remains is clamped to what remains.
   v_id := public.request_refund('81000000-0000-0000-0000-0000000000f2',
@@ -258,7 +258,7 @@ begin
   if v_amount <> 12000 then
     raise exception 'FAIL: expected the remaining 12000, got %', v_amount;
   end if;
-  v := public.settle_refund(v_id, 'refunded', 24000, null);
+  v := public.settle_refund(v_id, 'refunded', null, null);
 
   -- 4. Nothing remains, so nothing is written.
   v_id := public.request_refund('81000000-0000-0000-0000-0000000000f2',
@@ -448,6 +448,100 @@ begin
   end if;
 
   raise notice 'PASS: refund outbox wiring';
+end;
+$$;
+
+-- ============================================================
+-- Section 7: MyFatoorah refunds can wait — for the provider, or for balance.
+-- ============================================================
+insert into auth.users (id, email) values
+  ('84000000-0000-0000-0000-0000000000c1', 'ops@test.local');
+
+insert into public.payments
+  (id, workspace_id, event_id, user_id, seat_count, amount, status,
+   payment_method, provider_payment_id, paid_at)
+values ('84000000-0000-0000-0000-0000000000f1',
+        '81000000-0000-0000-0000-0000000000a1',
+        '81000000-0000-0000-0000-0000000000e1',
+        '81000000-0000-0000-0000-000000000002', 2, 12000, 'paid',
+        'applepay', 'mf_pay_7', now());
+
+do $$
+declare
+  v json;
+  v_id uuid;
+  v_id2 uuid;
+  v_status text;
+  v_ref text;
+  v_next timestamptz;
+  v_amount int;
+  v_count int;
+begin
+  delete from public.push_outbox;
+  -- 1. pending keeps processing
+  v_id := public.request_refund('84000000-0000-0000-0000-0000000000f1', 1, 6000, 'withdrew');
+  v := public.settle_refund(v_id, 'pending', 'R1', null);
+  select status, provider_refund_id into v_status, v_ref from public.refunds where id = v_id;
+  select refunded_amount into v_amount from public.payments where id = '84000000-0000-0000-0000-0000000000f1';
+  if v_status <> 'processing' or v_ref <> 'R1' or v_amount <> 0 then
+    raise exception 'FAIL 7.1: expected processing/R1/0, got %/%/%', v_status, v_ref, v_amount;
+  end if;
+  -- …and refunded later still settles it
+  v := public.settle_refund(v_id, 'refunded', 'R1', null);
+  select status into v_status from public.refunds where id = v_id;
+  select refunded_amount into v_amount from public.payments where id = '84000000-0000-0000-0000-0000000000f1';
+  if v_status <> 'done' or v_amount <> 6000 then
+    raise exception 'FAIL 7.1: expected done/6000 after refunded, got %/%', v_status, v_amount;
+  end if;
+  raise notice 'PASS 7.1 pending keeps processing';
+
+  -- 2. waiting_balance schedules next day
+  v_id2 := public.request_refund('84000000-0000-0000-0000-0000000000f1', 1, 6000, 'guest_removed');
+  v := public.settle_refund(v_id2, 'waiting_balance', null, 'Insufficient balance');
+  select status, next_attempt_at into v_status, v_next from public.refunds where id = v_id2;
+  if v_status <> 'waiting_balance'
+     or v_next < now() + interval '23 hours' or v_next > now() + interval '25 hours' then
+    raise exception 'FAIL 7.2: expected waiting_balance tomorrow, got % at %', v_status, v_next;
+  end if;
+  raise notice 'PASS 7.2 waiting_balance schedules next day';
+
+  -- 3. open refunds count toward the cap: 6000 refunded + 6000 waiting = nothing left
+  if public.request_refund('84000000-0000-0000-0000-0000000000f1', 1, 12000, 'withdrew') is not null then
+    raise exception 'FAIL 7.3: a refund was written although the waiting one covers the rest';
+  end if;
+  raise notice 'PASS 7.3 open refunds count toward the cap';
+
+  -- 4. waiting_balance after 7 days fails and pushes ops
+  perform vault.create_secret('84000000-0000-0000-0000-0000000000c1', 'ops_user_id');
+  update public.refunds set created_at = now() - interval '8 days' where id = v_id2;
+  v := public.settle_refund(v_id2, 'waiting_balance', null, 'Insufficient balance');
+  select status into v_status from public.refunds where id = v_id2;
+  select count(*) into v_count from public.push_outbox
+   where type = 'refund_failed' and user_id = '84000000-0000-0000-0000-0000000000c1';
+  if v_status <> 'failed' or v_count <> 1 then
+    raise exception 'FAIL 7.4: expected failed + 1 ops push, got % / %', v_status, v_count;
+  end if;
+  raise notice 'PASS 7.4 waiting_balance after 7 days fails and pushes ops';
+
+  -- 5. sweep picks due rows only
+  delete from public.refunds;
+  update public.payments set refunded_amount = 0, refunded_seats = 0
+   where id = '84000000-0000-0000-0000-0000000000f1';
+  insert into public.refunds (payment_id, event_id, user_id, seats, amount, reason,
+                              provider_payment_id, status, created_at, updated_at, next_attempt_at)
+  select '84000000-0000-0000-0000-0000000000f1', '81000000-0000-0000-0000-0000000000e1',
+         '81000000-0000-0000-0000-000000000002', 1, 100, 'withdrew', 'mf_pay_7',
+         s, c, u, n
+  from (values
+    ('pending',         now() - interval '10 minutes', now() - interval '10 minutes', null::timestamptz), -- due
+    ('processing',      now() - interval '1 hour',     now() - interval '30 minutes', null),             -- due
+    ('waiting_balance', now() - interval '1 day',      now() - interval '1 day',      now() - interval '1 minute'), -- due
+    ('processing',      now(),                         now(),                         null),             -- fresh
+    ('waiting_balance', now(),                         now(),                         now() + interval '1 day') -- not yet
+  ) as t(s, c, u, n);
+  v_count := public.retry_pending_refunds();
+  if v_count <> 3 then raise exception 'FAIL 7.5: sweep should pick 3 rows, picked %', v_count; end if;
+  raise notice 'PASS 7.5 sweep picks due rows only';
 end;
 $$;
 
