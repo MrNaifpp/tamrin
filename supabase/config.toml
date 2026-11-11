@@ -352,6 +352,11 @@ verify_jwt = true
 # MyFatoorah before acting.
 verify_jwt = false
 
+[functions.payment-sweep]
+# Called by pg_cron through pg_net, which cannot present a Supabase JWT. The
+# function's own shared-secret check (PAYMENT_SWEEP_SECRET) is the gate.
+verify_jwt = false
+
 [functions.refund-payment]
 # Called by the refunds trigger through pg_net, which cannot present a Supabase
 # JWT. The function's own shared-secret check is the gate.
