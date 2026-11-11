@@ -57,6 +57,14 @@ enum ApplePayPaymentServiceError: Error, LocalizedError {
     }
 }
 
+/// TEST ONLY: what asking for a MyFatoorah test card page came back as.
+enum TestCardStart: Equatable {
+    case ready(URL)
+    case paid
+    case processing
+    case failed(reason: String?)
+}
+
 /// What an Apple Pay attempt came back as, after the server has spoken.
 enum CardPaymentOutcome: Equatable {
     /// The server charged it and confirmed the seats.

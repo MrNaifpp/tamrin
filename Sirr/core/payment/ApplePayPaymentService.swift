@@ -70,6 +70,32 @@ final class ApplePayPaymentService {
         }
     }
 
+    /// TEST ONLY (see CardPayments.testCardEnabled): asks the server for a
+    /// MyFatoorah test card page for this payment.
+    func startTestCardPayment(paymentId: UUID) async throws -> TestCardStart {
+        struct Envelope: Decodable {
+            let status: String
+            let payment_url: String?
+            let reason: String?
+        }
+        let data = try await invoke(
+            "pay-card-test",
+            body: ["payment_id": paymentId.uuidString.lowercased()]
+        )
+        let envelope = try decoder.decode(Envelope.self, from: data)
+        paymentLogger.info("pay-card-test -> \(envelope.status, privacy: .public)")
+        switch envelope.status {
+        case "ready":
+            guard let link = envelope.payment_url, let url = URL(string: link) else {
+                throw ApplePayPaymentServiceError.malformedResponse
+            }
+            return .ready(url)
+        case "paid": return .paid
+        case "processing": return .processing
+        default: return .failed(reason: envelope.reason)
+        }
+    }
+
     private func invoke(_ name: String, body: some Encodable) async throws -> Data {
         do {
             return try await client.functions.invoke(

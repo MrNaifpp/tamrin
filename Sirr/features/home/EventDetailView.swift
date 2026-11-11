@@ -941,7 +941,9 @@ struct EventDetailView: View {
     private func beginPayment() {
         guard !isLoadingQuote, !isConfirmingPayment else { return }
         Haptics.impact(.light)
-        guard CardPayments.isEnabled else {
+        // Test builds go through the review step, which carries both Apple Pay
+        // and the test-only card button.
+        guard CardPayments.isEnabled, !CardPayments.testCardEnabled else {
             showPaymentReview = true
             return
         }
@@ -2554,6 +2556,9 @@ struct RegistrationFlowSheet: View {
     /// what puts the Apple Pay button on screen. The manual transfer flow below
     /// it is untouched.
     @State private var cardQuote: CardPaymentQuote?
+    /// TEST ONLY: MyFatoorah's test card page, and the note shown after it.
+    @State private var testCardPage: IdentifiableURL?
+    @State private var testCardNotice: String?
     /// Whether the member has claimed a seat for themselves. Starts off, so
     /// registering is a deliberate tap on your own card rather than something
     /// that already happened when the sheet opened.
@@ -2764,10 +2769,28 @@ struct RegistrationFlowSheet: View {
             // Apple Pay is only offered when this build talks to a project
             // whose payment functions are live and the device can pay. Asked
             // only in the review step, the only place the button can appear.
-            guard reviewOnly, CardPayments.isEnabled, ApplePayButton.isAvailable else { return }
+            guard reviewOnly, CardPayments.isEnabled,
+                  ApplePayButton.isAvailable || CardPayments.testCardEnabled else { return }
             if case .ready(let quote) = try? await ApplePayPaymentService.shared.startPayment(eventId: occurrence.id) {
                 cardQuote = quote
             }
+        }
+        .sheet(item: $testCardPage, onDismiss: {
+            Task {
+                await feed.reloadRoster(occurrence.id)
+                testCardNotice = String(localized: "إذا أكملت الدفع التجريبي، سيتأكد مقعدك خلال دقائق.")
+            }
+        }) { page in
+            SafariView(url: page.url)
+                .ignoresSafeArea()
+        }
+        .alert("دفع تجريبي", isPresented: Binding(
+            get: { testCardNotice != nil },
+            set: { if !$0 { testCardNotice = nil } }
+        )) {
+            Button("حسنًا", role: .cancel) { testCardNotice = nil }
+        } message: {
+            Text(testCardNotice ?? "")
         }
         .task {
             if reviewOnly, destination == nil {
@@ -3057,6 +3080,30 @@ struct RegistrationFlowSheet: View {
                     ApplePayButton(quote: cardQuote, eventName: occurrence.title) { outcome in
                         handleApplePay(outcome)
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 10)
+                }
+
+                if reviewOnly, let cardQuote, destination.status != .free, CardPayments.testCardEnabled {
+                    // TEST ONLY: MyFatoorah's test card page. Sandbox builds only.
+                    Button {
+                        startTestCardPayment(cardQuote)
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "creditcard")
+                            Text("ادفع بالبطاقة (تجربة)")
+                                .font(TamrinFont.font(size: 15, weight: .bold))
+                            Spacer()
+                            if submitting { ProgressView().controlSize(.small) }
+                        }
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 16)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .background(.white, in: .rect(cornerRadius: 17, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(submitting)
                     .padding(.horizontal, 20)
                     .padding(.bottom, 10)
                 }
@@ -3352,6 +3399,34 @@ struct RegistrationFlowSheet: View {
         if requestSent { return String(localized: "يوصلك تنبيه أول ما يقبله المشرف") }
         if isGuestRequest { return String(localized: "أضيف الضيوف إلى قائمة التمرين") }
         return String(localized: "اسمك مسجل في قائمة التمرين")
+    }
+
+    /// TEST ONLY: asks the server for MyFatoorah's test card page and opens it.
+    /// What happens after the card is paid is the real pipeline: the payment
+    /// sweep (or the webhook) confirms the seat.
+    private func startTestCardPayment(_ quote: CardPaymentQuote) {
+        guard !submitting else { return }
+        submitting = true
+        Task {
+            defer { submitting = false }
+            do {
+                switch try await ApplePayPaymentService.shared.startTestCardPayment(paymentId: quote.paymentId) {
+                case .ready(let url):
+                    testCardPage = IdentifiableURL(url: url)
+                case .paid:
+                    await feed.markCardPaid(for: occurrence)
+                    withAnimation { step = .success }
+                case .processing:
+                    testCardNotice = String(localized: "تأخر التحقق من الدفع. سيتأكد مقعدك تلقائيًا عند وصول التأكيد.")
+                case .failed:
+                    Haptics.error()
+                    failureMessage = String(localized: "لم تنجح عملية الدفع.")
+                }
+            } catch {
+                Haptics.error()
+                failureMessage = ServerErrorMessage.arabic(for: error)
+            }
+        }
     }
 
     /// Apple Pay came back, after the server charged it (or tried to). This
