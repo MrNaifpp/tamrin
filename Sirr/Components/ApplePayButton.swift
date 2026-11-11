@@ -2,22 +2,19 @@
 //  ApplePayButton.swift
 //  Sirr
 //
-//  Apple Pay through Moyasar. PassKit collects the token; the SDK sends it to
-//  Moyasar with the same manual (authorize-only) request the card form uses,
-//  so verify-payment is the gate for both and the device never decides that a
-//  seat is paid.
+//  Apple Pay through our server. PassKit collects the token; the app sends it
+//  to pay-apple-pay, which charges the amount the server quoted through
+//  MyFatoorah. No payment SDK and no payment key in the app: the device never
+//  decides that a seat is paid.
 //
 
-import SwiftUI
-
-#if canImport(MoyasarSdk)
 import PassKit
-import MoyasarSdk
+import SwiftUI
 
 struct ApplePayButton: View {
     private let action: () -> Void
 
-    /// For a caller that already holds a quote, like the card sheet: tapping
+    /// For a caller that already holds a quote, like the review step: tapping
     /// presents Apple Pay straight away.
     init(
         quote: CardPaymentQuote,
@@ -74,19 +71,11 @@ struct ApplePayButton: View {
             return
         }
 
-        let request: PaymentRequest
-        do {
-            request = try quote.paymentRequest()
-        } catch {
-            onResult(.failed(String(localized: "تعذر تجهيز الدفع. حاول مرة أخرى.")))
-            return
-        }
-
         let pk = PKPaymentRequest()
         pk.merchantIdentifier = merchant
         pk.countryCode = "SA"
         pk.currencyCode = quote.currency
-        pk.supportedNetworks = [.visa, .masterCard, .mada]
+        pk.supportedNetworks = [.mada, .visa, .masterCard]
         pk.merchantCapabilities = [.threeDSecure, .credit, .debit]
         // Apple reads the LAST item as the grand total and wants the business
         // receiving the money as its label, so the sheet ends "Pay تمرين". The
@@ -103,7 +92,7 @@ struct ApplePayButton: View {
         ]
 
         let controller = PKPaymentAuthorizationController(paymentRequest: pk)
-        let delegate = Delegate(request: request, onResult: onResult)
+        let delegate = Delegate(paymentId: quote.paymentId, onResult: onResult)
         controller.delegate = delegate
         Delegate.retained = delegate
         controller.present { presented in
@@ -122,12 +111,12 @@ struct ApplePayButton: View {
         /// inside a struct that is gone by the time Apple Pay answers.
         static var retained: Delegate?
 
-        let request: PaymentRequest
+        let paymentId: UUID
         let onResult: (CardPaymentOutcome) -> Void
         private var settled: CardPaymentOutcome?
 
-        init(request: PaymentRequest, onResult: @escaping (CardPaymentOutcome) -> Void) {
-            self.request = request
+        init(paymentId: UUID, onResult: @escaping (CardPaymentOutcome) -> Void) {
+            self.paymentId = paymentId
             self.onResult = onResult
         }
 
@@ -138,18 +127,26 @@ struct ApplePayButton: View {
         ) {
             Task {
                 do {
-                    let service = try ApplePayService(apiKey: request.apiKey)
-                    let api = try await service.authorizePayment(request: request, token: payment.token)
-                    switch api.status {
-                    case .paid, .authorized, .initiated, .captured:
-                        settled = .authorized(moyasarPaymentId: api.id)
+                    let verdict = try await ApplePayPaymentService.shared.pay(
+                        paymentId: paymentId,
+                        token: payment.token
+                    )
+                    switch verdict {
+                    case .paid:
+                        settled = .paid
                         completion(PKPaymentAuthorizationResult(status: .success, errors: nil))
-                    default:
+                    case .processing:
+                        // The charge may well have gone through; the server
+                        // finishes it. Telling Wallet "failed" here would invite
+                        // a second attempt for money already on its way.
+                        settled = .processing
+                        completion(PKPaymentAuthorizationResult(status: .success, errors: nil))
+                    case .failed:
                         settled = .failed(String(localized: "لم تنجح عملية الدفع. حاول مرة أخرى."))
                         completion(PKPaymentAuthorizationResult(status: .failure, errors: nil))
                     }
                 } catch {
-                    settled = .failed(String(localized: "لم تنجح عملية الدفع. حاول مرة أخرى."))
+                    settled = .failed(ServerErrorMessage.arabic(for: error))
                     completion(PKPaymentAuthorizationResult(status: .failure, errors: [error]))
                 }
             }
@@ -167,19 +164,3 @@ struct ApplePayButton: View {
         }
     }
 }
-#else
-/// Stand-in while the Moyasar SDK is out of the project. Without it the app
-/// links no PassKit at all, which App Review requires while Apple Pay is not
-/// offered. Never shown: `isAvailable` is false.
-struct ApplePayButton: View {
-    init(quote: CardPaymentQuote, eventName: String, onResult: @escaping (CardPaymentOutcome) -> Void) {}
-    init(action: @escaping () -> Void) {}
-    static var isAvailable: Bool { false }
-    static func present(
-        quote: CardPaymentQuote,
-        eventName: String,
-        onResult: @escaping (CardPaymentOutcome) -> Void
-    ) {}
-    var body: some View { EmptyView() }
-}
-#endif
