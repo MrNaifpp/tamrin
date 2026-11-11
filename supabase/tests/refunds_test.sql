@@ -542,6 +542,13 @@ begin
   v_count := public.retry_pending_refunds();
   if v_count <> 3 then raise exception 'FAIL 7.5: sweep should pick 3 rows, picked %', v_count; end if;
   raise notice 'PASS 7.5 sweep picks due rows only';
+
+  -- 6. refunds of Moyasar-era payments are never sent to MyFatoorah
+  update public.payments set provider = 'moyasar' where id = '84000000-0000-0000-0000-0000000000f1';
+  v_count := public.retry_pending_refunds();
+  if v_count <> 0 then raise exception 'FAIL 7.6: Moyasar refunds must be skipped, picked %', v_count; end if;
+  update public.payments set provider = 'myfatoorah' where id = '84000000-0000-0000-0000-0000000000f1';
+  raise notice 'PASS 7.6 Moyasar-era refunds are skipped';
 end;
 $$;
 

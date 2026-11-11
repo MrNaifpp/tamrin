@@ -17,7 +17,10 @@ alter table public.payments rename column moyasar_payment_id to provider_payment
 alter table public.payments rename column last_moyasar_status to last_provider_status;
 alter table public.payments drop column if exists split_recipient_id;
 alter table public.payments drop column if exists given_id;
-alter table public.payments add column provider text not null default 'myfatoorah';
+-- Rows from before the switch are Moyasar's (the sandbox has test payments),
+-- so the MyFatoorah sweep and refunds leave them alone; new rows are MyFatoorah's.
+alter table public.payments add column provider text not null default 'moyasar';
+alter table public.payments alter column provider set default 'myfatoorah';
 -- The Apple Pay attempt in flight, as sent to MyFatoorah's ExternalIdentifier.
 -- A late answer about an earlier attempt is recognised by not matching it.
 alter table public.payments add column current_attempt text;

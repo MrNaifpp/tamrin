@@ -191,21 +191,25 @@ begin
   -- 250 minutes, so resending past that could refund twice: stop, fail it, and
   -- let ops check the portal.
   for v_row in
-    select * from public.refunds
-    where status = 'processing' and provider_refund_id is null
-      and created_at < now() - interval '3 hours'
+    select r.* from public.refunds r
+    join public.payments p on p.id = r.payment_id and p.provider = 'myfatoorah'
+    where r.status = 'processing' and r.provider_refund_id is null
+      and r.created_at < now() - interval '3 hours'
   loop
     perform public.settle_refund(v_row.id, 'failed', null,
                                  'No answer from MyFatoorah for 3 hours; check the portal before retrying');
   end loop;
 
   for v_row in
-    select * from public.refunds
-    where (status = 'pending' and attempts < 5
-           and created_at < now() - interval '3 minutes')
-       or (status = 'processing' and updated_at < now() - interval '10 minutes')
-       or (status = 'waiting_balance' and next_attempt_at <= now())
-    order by created_at asc
+    -- Only MyFatoorah's: refunds left open from the Moyasar era are not ours
+    -- to send any more.
+    select r.* from public.refunds r
+    join public.payments p on p.id = r.payment_id and p.provider = 'myfatoorah'
+    where (r.status = 'pending' and r.attempts < 5
+           and r.created_at < now() - interval '3 minutes')
+       or (r.status = 'processing' and r.updated_at < now() - interval '10 minutes')
+       or (r.status = 'waiting_balance' and r.next_attempt_at <= now())
+    order by r.created_at asc
     limit 50
   loop
     perform public.post_refund(v_row.id);

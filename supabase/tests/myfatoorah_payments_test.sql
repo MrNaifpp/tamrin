@@ -299,6 +299,19 @@ begin
 end;
 $$;
 
+-- 15. rows from before the switch are Moyasar's; new ones are MyFatoorah's
+do $$
+declare v text;
+begin
+  select column_default into v from information_schema.columns
+   where table_schema = 'public' and table_name = 'payments' and column_name = 'provider';
+  if v is null or v not like '%myfatoorah%' then
+    raise exception 'FAIL 15: new payments should default to myfatoorah, default is %', v;
+  end if;
+  raise notice 'PASS 15 new payments default to myfatoorah';
+end;
+$$;
+
 -- 9. authenticated cannot write
 set local role authenticated;
 select pg_temp.set_auth('82000000-0000-0000-0000-000000000002');
