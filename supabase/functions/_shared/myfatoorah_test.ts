@@ -119,28 +119,56 @@ Deno.test("getRefund maps Refunded and Canceled", async () => {
   }
 });
 
-Deno.test("lookup by external identifier maps the latest transaction; 404 → null", async () => {
-  const { seen, impl } = fakeFetch(200, {
-    IsSuccess: true,
-    Data: {
-      Invoice: { Id: "7323784", Status: "PAID", ExternalIdentifier: "pay-1" },
-      Transactions: [
-        { Status: "FAILED", PaymentId: "0707-old", PaymentMethod: "Apple Pay", Error: { Message: "x" } },
-        { Status: "SUCCESS", PaymentId: "0707-new", PaymentMethod: "Apple Pay", Error: { Message: "" } },
-      ],
-      Amount: { BaseCurrency: "SAR", ValueInBaseCurrency: "60" },
+function routedFetch(routes: Array<{ match: (url: string, method: string) => boolean; status: number; body: unknown }>) {
+  const seen: Seen[] = [];
+  const impl = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    const method = init?.method ?? "GET";
+    seen.push({ url, method, headers: new Headers(init?.headers), body: init?.body ? JSON.parse(String(init.body)) : undefined });
+    const r = routes.find((x) => x.match(url, method));
+    if (!r) return new Response("no route", { status: 599 });
+    return new Response(typeof r.body === "string" ? r.body : JSON.stringify(r.body), { status: r.status });
+  }) as typeof fetch;
+  return { seen, impl };
+}
+
+// MyFatoorah's v3 lookup puts our reference in the URL path, and their server
+// returns an error page for a ":" in it (seen on the test server 2026-11-12).
+// The status lookup takes it in the body, so any reference works.
+Deno.test("lookup by our reference finds the successful payment, then reads it with v3", async () => {
+  const ref = "a72ce64e-af3c-44e9-93fe-3902b2439f4c:card032454a5";
+  const { seen, impl } = routedFetch([
+    {
+      match: (u, m) => u.endsWith("/v2/GetPaymentStatus") && m === "POST", status: 200,
+      body: { IsSuccess: true, Data: { InvoiceId: 7367020, InvoiceStatus: "Paid", CustomerReference: ref,
+        InvoiceTransactions: [
+          { TransactionStatus: "Failed", PaymentId: "0707-old" },
+          { TransactionStatus: "Succss", PaymentId: "07077367020394975874" },
+        ] } },
     },
-  });
-  const p = await makeMyFatoorahClient("k", base, impl).findPaymentByExternalIdentifier("pay-1");
-  assertEquals(seen[0].url, `${base}/v3/invoices/externalIdentifier/pay-1`);
-  assertEquals(p?.paymentId, "0707-new");
+    {
+      match: (u, m) => u.endsWith("/v3/payments/07077367020394975874") && m === "GET", status: 200,
+      body: { IsSuccess: true, Data: transaction("PAID", "SUCCESS", {
+        Invoice: { Id: "7367020", Status: "PAID", ExternalIdentifier: ref },
+        Transaction: { Status: "SUCCESS", PaymentId: "07077367020394975874", PaymentMethod: "VISA/MASTER", Error: {} },
+      }) },
+    },
+  ]);
+  const p = await makeMyFatoorahClient("k", base, impl).findPaymentByExternalIdentifier(ref);
+  assertEquals(seen[0].url, `${base}/v2/GetPaymentStatus`);
+  assertEquals(seen[0].body, { Key: ref, KeyType: "CustomerReference" });
+  assertEquals(p?.paymentId, "07077367020394975874");
   assertEquals(p?.outcome, "paid");
+  assertEquals(p?.externalIdentifier, ref);
+});
 
-  const missing = fakeFetch(404, { IsSuccess: false, Message: "Invoice not found" });
-  assertEquals(await makeMyFatoorahClient("k", base, missing.impl).findPaymentByExternalIdentifier("nope"), null);
-
-  const empty = fakeFetch(200, { IsSuccess: true, Data: { Invoice: { Id: "1", Status: "PENDING" }, Transactions: [] } });
-  assertEquals(await makeMyFatoorahClient("k", base, empty.impl).findPaymentByExternalIdentifier("pay-1"), null);
+Deno.test("lookup by our reference: no invoice, or an invoice with no attempt, is null", async () => {
+  const none = routedFetch([{ match: () => true, status: 200,
+    body: { IsSuccess: false, Message: "No invoices match this External Identifier!", Data: null } }]);
+  assertEquals(await makeMyFatoorahClient("k", base, none.impl).findPaymentByExternalIdentifier("x"), null);
+  const empty = routedFetch([{ match: () => true, status: 200,
+    body: { IsSuccess: true, Data: { InvoiceStatus: "Pending", InvoiceTransactions: [] } } }]);
+  assertEquals(await makeMyFatoorahClient("k", base, empty.impl).findPaymentByExternalIdentifier("x"), null);
 });
 
 Deno.test("non-2xx throws MyFatoorahError", async () => {

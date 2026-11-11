@@ -149,6 +149,11 @@ export function makeMyFatoorahClient(
     return parsed?.Data;
   }
 
+  async function getPayment(paymentId: string): Promise<MfPayment> {
+    const d = await call("GET", `/v3/payments/${encodeURIComponent(paymentId)}`);
+    return paymentFrom(d?.Invoice, d?.Transaction, d?.Amount);
+  }
+
   return {
     async payWithApplePay(args: {
       amountHalalas: number;
@@ -176,25 +181,36 @@ export function makeMyFatoorahClient(
       };
     },
 
-    async getPayment(paymentId: string): Promise<MfPayment> {
-      const d = await call("GET", `/v3/payments/${encodeURIComponent(paymentId)}`);
-      return paymentFrom(d?.Invoice, d?.Transaction, d?.Amount);
-    },
+    getPayment,
 
+    /// Finds the payment made for our reference (MyFatoorah's ExternalIdentifier).
+    ///
+    /// Not `GET /v3/invoices/externalIdentifier/{ref}`: that puts the reference
+    /// in the URL path, and MyFatoorah's server answers a ":" there with an error
+    /// page (seen on the test server, 2026-11-12). The status lookup takes the
+    /// reference in the body, which works for any reference; it only tells us
+    /// which payment it was, and the v3 payment read gives the details.
     async findPaymentByExternalIdentifier(externalIdentifier: string): Promise<MfPayment | null> {
       let d: Json;
       try {
-        d = await call("GET", `/v3/invoices/externalIdentifier/${encodeURIComponent(externalIdentifier)}`);
+        d = await call("POST", "/v2/GetPaymentStatus", {
+          Key: externalIdentifier,
+          KeyType: "CustomerReference",
+        });
       } catch (e) {
-        // "No invoice for this identifier" arrives as a clear no; a 5xx does not.
+        // "No invoices match" arrives as a clear no; a 5xx does not.
         if (e instanceof MyFatoorahError && e.definitive) return null;
         throw e;
       }
-      const txs: Json[] = Array.isArray(d?.Transactions) ? d.Transactions : [];
+      const txs: Json[] = Array.isArray(d?.InvoiceTransactions) ? d.InvoiceTransactions : [];
       if (txs.length === 0) return null;
-      // A successful attempt wins over any earlier declines on the same invoice.
-      const tx = txs.find((t) => String(t?.Status).toUpperCase() === "SUCCESS") ?? txs[txs.length - 1];
-      return paymentFrom(d?.Invoice, tx, d?.Amount);
+      // A successful attempt wins over earlier declines on the same invoice.
+      // MyFatoorah spells it "Succss" in this API; match both spellings.
+      const tx = txs.find((t) => /^succ?e?ss$/i.test(String(t?.TransactionStatus ?? "")))
+        ?? txs[txs.length - 1];
+      const paymentId = tx?.PaymentId ? String(tx.PaymentId) : "";
+      if (!paymentId) return null;
+      return await getPayment(paymentId);
     },
 
     async createCardPayment(args: {
