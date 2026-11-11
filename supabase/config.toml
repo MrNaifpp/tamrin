@@ -346,9 +346,10 @@ verify_jwt = true
 [functions.pay-apple-pay]
 verify_jwt = true
 
-[functions.moyasar-webhook]
-# Moyasar cannot present a Supabase JWT. The function checks the shared
-# secret_token itself and re-fetches every payment from Moyasar before acting.
+[functions.myfatoorah-webhook]
+# MyFatoorah cannot present a Supabase JWT. The function checks the
+# MyFatoorah-Signature HMAC itself and re-fetches every payment or refund from
+# MyFatoorah before acting.
 verify_jwt = false
 
 [functions.refund-payment]
