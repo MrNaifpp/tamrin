@@ -1,35 +1,46 @@
-// Sends money back. Called server to server by the refunds trigger, so the gate
-// is a shared secret rather than a user's JWT — the same arrangement send-push
-// uses, for the same reason: Postgres cannot present a Supabase JWT.
+// Sends money back. Called server to server by the refunds trigger and the
+// refund sweep, so the gate is a shared secret rather than a user's JWT — the
+// same arrangement send-push uses: Postgres cannot present a Supabase JWT.
 //
-// The amount is read from the refunds row. The request body carries an id and
-// nothing else that matters, exactly as create-payment carries no price.
+// The amount is read from the refunds row; the request body carries an id and
+// nothing else. What happens next depends on where the row is:
+//   pending / waiting_balance → ask MyFatoorah for a refund
+//   processing with an id     → ask MyFatoorah how that refund is going
+//   processing without one    → an earlier send got no answer; send again
+//                               with the same idempotency key
 import { json } from "../_shared/cors.ts";
-import type { makeMoyasarClient } from "../_shared/moyasar.ts";
+import { type MfPayment, type MfRefund, MyFatoorahError, refundInBaseCurrency } from "../_shared/myfatoorah.ts";
+import { refundStatusFor, type SettleRefundArgs } from "../myfatoorah-webhook/handler.ts";
 
 export type RefundRow = {
   id: string;
-  moyasar_payment_id: string;
+  provider_payment_id: string;
+  provider_refund_id: string | null;
   amount: number;
   status: string;
+  attempts: number;
 };
 
 export type RefundDeps = {
   sharedSecret: string;
   loadRefund(id: string): Promise<RefundRow | null>;
   markProcessing(id: string): Promise<void>;
-  moyasar: ReturnType<typeof makeMoyasarClient>;
-  settle(args: {
-    p_refund_id: string;
-    p_status: string;
-    p_refunded_total: number;
-    p_failure_message: string | null;
-  }): Promise<{ status: string }>;
+  mf: {
+    getPayment(paymentId: string): Promise<MfPayment>;
+    createRefund(args: {
+      paymentId: string;
+      baseAmount: number;
+      externalIdentifier: string;
+      idempotencyKey: string;
+    }): Promise<MfRefund>;
+    getRefund(refundId: string): Promise<MfRefund>;
+  };
+  settle(args: SettleRefundArgs): Promise<{ status: string }>;
 };
 
 export function makeHandler(deps: RefundDeps) {
   return async (req: Request): Promise<Response> => {
-    if (req.headers.get("authorization") !== `Bearer ${deps.sharedSecret}`) {
+    if (!deps.sharedSecret || req.headers.get("authorization") !== `Bearer ${deps.sharedSecret}`) {
       return json({ error: "unauthorized" }, 401);
     }
 
@@ -39,35 +50,55 @@ export function makeHandler(deps: RefundDeps) {
 
     const row = await deps.loadRefund(refundId);
     if (!row) return json({ error: "not found" }, 404);
-
-    // The trigger and the retry sweep can both reach the same row. Whichever
-    // arrives second finds it already moving and leaves it alone.
-    if (row.status !== "pending") return json({ status: "duplicate" });
-
-    await deps.markProcessing(row.id);
+    if (row.status === "done" || row.status === "failed") return json({ status: "duplicate" });
 
     try {
-      await deps.moyasar.refund(row.moyasar_payment_id, row.amount);
-      // Re-read so the cumulative total is Moyasar's figure, not our sum.
-      const payment = await deps.moyasar.fetchPayment(row.moyasar_payment_id);
-      const result = await deps.settle({
-        p_refund_id: row.id,
-        p_status: "refunded",
-        p_refunded_total: payment.refunded ?? row.amount,
-        p_failure_message: null,
+      if (row.status === "processing" && row.provider_refund_id) {
+        const remote = await deps.mf.getRefund(row.provider_refund_id);
+        const status = refundStatusFor(remote.status);
+        const r = await deps.settle({
+          p_refund_id: row.id, p_status: status, p_provider_refund_id: row.provider_refund_id,
+          p_failure_message: status === "failed" ? "Canceled by MyFatoorah" : null,
+        });
+        return json({ status: r.status });
+      }
+
+      await deps.markProcessing(row.id);
+      // Refunds are sent in the account's own currency. Live that is riyals;
+      // on the test server it is KWD, so the original payment sets the rate.
+      const original = await deps.mf.getPayment(row.provider_payment_id);
+      const remote = await deps.mf.createRefund({
+        paymentId: row.provider_payment_id,
+        baseAmount: refundInBaseCurrency(row.amount, original),
+        externalIdentifier: row.id,
+        // attempts only moves when a balance refusal schedules a retry, so a
+        // resend after no answer reuses the key and cannot refund twice.
+        idempotencyKey: `refund:${row.id}:${row.attempts}`,
       });
-      return json({ status: result.status });
+      const status = refundStatusFor(remote.status);
+      const r = await deps.settle({
+        p_refund_id: row.id, p_status: status, p_provider_refund_id: remote.refundId || null,
+        p_failure_message: status === "failed" ? "Canceled by MyFatoorah" : null,
+      });
+      return json({ status: r.status });
     } catch (error) {
-      // A refusal is an outcome, not a crash. Record it and acknowledge, so the
-      // retry sweep does not hammer a refund Moyasar will never accept.
-      console.error("refund-payment failed:", error);
-      await deps.settle({
-        p_refund_id: row.id,
-        p_status: "failed",
-        p_refunded_total: 0,
-        p_failure_message: String(error).slice(0, 500),
-      });
-      return json({ status: "failed" });
+      if (error instanceof MyFatoorahError && error.definitive) {
+        // MyFatoorah answered no. Not enough balance yet is a "try tomorrow";
+        // anything else is final and alerts ops through settle_refund.
+        console.error("refund-payment refused:", error.status, error.body.slice(0, 300));
+        const r = await deps.settle({
+          p_refund_id: row.id,
+          p_status: error.isBalanceRefusal ? "waiting_balance" : "failed",
+          p_provider_refund_id: null,
+          p_failure_message: error.body.slice(0, 500),
+        });
+        return json({ status: r.status });
+      }
+      // No clear answer (network, 5xx, gateway page). The refund may exist, so
+      // the row stays where it is; the sweep resends with the same key while
+      // MyFatoorah still remembers it, and gives up after three hours.
+      console.error("refund-payment got no answer:", error);
+      return json({ status: "retry" });
     }
   };
 }

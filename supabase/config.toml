@@ -343,12 +343,26 @@ verify_jwt = false
 [functions.create-payment]
 verify_jwt = true
 
-[functions.verify-payment]
+[functions.pay-apple-pay]
 verify_jwt = true
 
-[functions.moyasar-webhook]
-# Moyasar cannot present a Supabase JWT. The function checks the shared
-# secret_token itself and re-fetches every payment from Moyasar before acting.
+[functions.check-payment]
+verify_jwt = true
+
+[functions.pay-card-test]
+# TEST ONLY: refuses unless ALLOW_TEST_CARD_PAYMENTS=true and the MyFatoorah
+# base URL is the test server. Never deploy the switch to production.
+verify_jwt = true
+
+[functions.myfatoorah-webhook]
+# MyFatoorah cannot present a Supabase JWT. The function checks the
+# MyFatoorah-Signature HMAC itself and re-fetches every payment or refund from
+# MyFatoorah before acting.
+verify_jwt = false
+
+[functions.payment-sweep]
+# Called by pg_cron through pg_net, which cannot present a Supabase JWT. The
+# function's own shared-secret check (PAYMENT_SWEEP_SECRET) is the gate.
 verify_jwt = false
 
 [functions.refund-payment]

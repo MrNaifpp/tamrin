@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { makeMoyasarClient } from "../_shared/moyasar.ts";
+import { makeMyFatoorahClient } from "../_shared/myfatoorah.ts";
 import { makeHandler, type RefundRow } from "./handler.ts";
 
 const admin = createClient(
@@ -8,11 +8,15 @@ const admin = createClient(
 );
 
 Deno.serve(makeHandler({
-  sharedSecret: Deno.env.get("REFUND_PAYMENT_SECRET")!,
-  moyasar: makeMoyasarClient(Deno.env.get("MOYASAR_SECRET_KEY")!),
+  sharedSecret: Deno.env.get("REFUND_PAYMENT_SECRET") ?? "",
+  mf: makeMyFatoorahClient(
+    Deno.env.get("MYFATOORAH_API_KEY") ?? "",
+    Deno.env.get("MYFATOORAH_BASE_URL") ?? "https://api-sa.myfatoorah.com",
+  ),
   async loadRefund(id) {
     const { data } = await admin.from("refunds")
-      .select("id, moyasar_payment_id, amount, status").eq("id", id).maybeSingle();
+      .select("id, provider_payment_id, provider_refund_id, amount, status, attempts")
+      .eq("id", id).maybeSingle();
     return (data as RefundRow | null) ?? null;
   },
   async markProcessing(id) {

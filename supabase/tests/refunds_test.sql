@@ -39,7 +39,7 @@ values ('81000000-0000-0000-0000-0000000000e1',
 -- A paid card payment covering two seats at 120 SAR each.
 insert into public.payments
   (id, workspace_id, event_id, user_id, seat_count, amount, status,
-   payment_method, moyasar_payment_id, paid_at)
+   payment_method, provider_payment_id, paid_at)
 values ('81000000-0000-0000-0000-0000000000f1',
         '81000000-0000-0000-0000-0000000000a1',
         '81000000-0000-0000-0000-0000000000e1',
@@ -69,7 +69,7 @@ begin
   -- 1. A refund row cannot claim more than the payment took.
   begin
     insert into public.refunds
-      (payment_id, event_id, user_id, seats, amount, reason, moyasar_payment_id)
+      (payment_id, event_id, user_id, seats, amount, reason, provider_payment_id)
     values ('81000000-0000-0000-0000-0000000000f1',
             '81000000-0000-0000-0000-0000000000e1',
             '81000000-0000-0000-0000-000000000002', 3, 99999, 'withdrew',
@@ -80,14 +80,14 @@ begin
 
   -- 2. Half the payment goes back: one seat, 120 SAR.
   insert into public.refunds
-    (payment_id, event_id, user_id, seats, amount, reason, moyasar_payment_id)
+    (payment_id, event_id, user_id, seats, amount, reason, provider_payment_id)
   values ('81000000-0000-0000-0000-0000000000f1',
           '81000000-0000-0000-0000-0000000000e1',
           '81000000-0000-0000-0000-000000000002', 1, 12000, 'guest_removed',
           'pay_moy_refund_1')
   returning id into v_refund_a;
 
-  v := public.settle_refund(v_refund_a, 'refunded', 12000, null);
+  v := public.settle_refund(v_refund_a, 'refunded', null, null);
   if v ->> 'status' <> 'settled' then
     raise exception 'FAIL: expected settled, got %', v;
   end if;
@@ -103,7 +103,7 @@ begin
   end if;
 
   -- 3. Settling the same refund twice moves nothing.
-  v := public.settle_refund(v_refund_a, 'refunded', 12000, null);
+  v := public.settle_refund(v_refund_a, 'refunded', null, null);
   if v ->> 'status' <> 'already_settled' then
     raise exception 'FAIL: replay should say already_settled, got %', v;
   end if;
@@ -115,14 +115,14 @@ begin
 
   -- 4. The rest goes back: the payment is now refunded in full.
   insert into public.refunds
-    (payment_id, event_id, user_id, seats, amount, reason, moyasar_payment_id)
+    (payment_id, event_id, user_id, seats, amount, reason, provider_payment_id)
   values ('81000000-0000-0000-0000-0000000000f1',
           '81000000-0000-0000-0000-0000000000e1',
           '81000000-0000-0000-0000-000000000002', 1, 12000, 'withdrew',
           'pay_moy_refund_1')
   returning id into v_refund_b;
 
-  v := public.settle_refund(v_refund_b, 'refunded', 24000, null);
+  v := public.settle_refund(v_refund_b, 'refunded', null, null);
   select refunded_amount, refunded_seats, status
     into v_amount, v_seats, v_status
   from public.payments where id = '81000000-0000-0000-0000-0000000000f1';
@@ -148,13 +148,13 @@ begin
 
   -- 7. A failed refund records the reason and moves no money.
   insert into public.refunds
-    (payment_id, event_id, user_id, seats, amount, reason, moyasar_payment_id)
+    (payment_id, event_id, user_id, seats, amount, reason, provider_payment_id)
   values ('81000000-0000-0000-0000-0000000000f1',
           '81000000-0000-0000-0000-0000000000e1',
           '81000000-0000-0000-0000-000000000002', 1, 12000, 'withdrew',
           'pay_moy_refund_1')
   returning id into v_refund_b;
-  v := public.settle_refund(v_refund_b, 'failed', 24000, 'already fully refunded');
+  v := public.settle_refund(v_refund_b, 'failed', null, 'already fully refunded');
   if v ->> 'status' <> 'failed' then
     raise exception 'FAIL: expected failed, got %', v;
   end if;
@@ -185,7 +185,7 @@ begin
   -- 9. Nobody may write one.
   begin
     insert into public.refunds
-      (payment_id, event_id, user_id, seats, amount, reason, moyasar_payment_id)
+      (payment_id, event_id, user_id, seats, amount, reason, provider_payment_id)
     values ('81000000-0000-0000-0000-0000000000f1',
             '81000000-0000-0000-0000-0000000000e1',
             '81000000-0000-0000-0000-000000000002', 1, 100, 'withdrew', 'x');
@@ -214,7 +214,7 @@ $$;
 -- ============================================================
 insert into public.payments
   (id, workspace_id, event_id, user_id, seat_count, amount, status,
-   payment_method, moyasar_payment_id, paid_at)
+   payment_method, provider_payment_id, paid_at)
 values ('81000000-0000-0000-0000-0000000000f2',
         '81000000-0000-0000-0000-0000000000a1',
         '81000000-0000-0000-0000-0000000000e1',
@@ -249,7 +249,7 @@ begin
   if v_amount <> 12000 then
     raise exception 'FAIL: expected 12000, got %', v_amount;
   end if;
-  v := public.settle_refund(v_id, 'refunded', 12000, null);
+  v := public.settle_refund(v_id, 'refunded', null, null);
 
   -- 3. Asking for more than remains is clamped to what remains.
   v_id := public.request_refund('81000000-0000-0000-0000-0000000000f2',
@@ -258,7 +258,7 @@ begin
   if v_amount <> 12000 then
     raise exception 'FAIL: expected the remaining 12000, got %', v_amount;
   end if;
-  v := public.settle_refund(v_id, 'refunded', 24000, null);
+  v := public.settle_refund(v_id, 'refunded', null, null);
 
   -- 4. Nothing remains, so nothing is written.
   v_id := public.request_refund('81000000-0000-0000-0000-0000000000f2',
@@ -268,64 +268,6 @@ begin
   end if;
 
   raise notice 'PASS: request_refund guards';
-end;
-$$;
-
--- ============================================================
--- Section 4: a webhook saying "refunded" no longer means "all of it".
--- ============================================================
-insert into public.payments
-  (id, workspace_id, event_id, user_id, seat_count, amount, status,
-   payment_method, moyasar_payment_id, paid_at)
-values ('81000000-0000-0000-0000-0000000000f4',
-        '81000000-0000-0000-0000-0000000000a1',
-        '81000000-0000-0000-0000-0000000000e1',
-        '81000000-0000-0000-0000-000000000002', 2, 24000, 'paid',
-        'creditcard', 'pay_moy_refund_4', now());
-
-insert into public.event_participants (event_id, user_id, added_by, guest_name,
-                                       payment_status, payment_id)
-values ('81000000-0000-0000-0000-0000000000e1', null,
-        '81000000-0000-0000-0000-000000000002', 'ضيف رابع',
-        'confirmed', '81000000-0000-0000-0000-0000000000f4');
-
-do $$
-declare
-  v json;
-  v_amount int;
-  v_status text;
-  v_count int;
-begin
-  -- A refund of half, issued from the Moyasar dashboard, arrives as a webhook.
-  v := public.settle_payment('81000000-0000-0000-0000-0000000000f4',
-                             'pay_moy_refund_4', 'refunded', 'creditcard',
-                             24000, 'SAR', 12000);
-  select refunded_amount, status into v_amount, v_status
-  from public.payments where id = '81000000-0000-0000-0000-0000000000f4';
-  if v_amount <> 12000 then
-    raise exception 'FAIL: expected 12000 absorbed, got %', v_amount;
-  end if;
-  if v_status <> 'paid' then
-    raise exception 'FAIL: half a refund must not mark it refunded, got %', v_status;
-  end if;
-  select count(*) into v_count from public.event_participants
-  where payment_id = '81000000-0000-0000-0000-0000000000f4'
-    and payment_status = 'confirmed';
-  if v_count <> 1 then
-    raise exception 'FAIL: half a refund released the seat, % left', v_count;
-  end if;
-
-  -- The rest follows.
-  v := public.settle_payment('81000000-0000-0000-0000-0000000000f4',
-                             'pay_moy_refund_4', 'refunded', 'creditcard',
-                             24000, 'SAR', 24000);
-  select status into v_status
-  from public.payments where id = '81000000-0000-0000-0000-0000000000f4';
-  if v_status <> 'refunded' then
-    raise exception 'FAIL: expected refunded, got %', v_status;
-  end if;
-
-  raise notice 'PASS: partial refund reconciliation';
 end;
 $$;
 
@@ -362,7 +304,7 @@ begin
   -- ---------- removing one guest refunds exactly that seat ----------
   insert into public.payments
     (id, workspace_id, event_id, user_id, seat_count, amount, status,
-     payment_method, moyasar_payment_id, paid_at)
+     payment_method, provider_payment_id, paid_at)
   values ('82000000-0000-0000-0000-0000000000f1',
           '81000000-0000-0000-0000-0000000000a1',
           '82000000-0000-0000-0000-0000000000e1',
@@ -420,7 +362,7 @@ begin
   -- ---------- withdrawing after the start refunds nothing ----------
   insert into public.payments
     (id, workspace_id, event_id, user_id, seat_count, amount, status,
-     payment_method, moyasar_payment_id, paid_at)
+     payment_method, provider_payment_id, paid_at)
   values ('82000000-0000-0000-0000-0000000000f2',
           '81000000-0000-0000-0000-0000000000a1',
           '82000000-0000-0000-0000-0000000000e2',
@@ -443,7 +385,7 @@ begin
   -- ---------- cancelling refunds every card payer in full ----------
   insert into public.payments
     (id, workspace_id, event_id, user_id, seat_count, amount, status,
-     payment_method, moyasar_payment_id, paid_at)
+     payment_method, provider_payment_id, paid_at)
   values ('82000000-0000-0000-0000-0000000000f3',
           '81000000-0000-0000-0000-0000000000a1',
           '82000000-0000-0000-0000-0000000000e2',
@@ -487,7 +429,7 @@ begin
   --    A local stack and CI have no secrets, and neither may fail because of it.
   insert into public.payments
     (id, workspace_id, event_id, user_id, seat_count, amount, status,
-     payment_method, moyasar_payment_id, paid_at)
+     payment_method, provider_payment_id, paid_at)
   values ('83000000-0000-0000-0000-0000000000f1',
           '81000000-0000-0000-0000-0000000000a1',
           '81000000-0000-0000-0000-0000000000e1',
@@ -506,6 +448,158 @@ begin
   end if;
 
   raise notice 'PASS: refund outbox wiring';
+end;
+$$;
+
+-- ============================================================
+-- Section 7: MyFatoorah refunds can wait — for the provider, or for balance.
+-- ============================================================
+insert into auth.users (id, email) values
+  ('84000000-0000-0000-0000-0000000000c1', 'ops@test.local');
+
+insert into public.payments
+  (id, workspace_id, event_id, user_id, seat_count, amount, status,
+   payment_method, provider_payment_id, paid_at)
+values ('84000000-0000-0000-0000-0000000000f1',
+        '81000000-0000-0000-0000-0000000000a1',
+        '81000000-0000-0000-0000-0000000000e1',
+        '81000000-0000-0000-0000-000000000002', 2, 12000, 'paid',
+        'applepay', 'mf_pay_7', now());
+
+do $$
+declare
+  v json;
+  v_id uuid;
+  v_id2 uuid;
+  v_status text;
+  v_ref text;
+  v_next timestamptz;
+  v_amount int;
+  v_count int;
+begin
+  delete from public.push_outbox;
+  -- 1. pending keeps processing
+  v_id := public.request_refund('84000000-0000-0000-0000-0000000000f1', 1, 6000, 'withdrew');
+  v := public.settle_refund(v_id, 'pending', 'R1', null);
+  select status, provider_refund_id into v_status, v_ref from public.refunds where id = v_id;
+  select refunded_amount into v_amount from public.payments where id = '84000000-0000-0000-0000-0000000000f1';
+  if v_status <> 'processing' or v_ref <> 'R1' or v_amount <> 0 then
+    raise exception 'FAIL 7.1: expected processing/R1/0, got %/%/%', v_status, v_ref, v_amount;
+  end if;
+  -- …and refunded later still settles it
+  v := public.settle_refund(v_id, 'refunded', 'R1', null);
+  select status into v_status from public.refunds where id = v_id;
+  select refunded_amount into v_amount from public.payments where id = '84000000-0000-0000-0000-0000000000f1';
+  if v_status <> 'done' or v_amount <> 6000 then
+    raise exception 'FAIL 7.1: expected done/6000 after refunded, got %/%', v_status, v_amount;
+  end if;
+  raise notice 'PASS 7.1 pending keeps processing';
+
+  -- 2. waiting_balance schedules next day
+  v_id2 := public.request_refund('84000000-0000-0000-0000-0000000000f1', 1, 6000, 'guest_removed');
+  v := public.settle_refund(v_id2, 'waiting_balance', null, 'Insufficient balance');
+  select status, next_attempt_at into v_status, v_next from public.refunds where id = v_id2;
+  if v_status <> 'waiting_balance'
+     or v_next < now() + interval '23 hours' or v_next > now() + interval '25 hours' then
+    raise exception 'FAIL 7.2: expected waiting_balance tomorrow, got % at %', v_status, v_next;
+  end if;
+  raise notice 'PASS 7.2 waiting_balance schedules next day';
+
+  -- 3. open refunds count toward the cap: 6000 refunded + 6000 waiting = nothing left
+  if public.request_refund('84000000-0000-0000-0000-0000000000f1', 1, 12000, 'withdrew') is not null then
+    raise exception 'FAIL 7.3: a refund was written although the waiting one covers the rest';
+  end if;
+  raise notice 'PASS 7.3 open refunds count toward the cap';
+
+  -- 4. waiting_balance after 7 days fails and pushes ops
+  perform vault.create_secret('84000000-0000-0000-0000-0000000000c1', 'ops_user_id');
+  update public.refunds set created_at = now() - interval '8 days' where id = v_id2;
+  v := public.settle_refund(v_id2, 'waiting_balance', null, 'Insufficient balance');
+  select status into v_status from public.refunds where id = v_id2;
+  select count(*) into v_count from public.push_outbox
+   where type = 'refund_failed' and user_id = '84000000-0000-0000-0000-0000000000c1';
+  if v_status <> 'failed' or v_count <> 1 then
+    raise exception 'FAIL 7.4: expected failed + 1 ops push, got % / %', v_status, v_count;
+  end if;
+  raise notice 'PASS 7.4 waiting_balance after 7 days fails and pushes ops';
+
+  -- 5. sweep picks due rows only
+  delete from public.refunds;
+  update public.payments set refunded_amount = 0, refunded_seats = 0
+   where id = '84000000-0000-0000-0000-0000000000f1';
+  insert into public.refunds (payment_id, event_id, user_id, seats, amount, reason,
+                              provider_payment_id, status, created_at, updated_at, next_attempt_at)
+  select '84000000-0000-0000-0000-0000000000f1', '81000000-0000-0000-0000-0000000000e1',
+         '81000000-0000-0000-0000-000000000002', 1, 100, 'withdrew', 'mf_pay_7',
+         s, c, u, n
+  from (values
+    ('pending',         now() - interval '10 minutes', now() - interval '10 minutes', null::timestamptz), -- due
+    ('processing',      now() - interval '1 hour',     now() - interval '30 minutes', null),             -- due
+    ('waiting_balance', now() - interval '1 day',      now() - interval '1 day',      now() - interval '1 minute'), -- due
+    ('processing',      now(),                         now(),                         null),             -- fresh
+    ('waiting_balance', now(),                         now(),                         now() + interval '1 day') -- not yet
+  ) as t(s, c, u, n);
+  v_count := public.retry_pending_refunds();
+  if v_count <> 3 then raise exception 'FAIL 7.5: sweep should pick 3 rows, picked %', v_count; end if;
+  raise notice 'PASS 7.5 sweep picks due rows only';
+
+  -- 6. refunds of Moyasar-era payments are never sent to MyFatoorah
+  update public.payments set provider = 'moyasar' where id = '84000000-0000-0000-0000-0000000000f1';
+  v_count := public.retry_pending_refunds();
+  if v_count <> 0 then raise exception 'FAIL 7.6: Moyasar refunds must be skipped, picked %', v_count; end if;
+  update public.payments set provider = 'myfatoorah' where id = '84000000-0000-0000-0000-0000000000f1';
+  raise notice 'PASS 7.6 Moyasar-era refunds are skipped';
+end;
+$$;
+
+-- ============================================================
+-- Section 8: duplicate-charge refunds and giving up on silence.
+-- ============================================================
+do $$
+declare
+  v json;
+  v_id uuid;
+  v_amount int;
+  v_status text;
+  v_count int;
+begin
+  delete from public.refunds;
+  delete from public.push_outbox;
+  update public.payments set refunded_amount = 0, refunded_seats = 0, status = 'paid'
+   where id = '84000000-0000-0000-0000-0000000000f1';
+
+  -- 1. a duplicate-charge refund settles without touching the real payment
+  insert into public.refunds (payment_id, event_id, user_id, seats, amount, reason, provider_payment_id)
+  values ('84000000-0000-0000-0000-0000000000f1', '81000000-0000-0000-0000-0000000000e1',
+          '81000000-0000-0000-0000-000000000002', 1, 12000, 'duplicate_charge', 'mf_dup')
+  returning id into v_id;
+  -- …and it does not eat into what the real payment can still refund
+  if public.request_refund('84000000-0000-0000-0000-0000000000f1', 1, 6000, 'withdrew') is null then
+    raise exception 'FAIL 8.1: a duplicate-charge refund must not count against the cap';
+  end if;
+  v := public.settle_refund(v_id, 'refunded', 'RD', null);
+  select refunded_amount, status into v_amount, v_status
+    from public.payments where id = '84000000-0000-0000-0000-0000000000f1';
+  if v_amount <> 0 or v_status <> 'paid' then
+    raise exception 'FAIL 8.1: duplicate refund touched the payment: %/%', v_amount, v_status;
+  end if;
+  raise notice 'PASS 8.1 duplicate-charge refund is kept apart';
+
+  -- 2. no answer for 3 hours: stop resending, fail it, tell ops
+  delete from public.refunds;
+  insert into public.refunds (payment_id, event_id, user_id, seats, amount, reason,
+                              provider_payment_id, status, created_at)
+  values ('84000000-0000-0000-0000-0000000000f1', '81000000-0000-0000-0000-0000000000e1',
+          '81000000-0000-0000-0000-000000000002', 1, 100, 'withdrew', 'mf_pay_7',
+          'processing', now() - interval '4 hours')
+  returning id into v_id;
+  v_count := public.retry_pending_refunds();
+  select status into v_status from public.refunds where id = v_id;
+  select count(*) into v_count from public.push_outbox where type = 'refund_failed';
+  if v_status <> 'failed' or v_count <> 1 then
+    raise exception 'FAIL 8.2: silent refund should fail with one ops push, got % / %', v_status, v_count;
+  end if;
+  raise notice 'PASS 8.2 silent refund gives up after 3 hours';
 end;
 $$;
 

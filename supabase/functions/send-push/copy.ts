@@ -38,6 +38,16 @@ export function copyFor(
         title: "رجعت لك قطتك 💳",
         body: `استرجعنا قطة ${eventName} إلى بطاقتك. تصل خلال أيام قليلة حسب بنكك.`,
       };
+    case "refund_failed":
+      return {
+        title: "استرداد متعثر",
+        body: `تعذّر إرجاع قطة ${eventName} لأحد اللاعبين. راجع لوحة MyFatoorah.`,
+      };
+    case "payment_problem":
+      return {
+        title: "دفعة تحتاج مراجعة",
+        body: `وصل مبلغ لـ ${eventName} يحتاج مراجعة. راجع لوحة MyFatoorah.`,
+      };
     case "registration_reminder":
       return {
         title: "باقي مكانك ⚽",

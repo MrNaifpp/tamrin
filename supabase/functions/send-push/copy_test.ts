@@ -172,6 +172,20 @@ Deno.test("refund_issued copy interpolates the event name", () => {
   });
 });
 
+Deno.test("refund_failed copy tells ops which workout to look at", () => {
+  assertEquals(copyFor("refund_failed", "تمرين كرة قدم"), {
+    title: "استرداد متعثر",
+    body: "تعذّر إرجاع قطة تمرين كرة قدم لأحد اللاعبين. راجع لوحة MyFatoorah.",
+  });
+});
+
+Deno.test("payment_problem copy tells ops which workout to check", () => {
+  assertEquals(copyFor("payment_problem", "تمرين كرة قدم"), {
+    title: "دفعة تحتاج مراجعة",
+    body: "وصل مبلغ لـ تمرين كرة قدم يحتاج مراجعة. راجع لوحة MyFatoorah.",
+  });
+});
+
 Deno.test("member_registered alone names the player", () => {
   assertEquals(
     copyFor("member_registered", "تمرين الخميس", { actorName: "فهد", guestCount: 0 }),
