@@ -4,6 +4,9 @@
 // Naif and Faris sign with different teams and bundle ids. The `?` makes the
 // include non-fatal, so a fresh clone still builds — it just will not sign
 // until the developer creates their own copy from Local.xcconfig.example.
+// Paid-team defaults; a developer may opt Debug into Personal Team signing locally.
+TAMRIN_DEBUG_ENTITLEMENTS = Sirr/Sirr.entitlements
+TAMRIN_DEBUG_SWIFT_FLAGS =
 #include? "Local.xcconfig"
 
 // Version lives here, not in the target, so a bump is tracked in git. It used

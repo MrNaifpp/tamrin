@@ -79,6 +79,14 @@ enum ServerErrorMessage {
         "A guest must be added by a workspace member": String(localized: "الضيف لازم يضيفه عضو في التمرين."),
         "Guest registration mode is required": String(localized: "اختر طريقة تسجيل الضيوف."),
         "registration_not_open": String(localized: "التسجيل في هذا الموعد لم يفتح بعد."),
+        "Only players in this exercise can join the lineup talk":
+            String(localized: "الخواطر للاعبين المسجلين في التمرين."),
+        "The lineup talk has closed": String(localized: "انتهت خواطر هذا التمرين."),
+        "A thought is at most 60 characters": String(localized: "الخاطرة 60 حرفًا بالكثير."),
+        "A reply is at most 60 characters": String(localized: "الرد 60 حرفًا بالكثير."),
+        "A reply cannot be empty": String(localized: "اكتب ردك أول."),
+        "That thought is no longer there": String(localized: "هذي الخاطرة انحذفت."),
+        "That reply is no longer there": String(localized: "هذا الرد انحذف."),
         "guests_not_allowed": String(localized: "تسجيل الضيوف موقف في هذا التمرين."),
         "approval_required": String(localized: "التسجيل في هذا التمرين بموافقة المشرف."),
 

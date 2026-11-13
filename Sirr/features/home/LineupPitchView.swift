@@ -32,6 +32,8 @@ enum LineupSportStyle: Equatable {
     }
 
     var usesFootballFeatures: Bool { self == .football }
+    /// Peer ratings exist for every sport that has positions to weigh them by.
+    var usesRatings: Bool { self != .generic }
 }
 
 // MARK: - Pitch
@@ -115,6 +117,10 @@ struct LineupPitchView: View {
     /// scrolling. Without it the scroll view claims the vertical part of the
     /// drag and cancels the pickup gesture.
     var onDraggingChanged: ((Bool) -> Void)?
+    /// «خواطر التشكيلة», keyed by the player's seat. Drawn as a note over his
+    /// name; tappable only where `onThoughtTap` is given.
+    var thoughts: [UUID: LineupThought] = [:]
+    var onThoughtTap: ((LineupThought) -> Void)?
 
     /// The stable pitch owns pickup while its player slots rearrange beneath
     /// the finger. Touches outside a player are left to the enclosing scroll view.
@@ -388,6 +394,7 @@ struct LineupPitchView: View {
             .frame(maxWidth: .infinity, minHeight: compact ? 40 : 44)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(player.name)
+            .lineupThought(thoughts[player.id], compact: compact, onTap: onThoughtTap)
 
         if let onSelect {
             let tappable = node
@@ -572,6 +579,7 @@ struct LineupPitchView: View {
             .frame(maxWidth: .infinity, minHeight: compact ? 40 : 44)
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(player.name)، \(player.row.title)")
+            .lineupThought(thoughts[player.id], compact: compact, onTap: onThoughtTap)
 
         if let onSelect {
             let tappable = node
@@ -866,6 +874,8 @@ struct LineupTeamCard: View {
     /// Hidden on the exercise page: the level is the organizer's working
     /// number while he splits, not something the roster needs to read.
     var showsLevel: Bool = true
+    var thoughts: [UUID: LineupThought] = [:]
+    var onThoughtTap: ((LineupThought) -> Void)?
 
     private var stats: LineupStats { LineupStats(players: players) }
     private var displayedStrength: Int {
@@ -908,7 +918,9 @@ struct LineupTeamCard: View {
                         onSelect: onSelect,
                         onMove: onMove,
                         onReorder: onReorder,
-                        onDraggingChanged: onDraggingChanged
+                        onDraggingChanged: onDraggingChanged,
+                        thoughts: thoughts,
+                        onThoughtTap: onThoughtTap
                     )
                 }
             }

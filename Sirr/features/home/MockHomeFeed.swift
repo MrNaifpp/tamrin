@@ -392,10 +392,14 @@ final class HomeStore {
     /// history out of `occurrencesByTeam` prevents Home bootstrap from doing
     /// roster work for every exercise a workspace has ever held.
     var pastOccurrencesByTeam: [UUID: [FeedOccurrence]] = [:]
+    @ObservationIgnored var scheduleArtworkDecks: [UUID: ScheduleArtworkDeck] = [:]
     var plansByTeam: [UUID: [FeedPlan]] = [:]
     var membersByTeam: [UUID: [FeedTeamMember]] = [:]
     var profileName: String = ""
     var playerPosition: String = ""
+    /// Sports I added on my profile and my position in each. Football's
+    /// position also lives in `playerPosition`; see `HomeStore+Sports`.
+    var mySports: [MySport] = []
     var avatarData: Data? = nil
     var stcPayNumber: String? = nil
     var paymentMethodsByTeam: [UUID: [PaymentMethodRecord]] = [:]
@@ -432,8 +436,13 @@ final class HomeStore {
     private(set) var avatarUrl: String?
     /// Mapped roster + my status per event id (source for the detail page).
     private var rosterCache: [UUID: [FeedMember]] = [:]
+    /// «خواطر التشكيلة» per exercise, as the server last answered it.
+    var lineupTalkByEvent: [UUID: LineupTalk] = [:]
+    /// Reactions on each seat, per exercise.
+    var registrationReactionsByEvent: [UUID: [UUID: SeatReactions]] = [:]
     #if DEBUG
     private var debugRatingChanges: [UUID: PlayerRatingChange] = [:]
+    private var debugLocalTeamIDs: Set<UUID> = []
     #endif
     private var myEventStatus: [UUID: FeedRegStatus] = [:]
     /// My own request on a manually approved exercise. Kept apart from
@@ -470,7 +479,8 @@ final class HomeStore {
     /// backend guards easy to audit at each mutation boundary.
     private func isDebugMemberFixtureTeam(_ teamID: UUID) -> Bool {
         #if DEBUG
-        return teamID == HomeDebugMemberFixture.teamID
+        return debugLocalTeamIDs.contains(teamID) || CommunityScheduleFixture.teamIDs.contains(teamID)
+            || teamID == HomeDebugMemberFixture.teamID
             || teamID == HomeDebugMemberFixture.paidMemberTeamID
             || teamID == HomeDebugMemberFixture.ownerTeamID
             || teamID == HomeDebugMemberFixture.volleyTeamID
@@ -483,9 +493,15 @@ final class HomeStore {
         #endif
     }
 
+    /// Lineup talk on a preview or fixture exercise never reaches the server.
+    func usesLocalLineupTalk(for eventID: UUID) -> Bool {
+        isPreview || isDebugMemberFixtureEvent(eventID)
+    }
+
     private func isDebugMemberFixtureEvent(_ eventID: UUID) -> Bool {
         #if DEBUG
         return occurrencesByTeam.contains { isDebugMemberFixtureTeam($0.key) && $0.value.contains { $0.id == eventID } }
+            || eventID == HomeDebugMemberFixture.matchAwardEventID
             || eventID == HomeDebugMemberFixture.paymentReviewPastEventID
             || eventID == HomeDebugMemberFixture.eventID
             || eventID == HomeDebugMemberFixture.paidMemberEventID
@@ -944,6 +960,20 @@ final class HomeStore {
             rosterCache[mine.id] = HomeDebugMemberFixture.ownerRoster()
         }
 
+        let awardExercise = HomeDebugMemberFixture.matchAwardOccurrence()
+        if !(occurrencesByTeam[ownerTeamID] ?? []).contains(where: { $0.id == awardExercise.id }) {
+            occurrencesByTeam[ownerTeamID, default: []].append(awardExercise)
+            pastOccurrencesByTeam[ownerTeamID, default: []].append(awardExercise)
+            let roster = HomeDebugMemberFixture.matchAwardRoster()
+            rosterCache[awardExercise.id] = roster
+            myEventStatus[awardExercise.id] = .registered
+            if LineupStore.cached(eventID: awardExercise.id) == nil {
+                LineupStore.save(LineupPlan(first: Array(roster.prefix(8).map(\.id)),
+                                           second: Array(roster.suffix(8).map(\.id))),
+                                 positions: LineupPositions(), eventID: awardExercise.id)
+            }
+        }
+
         let paymentReview = HomeDebugMemberFixture.paymentReviewPastOccurrence()
         if !(occurrencesByTeam[ownerTeamID] ?? []).contains(where: { $0.id == paymentReview.id }) {
             occurrencesByTeam[ownerTeamID, default: []].append(paymentReview)
@@ -1045,6 +1075,231 @@ final class HomeStore {
             rosterCache[occurrence.id] = roster
         }
     }
+    static func communityFixture() -> HomeStore {
+        let store = HomeStore()
+        store.currentUserID = HomeDebugMemberFixture.memberFallbackID
+        store.profileName = "حساب التجربة"
+        store.playerPosition = "وسط"
+        store.installCommunityScheduleFixture()
+        store.selectedTeamID = CommunityScheduleFixture.id(1)
+        store.hasAuthoritativeUpcomingSnapshot = true
+        return store
+    }
+
+    /// Exercises the real store mutation path with isolated local fixtures.
+    /// Launched explicitly for simulator QA; failures become a machine-readable
+    /// report, not a production assertion or a silent test-only success path.
+    static func checkCommunityScenarios() async throws -> [String] {
+        let store = communityFixture()
+        var passed: [String] = []
+        func check(_ condition: Bool, _ title: String) throws {
+            guard condition else { throw NSError(domain: "CommunityChecks", code: 1,
+                userInfo: [NSLocalizedDescriptionKey: title]) }
+            passed.append(title)
+        }
+        var initialPlan = PlanDraft()
+        initialPlan.name = "مجموعة جديدة للاختبار"
+        initialPlan.scheduleKind = .oneOff
+        initialPlan.locationName = "ملعب أول موعد"
+        var firstDraft = TeamDraft()
+        firstDraft.teamName = initialPlan.name
+        firstDraft.teamSymbol = "figure.pickleball"
+        firstDraft.plans = [initialPlan]
+        guard case .newTeam(let firstTeam) = try await store.createTeam(from: firstDraft) else {
+            throw NSError(domain: "CommunityChecks", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "first creation makes a new group"])
+        }
+        try check(store.occurrencesByTeam[firstTeam.id]?.count == 1, "first creation includes its first date")
+        try check(store.members(for: firstTeam.id).count == 1, "first creation keeps group membership separate")
+        let teamID = CommunityScheduleFixture.id(1)
+        let idleID = CommunityScheduleFixture.id(2)
+        let memberID = CommunityScheduleFixture.id(3)
+        try check(store.members(for: teamID).count == 300, "300 shared members")
+        let original = store.occurrencesByTeam[teamID]!
+        let first = original[0]
+        let full = original[1]
+        try check(abs(first.startAt.timeIntervalSince(full.startAt)) < 1, "simultaneous sessions")
+        try check(store.registeredCount(for: first) == 6 && store.registeredCount(for: full) == 8, "independent open/full rosters")
+        let originalHomeIDs = store.homeScheduleOccurrences().compactMap { store.teamID(for: $0) }
+        try check(Set(originalHomeIDs).count == originalHomeIDs.count, "Home has one representative per workspace")
+        try check(store.scheduleOccurrences(for: teamID).count == 4, "all four future dates stay inside their workspace")
+        try check(store.preferredScheduleOccurrence(for: teamID)?.id == first.id, "entry prefers the date already registered in")
+        try check(Set(store.scheduleOccurrences(for: teamID).map { store.scheduleArt(for: $0) }).count == 4,
+                  "each visible date has distinct artwork")
+        let selectionStore = communityFixture()
+        let later = original[2]
+        selectionStore.myEventStatus[first.id] = nil
+        selectionStore.myEventStatus[later.id] = .registered
+        try check(selectionStore.preferredScheduleOccurrence(for: teamID)?.id == later.id,
+                  "registered date wins over an earlier available date")
+        selectionStore.myEventStatus[later.id] = .awaitingPayment
+        try check(selectionStore.preferredScheduleOccurrence(for: teamID)?.id == later.id,
+                  "unpaid held seat remains the preferred date")
+        selectionStore.myEventStatus[later.id] = nil
+        selectionStore.memberResponseByEvent[first.id] = .declined
+        try check(selectionStore.preferredScheduleOccurrence(for: teamID)?.id == later.id,
+                  "entry skips declined and full dates for an available seat")
+        selectionStore.occurrencesByTeam[teamID]?[2].registrationLocked = true
+        try check(selectionStore.preferredScheduleOccurrence(for: teamID)?.id == original[3].id,
+                  "entry skips a date with registration locked")
+        selectionStore.occurrencesByTeam[teamID]?[2].registrationLocked = false
+        selectionStore.occurrencesByTeam[teamID]?[2].isCancelled = true
+        try check(selectionStore.preferredScheduleOccurrence(for: teamID)?.id == original[3].id,
+                  "cancelled date never outranks an available date")
+        try check(selectionStore.scheduleOccurrences(for: teamID).contains { $0.id == later.id },
+                  "cancelled upcoming date stays accessible without another Home card")
+        selectionStore.occurrencesByTeam[teamID]?[2].isCancelled = false
+        selectionStore.rosterLoadFailedEventIDs.insert(later.id)
+        try check(selectionStore.preferredScheduleOccurrence(for: teamID)?.id == original[3].id,
+                  "failed roster load is never treated as available")
+        var overdue = original.last!
+        overdue.requiresPaymentAction = true
+        selectionStore.occurrencesByTeam[idleID] = [overdue]
+        selectionStore.occurrencesByTeam[teamID]?.removeAll { $0.id == overdue.id }
+        selectionStore.pastOccurrencesByTeam[teamID]?.removeAll { $0.id == overdue.id }
+        selectionStore.pastOccurrencesByTeam[idleID] = [overdue]
+        try check(selectionStore.scheduleOccurrences(for: idleID).map(\.id) == [overdue.id],
+                  "overdue contribution stays reachable inside its workspace")
+        try check(selectionStore.homeScheduleOccurrences().filter { selectionStore.teamID(for: $0) == idleID }.count == 1,
+                  "overdue date does not duplicate an empty workspace card")
+
+        try check(store.teamsWithoutUpcomingOccurrences().map(\.id).contains(idleID), "expired-only workspace remains reachable")
+        try check(!store.isOwner(ofTeamID: memberID), "member empty state has no owner permission")
+        var draft = store.newSessionDraft(for: teamID)
+        draft.locationName = "ملعب اختبار الإضافة"
+        draft.capacity = 8
+        let originalArtwork = store.scheduleArt(for: first)
+        let savedMethods = draft.paymentMethods
+        try check(!savedMethods.isEmpty, "saved payment methods preselected")
+        // Deliberately focus another group before saving: explicit context wins.
+        store.focusTeam(id: memberID)
+        let created = try await store.addSession(draft, in: teamID)!
+        try check(store.teamID(for: created) == teamID, "creation uses captured workspace")
+        try check(store.scheduleArt(for: first) == originalArtwork, "adding an earlier date preserves existing artwork")
+        try check(store.homeScheduleOccurrences().compactMap { store.teamID(for: $0) }.filter { $0 == teamID }.count == 1,
+                  "adding a date does not duplicate Home")
+        try check(store.scheduleOccurrences(for: teamID).contains { $0.id == created.id },
+                  "newly created date is selectable in the same workspace")
+
+        try check(store.registeredCount(for: first) == 6 && store.registeredCount(for: full) == 8, "creating another date preserves existing rosters")
+        try check(store.members(for: teamID).count == 300 && store.registeredCount(for: created) == 1, "members are retained without auto-enrollment")
+        var emptyDraft = store.newSessionDraft(for: idleID)
+        emptyDraft.locationName = "ملعب العودة"
+        _ = try await store.addSession(emptyDraft, in: idleID)
+        try check(!store.teamsWithoutUpcomingOccurrences().map(\.id).contains(idleID), "new date replaces idle card")
+        var forbidden = store.newSessionDraft(for: memberID)
+        forbidden.locationName = "ملعب"
+        do {
+            _ = try await store.addSession(forbidden, in: memberID)
+            try check(false, "member creation must fail")
+        } catch { try check((store.occurrencesByTeam[memberID] ?? []).allSatisfy { $0.isPast() }, "member cannot add a date") }
+        var past = draft
+        past.oneOffDate = .now.addingTimeInterval(-86400)
+        try check(past.newSessionValidationError() != nil, "past start rejected")
+        let future = Date.now.addingTimeInterval(7 * 86400)
+        try check(store.teamsWithoutUpcomingOccurrences(at: future).contains { $0.id == teamID }, "last expiry exposes idle card")
+        try check(store.preferredScheduleOccurrence(for: teamID, at: future) == nil,
+                  "last expiry leaves the workspace without a dated representative")
+        let football = store.occurrencesByTeam[CommunityScheduleFixture.id(4)]!.first!
+        let player = store.roster(for: football).first { $0.userId == CommunityScheduleFixture.id(1001) }!
+        store.focusTeam(for: football)
+        let baseline = try await store.playerRating(for: player)
+        if case .saved(let revised) = try await store.submitPlayerRating(CommunityScheduleFixture.scores(100), for: player) {
+            try check(revised.change?.delta == (revised.averageOverall! - baseline.averageOverall!), "rating edit changes aggregate indicator")
+            if case .saved(let again) = try await store.submitPlayerRating(CommunityScheduleFixture.scores(100), for: player) {
+                try check(again.change == revised.change, "identical rating preserves change and date")
+            }
+        }
+        return passed
+    }
+
+    private func installCommunityScheduleFixture() {
+        guard let uid = currentUserID else { return }
+        let titles = ["مجتمع البادل", "بادل بلا موعد", "بادل الأصدقاء", "كورة وتقييمات"]
+        for index in 1...4 {
+            let teamID = CommunityScheduleFixture.id(index)
+            let owner = index == 3 ? HomeDebugMemberFixture.organizerID : uid
+            let count = index == 1 ? 300 : index == 4 ? 30 : 60
+            let football = index == 4
+            let team = FeedTeam(id: teamID, name: titles[index - 1],
+                                symbol: football ? "figure.soccer" : "figure.pickleball",
+                                sport: football ? "soccer" : "padel", avatarData: nil,
+                                memberCount: count, inviteCode: "DEMO-\(index)")
+            if !teams.contains(where: { $0.id == teamID }) { teams.append(team) }
+            ownerByTeam[teamID] = owner
+            let members = CommunityScheduleFixture.members(count: count, ownerID: owner,
+                                                           currentUserID: uid, football: football)
+            membersByTeam[teamID] = members
+            guard occurrencesByTeam[teamID] == nil else { continue }
+            if football {
+                for (offset, score) in [(1, 82), (2, 52), (3, 70)] {
+                    HomeDebugMemberFixture.submittedRatings[CommunityScheduleFixture.id(1000 + offset)] = CommunityScheduleFixture.scores(score)
+                }
+                debugRatingChanges[CommunityScheduleFixture.id(1001)] = PlayerRatingChange(
+                    previousOverall: 70, currentOverall: 74, changedAt: .now.addingTimeInterval(-86400))
+                debugRatingChanges[CommunityScheduleFixture.id(1002)] = PlayerRatingChange(
+                    previousOverall: 68, currentOverall: 64, changedAt: .now.addingTimeInterval(-172800))
+            }
+            let cash = PaymentMethodRecord(id: CommunityScheduleFixture.id(100 + index),
+                                           workspaceId: teamID, provider: .cash,
+                                           mobileNumber: nil, iban: nil, accountNumber: nil,
+                                           createdAt: .now, updatedAt: .now)
+            paymentMethodsByTeam[teamID] = [cash]
+            occurrencesByTeam[teamID] = []
+            pastOccurrencesByTeam[teamID] = []
+            let offsets: [Double] = index == 1 ? [3, 3, 6, 24, -30] : index == 4 ? [5] : [-30]
+            for (slot, hours) in offsets.enumerated() {
+                let event = FeedOccurrence(
+                    id: CommunityScheduleFixture.id(200 + index * 10 + slot),
+                    title: team.name, startAt: Date.now.addingTimeInterval(hours * 3600),
+                    endAt: Date.now.addingTimeInterval((hours + 1.5) * 3600),
+                    locationName: football ? "ملعب الرواد" : "نادي البادل · ملعب \(slot + 1)",
+                    capacity: football ? 16 : 8, price: 0, isCancelled: false, artIndex: index,
+                    isRecurring: false, paymentMethodIds: [cash.id], publishedAt: .now)
+                let number = football ? 16 : (slot == 1 ? 8 : slot == 3 ? 3 : 6)
+                let roster = members.dropFirst(slot * 3).prefix(number).map {
+                    FeedMember(id: UUID(), name: $0.displayName, status: .registered,
+                               userId: $0.id, joinedAt: .now, position: $0.position)
+                }
+                occurrencesByTeam[teamID, default: []].append(event)
+                if event.isPast() { pastOccurrencesByTeam[teamID, default: []].append(event) }
+                plansByTeam[teamID, default: []].append(HomeDebugMemberFixture.plan(for: event))
+                rosterCache[event.id] = roster
+                if roster.contains(where: { $0.userId == uid }) { myEventStatus[event.id] = .registered }
+            }
+        }
+    }
+
+    private func addDebugSession(_ plan: PlanDraft, teamID: UUID) throws -> FeedOccurrence? {
+        let calendar = Calendar.current
+        let start = plan.scheduleKind == .oneOff
+            ? combine(day: plan.oneOffDate, time: plan.startTime, cal: calendar)
+            : nextWeekday(plan.weekdays.sorted().first ?? 1, at: plan.startTime, onOrAfter: .now, cal: calendar)
+        var end = combine(day: start, time: plan.endTime, cal: calendar)
+        if end <= start { end = calendar.date(byAdding: .day, value: 1, to: end) ?? start.addingTimeInterval(5400) }
+        let methods = plan.paymentMethods.map { draft in
+            PaymentMethodRecord(id: UUID(), workspaceId: teamID, provider: draft.provider,
+                                mobileNumber: draft.normalizedMobileNumber, iban: draft.normalizedIBAN,
+                                accountNumber: draft.normalizedAccountNumber, createdAt: .now, updatedAt: .now)
+        }
+        paymentMethodsByTeam[teamID, default: []].append(contentsOf: methods)
+        let event = FeedOccurrence(id: UUID(), title: plan.name, startAt: start, endAt: end,
+                                   locationName: plan.locationName, capacity: plan.capacity,
+                                   price: plan.pricePerPerson, isCancelled: false, artIndex: 0,
+                                   latitude: plan.latitude, longitude: plan.longitude,
+                                   isRecurring: plan.scheduleKind == .recurring,
+                                   paymentMethodIds: methods.map(\.id), publishedAt: .now,
+                                   capacityPolicy: plan.capacityPolicy)
+        occurrencesByTeam[teamID, default: []].append(event)
+        plansByTeam[teamID, default: []].append(HomeDebugMemberFixture.plan(for: event))
+        if let uid = currentUserID {
+            rosterCache[event.id] = [FeedMember(id: UUID(), name: profileName,
+                                               status: event.price > 0 ? .awaitingPayment : .registered,
+                                               userId: uid, joinedAt: .now, position: playerPosition)]
+            myEventStatus[event.id] = event.price > 0 ? .awaitingPayment : .registered
+        }
+        return event
+    }
     #endif
 
     // MARK: Bootstrap / loads
@@ -1052,6 +1307,25 @@ final class HomeStore {
         guard !isPreview else { return }
         isLoading = true
         defer { isLoading = false }
+        #if DEBUG
+        if CommunityScheduleFixture.isEnabled {
+            currentUserID = HomeDebugMemberFixture.memberFallbackID
+            profileName = "حساب التجربة"
+            playerPosition = "وسط"
+            if ProcessInfo.processInfo.arguments.contains("-runCommunityChecks") {
+                let report: String
+                do { report = "PASS\n" + (try await Self.checkCommunityScenarios()).joined(separator: "\n") }
+                catch { report = "FAIL: \(error.localizedDescription)" }
+                try? report.write(to: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                    .appendingPathComponent("community-checks.txt"), atomically: true, encoding: .utf8)
+            }
+            installCommunityScheduleFixture()
+            selectedTeamID = CommunityScheduleFixture.id(1)
+            onSelectWorkspace?(selectedTeamID)
+            hasAuthoritativeUpcomingSnapshot = true
+            return
+        }
+        #endif
         await loadProfile()          // also captures currentUserID
         await loadWorkspaces(preferred: initialWorkspaceID)
     }
@@ -1070,6 +1344,7 @@ final class HomeStore {
             stcPayNumber = profile.stcPayNumber
             avatarUrl = profile.avatarUrl
         }
+        if let sports = try? await RatingService.shared.mySports() { mySports = sports }
     }
 
     /// Full refresh — workspace list + the selected team's events / members /
@@ -1108,8 +1383,8 @@ final class HomeStore {
                teams.contains(where: { isDebugMemberFixtureTeam($0.id) }) {
                 // The flag was passed to test the fixture, so open on it rather
                 // than on whichever real workspace happens to sort first.
-                selectedTeamID = HomeDebugMemberFixture.teamID
-                onSelectWorkspace?(HomeDebugMemberFixture.teamID)
+                selectedTeamID = HomeDebugMemberFixture.landingTeamID
+                onSelectWorkspace?(HomeDebugMemberFixture.landingTeamID)
                 hasAuthoritativeUpcomingSnapshot = true
                 return
             }
@@ -1134,8 +1409,8 @@ final class HomeStore {
             installDebugMemberFixtureIfNeeded()
             if HomeDebugMemberFixture.isEnabled,
                teams.contains(where: { $0.id == HomeDebugMemberFixture.teamID }) {
-                selectedTeamID = HomeDebugMemberFixture.teamID
-                onSelectWorkspace?(HomeDebugMemberFixture.teamID)
+                selectedTeamID = HomeDebugMemberFixture.landingTeamID
+                onSelectWorkspace?(HomeDebugMemberFixture.landingTeamID)
             } else if let preferred,
                teams.contains(where: { $0.id == preferred }) {
                 selectedTeamID = preferred
@@ -1745,6 +2020,29 @@ final class HomeStore {
                 userInfo: [NSLocalizedDescriptionKey: String(localized: "الإنشاء غير متاح في وضع المعاينة.")]
             )
         }
+        #if DEBUG
+        if CommunityScheduleFixture.isEnabled, let uid = currentUserID {
+            for plan in draft.plans {
+                if let message = plan.newSessionValidationError() {
+                    throw NSError(domain: "HomeStore.Session", code: 2,
+                                  userInfo: [NSLocalizedDescriptionKey: message])
+                }
+            }
+            let team = FeedTeam(id: UUID(), name: name, symbol: draft.teamSymbol,
+                                sport: Sport.named(draft.teamSymbol)?.key ?? "soccer",
+                                color: draft.teamColor, avatarData: draft.avatarData,
+                                memberCount: 1, inviteCode: "DEMO-LOCAL")
+            debugLocalTeamIDs.insert(team.id)
+            teams.append(team)
+            ownerByTeam[team.id] = uid
+            membersByTeam[team.id] = [FeedTeamMember(id: uid, displayName: profileName,
+                                                    role: .admin, isPending: false)]
+            occurrencesByTeam[team.id] = []
+            for plan in draft.plans { _ = try addDebugSession(plan, teamID: team.id) }
+            focusTeam(id: team.id)
+            return .newTeam(team)
+        }
+        #endif
         let playerIds = pick.map { Array($0.selected) } ?? []
 
         if let pick, case .existing(let workspaceId) = pick.destination(ownedGroups: sources.groups) {
@@ -1792,15 +2090,31 @@ final class HomeStore {
 
     /// Adds session(s) to the current workspace from one composed plan (same
     /// mapping as the wizard), then reloads the feed so they appear on Home.
-    func addSession(_ plan: PlanDraft) async throws {
-        guard !isPreview, !isDebugMemberFixtureTeam(selectedTeamID) else { return }
+    @discardableResult
+    func addSession(_ plan: PlanDraft, in workspaceID: UUID? = nil) async throws -> FeedOccurrence? {
+        let teamID = workspaceID ?? selectedTeamID
+        guard isOwner(ofTeamID: teamID) else {
+            throw NSError(domain: "HomeStore.Session", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: String(localized: "إنشاء المواعيد متاح للمشرف فقط.")])
+        }
+        if let message = plan.newSessionValidationError() {
+            throw NSError(domain: "HomeStore.Session", code: 2,
+                          userInfo: [NSLocalizedDescriptionKey: message])
+        }
+        #if DEBUG
+        if isDebugMemberFixtureTeam(teamID) {
+            return try addDebugSession(plan, teamID: teamID)
+        }
+        #endif
+        guard !isPreview else { return nil }
         do {
-            try await createEvents(from: [plan], startDate: Date(), in: selectedTeamID)
+            let created = try await createEvents(from: [plan], startDate: Date(), in: teamID)
+            await loadTeamData(teamID)
+            return created.first.map(mapOccurrence)
         } catch {
             errorMessage = ServerErrorMessage.arabic(for: error)
             throw error
         }
-        await loadSelectedTeamData()
     }
 
     /// Applies a composed plan back onto an existing event. The server performs
@@ -2536,13 +2850,14 @@ final class HomeStore {
 
         #if DEBUG
         if HomeDebugMemberFixture.isFixturePlayer(userId) {
-            return debugRatingSummary(for: userId, position: member.position)
+            return debugRatingSummary(for: userId, position: member.position, sport: currentRatingSport)
         }
         #endif
 
         return try await RatingService.shared.getPlayerRating(
             workspaceId: selectedTeamID,
-            userId: userId
+            userId: userId,
+            sport: currentRatingSport
         )
     }
 
@@ -2562,13 +2877,15 @@ final class HomeStore {
 
         #if DEBUG
         if HomeDebugMemberFixture.isEnabled {
-            return debugRatingSummary(for: currentUserID, position: playerPosition)
+            return debugRatingSummary(for: currentUserID, position: position(in: currentRatingSport) ?? "",
+                                      sport: currentRatingSport)
         }
         #endif
 
         return try await RatingService.shared.getPlayerRating(
             workspaceId: selectedTeamID,
-            userId: currentUserID
+            userId: currentUserID,
+            sport: currentRatingSport
         )
     }
 
@@ -2580,21 +2897,23 @@ final class HomeStore {
 
         #if DEBUG
         if HomeDebugMemberFixture.isFixturePlayer(userId) {
-            let before = debugRatingSummary(for: userId, position: member.position).averageOverall
+            let sport = currentRatingSport
+            let before = debugRatingSummary(for: userId, position: member.position, sport: sport).averageOverall
             HomeDebugMemberFixture.submittedRatings[userId] = scores
-            let after = debugRatingSummary(for: userId, position: member.position).averageOverall
+            let after = debugRatingSummary(for: userId, position: member.position, sport: sport).averageOverall
             if let before, let after, before != after {
                 debugRatingChanges[userId] = PlayerRatingChange(previousOverall: before,
                                                                currentOverall: after, changedAt: .now)
             }
-            return .saved(debugRatingSummary(for: userId, position: member.position))
+            return .saved(debugRatingSummary(for: userId, position: member.position, sport: sport))
         }
         #endif
 
         return try await RatingService.shared.submitPlayerRating(
             workspaceId: selectedTeamID,
             userId: userId,
-            scores: scores
+            scores: scores,
+            sport: currentRatingSport
         )
     }
 
@@ -2603,9 +2922,10 @@ final class HomeStore {
     /// life of the session, blended with the seeded ratings so the average is
     /// a crowd's. Same shape and same arithmetic as the RPC, so the sheet
     /// cannot tell the two apart.
-    private func debugRatingSummary(for playerID: UUID, position: String) -> PlayerRatingSummary {
-        let resolved = PlayerPosition.resolved(from: position)
-        let seeded = HomeDebugMemberFixture.seededRatings(for: playerID)
+    private func debugRatingSummary(for playerID: UUID, position: String,
+                                    sport: RatingSport = .football) -> PlayerRatingSummary {
+        let resolved = PlayerPosition.resolved(from: position, in: sport)
+        let seeded = HomeDebugMemberFixture.seededRatings(for: playerID, sport: sport)
         let mine = HomeDebugMemberFixture.submittedRatings[playerID]
 
         let all = seeded + (mine.map { [$0] } ?? [])
@@ -2623,7 +2943,7 @@ final class HomeStore {
         }
 
         var averaged = PlayerRatingScores.neutral
-        for attribute in PlayerAttribute.allCases {
+        for attribute in sport.attributes {
             let total = all.reduce(0) { $0 + $1[attribute] }
             averaged[attribute] = roundedMean(total: total, count: all.count)
         }

@@ -8,6 +8,16 @@ export function copyFor(
   details: CopyDetails = {},
 ): { title: string; body: string } | null {
   switch (type) {
+    case "match_award_nominate":
+      return { title: "من كان نجمها؟ 🏆", body: `انتهى ${eventName}. رشّح ثلاثة لاعبين لرجل المباراة وخلّ الفريق يختار.` };
+    case "match_award_vote":
+      return { title: "صوّت لرجل المباراة 🏆", body: `وصلت ترشيحات ${eventName}. اختر نجمك؛ صوتك سرّي والتصويت مفتوح ساعة واحدة.` };
+    case "match_award_result":
+      return { title: "رجل المباراة انكشف 🏆", body: `انتهى تصويت ${eventName}. افتح وشوف مين طلع.` };
+    case "match_award_won":
+      return { title: "أنت رجل المباراة 🏆", body: `اختارك الفريق نجم ${eventName}. افتح وشوف بطاقتك.` };
+    case "match_award_cheered":
+      return { title: "الفريق يهنّيك 👏", body: `وصلتك تهاني على رجل المباراة في ${eventName}.` };
     case "payment_submitted":
       return {
         title: "طلب انضمام جديد 🎉",
@@ -96,7 +106,22 @@ export function copyFor(
     case "lineup_published":
       return {
         title: "نزلت التشكيلة🔥",
-        body: "ادخل التطبيق وشف فريقك ومركزك",
+        body: "ادخل التطبيق وشف فريقك ومركزك، واكتب خاطرتك عن التشكيلة",
+      };
+    case "registration_reacted":
+      return {
+        title: "تفاعلوا مع تسجيلك 👏",
+        body: `وصلك تفاعل على تسجيلك في ${eventName}`,
+      };
+    case "lineup_thought_reacted":
+      return {
+        title: "تفاعلوا مع خاطرتك 🔥",
+        body: `وصلك تفاعل على خاطرتك في تشكيلة ${eventName}`,
+      };
+    case "lineup_thought_replied":
+      return {
+        title: "رد على خاطرتك 💬",
+        body: `وصلك رد على خاطرتك في تشكيلة ${eventName}`,
       };
     case "seat_available":
       return {

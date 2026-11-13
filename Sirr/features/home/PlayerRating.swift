@@ -1,7 +1,57 @@
 import SwiftUI
 
-/// The six things one player judges another on. The order is the order the
-/// rating flow walks them in, and the order they are drawn in.
+/// The sports that have positions and ratings. A workspace has one sport,
+/// stored as the database key (`soccer`, `volleyball`, …); everything else is
+/// rated nowhere.
+enum RatingSport: String, CaseIterable, Identifiable {
+    case football = "soccer"
+    case volleyball
+
+    var id: String { rawValue }
+
+    init?(sport: String?) {
+        guard let sport, let value = RatingSport(rawValue: sport) else { return nil }
+        self = value
+    }
+
+    var title: String {
+        switch self {
+        case .football: String(localized: "كرة القدم")
+        case .volleyball: String(localized: "الكرة الطائرة")
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .football: "figure.soccer"
+        case .volleyball: "figure.volleyball"
+        }
+    }
+
+    /// The six this sport is judged on, in the order the flow walks them.
+    var attributes: [PlayerAttribute] {
+        switch self {
+        case .football: [.pace, .passing, .shooting, .stamina, .defending, .awareness]
+        case .volleyball: [.receiving, .setting, .attacking, .blocking, .serving, .courtAwareness]
+        }
+    }
+
+    var positions: [PlayerPosition] {
+        PlayerPosition.allCases.filter { $0.sport == self }
+    }
+
+    /// Where the profile asks for it.
+    var positionPrompt: String {
+        switch self {
+        case .football: String(localized: "مركزك في الملعب")
+        case .volleyball: String(localized: "مركزك في الطائرة")
+        }
+    }
+}
+
+/// The six things one player judges another on, per sport. The order of each
+/// sport's six is the order the rating flow walks them in, and the order they
+/// are drawn in.
 enum PlayerAttribute: String, CaseIterable, Identifiable {
     case pace
     case passing
@@ -10,7 +60,26 @@ enum PlayerAttribute: String, CaseIterable, Identifiable {
     case defending
     case awareness
 
+    case receiving
+    case setting
+    case attacking
+    case blocking
+    case serving
+    /// Volleyball's awareness. A case of its own rather than a shared one, so
+    /// a volleyball rating can never be read into a football field.
+    case courtAwareness
+
     var id: String { rawValue }
+
+    var sport: RatingSport {
+        switch self {
+        case .pace, .passing, .shooting, .stamina, .defending, .awareness: .football
+        default: .volleyball
+        }
+    }
+
+    /// The key the server uses for this attribute within its sport.
+    var serverKey: String { self == .courtAwareness ? "awareness" : rawValue }
 
     var title: String {
         switch self {
@@ -20,6 +89,12 @@ enum PlayerAttribute: String, CaseIterable, Identifiable {
         case .stamina: return String(localized: "اللياقة")
         case .defending: return String(localized: "الدفاع")
         case .awareness: return String(localized: "الوعي الكروي")
+        case .receiving: return String(localized: "الاستقبال")
+        case .setting: return String(localized: "الإعداد")
+        case .attacking: return String(localized: "الهجوم")
+        case .blocking: return String(localized: "الصد")
+        case .serving: return String(localized: "الإرسال")
+        case .courtAwareness: return String(localized: "الوعي")
         }
     }
 
@@ -32,6 +107,12 @@ enum PlayerAttribute: String, CaseIterable, Identifiable {
         case .stamina: return String(localized: "ليا")
         case .defending: return String(localized: "دفع")
         case .awareness: return String(localized: "وعي")
+        case .receiving: return String(localized: "استق")
+        case .setting: return String(localized: "إعد")
+        case .attacking: return String(localized: "هجم")
+        case .blocking: return String(localized: "صد")
+        case .serving: return String(localized: "إرس")
+        case .courtAwareness: return String(localized: "وعي")
         }
     }
 
@@ -42,7 +123,12 @@ enum PlayerAttribute: String, CaseIterable, Identifiable {
         case .shooting: return "target"
         case .stamina: return "bolt.heart.fill"
         case .defending: return "shield.lefthalf.filled"
-        case .awareness: return "eye.fill"
+        case .awareness, .courtAwareness: return "eye.fill"
+        case .receiving: return "hand.raised.fill"
+        case .setting: return "hands.sparkles.fill"
+        case .attacking: return "bolt.fill"
+        case .blocking: return "hand.raised.square.fill"
+        case .serving: return "figure.volleyball"
         }
     }
 
@@ -56,18 +142,41 @@ enum PlayerAttribute: String, CaseIterable, Identifiable {
         case .stamina: return String(localized: "كم يكمّل التمرين بنفس المستوى؟")
         case .defending: return String(localized: "كم يقطع الكرة ويغلق الفراغات؟")
         case .awareness: return String(localized: "كم يقرأ اللعب ويختار القرار الصح؟")
+        case .receiving: return String(localized: "كم يستقبل الإرسال والضربات ويرفعها نظيفة؟")
+        case .setting: return String(localized: "كم إعداده يوصل للضارب في المكان الصح؟")
+        case .attacking: return String(localized: "كم ضرباته تنهي النقطة؟")
+        case .blocking: return String(localized: "كم يقفل الشبكة ويرد الضربات؟")
+        case .serving: return String(localized: "كم إرساله يدخل ويصعّب الاستقبال؟")
+        case .courtAwareness: return String(localized: "كم يقرأ الملعب ويختار القرار الصح؟")
         }
     }
 }
 
-/// A player's position. These four are the only ones the app offers, so the
-/// fallback below is only ever reached by a profile saved before that was true
-/// — or one that never picked a position at all.
+/// A player's position in one sport. Football's four are the only ones the
+/// app offers there, so the fallback below is only ever reached by a profile
+/// saved before that was true — or one that never picked a position at all.
 enum PlayerPosition: String, CaseIterable {
     case goalkeeper = "حارس"
     case defender = "دفاع"
     case midfielder = "وسط"
     case forward = "هجوم"
+
+    case setter = "معدّ"
+    case receiver = "مستقبل"
+    case leftHitter = "ضارب يسار"
+    case rightHitter = "ضارب يمين"
+    case middleBlocker = "صادّ"
+    case libero = "ليبرو"
+
+    var sport: RatingSport {
+        switch self {
+        case .goalkeeper, .defender, .midfielder, .forward: .football
+        default: .volleyball
+        }
+    }
+
+    /// Football's four, for the pitch and the lineup.
+    static var football: [PlayerPosition] { RatingSport.football.positions }
 
     /// The raw value is what the profile and the server store, in Arabic in
     /// every language. This is what the screen says.
@@ -77,6 +186,12 @@ enum PlayerPosition: String, CaseIterable {
         case .defender: return String(localized: "دفاع")
         case .midfielder: return String(localized: "وسط")
         case .forward: return String(localized: "هجوم")
+        case .setter: return String(localized: "معدّ")
+        case .receiver: return String(localized: "مستقبل")
+        case .leftHitter: return String(localized: "ضارب يسار")
+        case .rightHitter: return String(localized: "ضارب يمين")
+        case .middleBlocker: return String(localized: "صادّ")
+        case .libero: return String(localized: "ليبرو")
         }
     }
 
@@ -94,6 +209,13 @@ enum PlayerPosition: String, CaseIterable {
         exact(from: raw) ?? .defender
     }
 
+    /// The same, inside one sport: a football position never weighs a
+    /// volleyball rating. Volleyball's fallback mirrors `volleyball_rating_overall`.
+    static func resolved(from raw: String?, in sport: RatingSport) -> PlayerPosition {
+        if let exact = exact(from: raw), exact.sport == sport { return exact }
+        return sport == .football ? .defender : .leftHitter
+    }
+
     /// The zone of the pitch this position holds, from own goal (0) to the
     /// opponent's (1). The pitch badge places the pill inside this band.
     var pitchZone: ClosedRange<Double> {
@@ -102,6 +224,7 @@ enum PlayerPosition: String, CaseIterable {
         case .defender: return 0.10...0.40
         case .midfielder: return 0.36...0.64
         case .forward: return 0.62...0.94
+        default: return 0.36...0.64
         }
     }
 
@@ -114,6 +237,11 @@ enum PlayerPosition: String, CaseIterable {
         case .midfielder: return Color(red: 0.95, green: 0.72, blue: 0.20)
         case .defender: return Color(red: 0.87, green: 0.32, blue: 0.27)
         case .goalkeeper: return Color(red: 0.29, green: 0.55, blue: 0.90)
+        case .setter: return Color(red: 0.95, green: 0.72, blue: 0.20)
+        case .receiver: return Color(red: 0.29, green: 0.55, blue: 0.90)
+        case .leftHitter, .rightHitter: return Color(red: 0.42, green: 0.78, blue: 0.35)
+        case .middleBlocker: return Color(red: 0.87, green: 0.32, blue: 0.27)
+        case .libero: return Color(red: 0.62, green: 0.45, blue: 0.88)
         }
     }
 
@@ -139,13 +267,39 @@ enum PlayerPosition: String, CaseIterable {
         case .defender:
             return [.defending: 30, .awareness: 20, .passing: 15,
                     .stamina: 15, .shooting: 10, .pace: 10]
+
+        // Volleyball, in the same shape: the position's skill, awareness, two
+        // supporting skills, then the rest. Mirrors `volleyball_rating_overall`.
+        case .setter:
+            // Weighted like the keeper: the whole game runs through him.
+            return [.setting: 35, .courtAwareness: 25, .serving: 15,
+                    .receiving: 10, .blocking: 10, .attacking: 5]
+        case .receiver:
+            return [.receiving: 30, .courtAwareness: 20, .attacking: 15,
+                    .serving: 15, .blocking: 10, .setting: 10]
+        case .leftHitter:
+            return [.attacking: 30, .courtAwareness: 20, .receiving: 15,
+                    .serving: 15, .blocking: 10, .setting: 10]
+        case .rightHitter:
+            return [.attacking: 30, .courtAwareness: 20, .blocking: 15,
+                    .serving: 15, .receiving: 10, .setting: 10]
+        case .middleBlocker:
+            return [.blocking: 30, .courtAwareness: 20, .attacking: 15,
+                    .serving: 15, .receiving: 10, .setting: 10]
+        case .libero:
+            // The rules keep him from attacking, blocking and serving, so those
+            // are token weights and reception carries the most of anyone.
+            return [.receiving: 40, .courtAwareness: 25, .setting: 20,
+                    .attacking: 5, .blocking: 5, .serving: 5]
         }
     }
 }
 
-/// One rating: the six numbers, and the Overall they blend into.
+/// One rating: the six numbers of its sport, and the Overall they blend into.
+/// Football's six and volleyball's six sit side by side; a rating only ever
+/// fills its own sport's.
 ///
-/// Six stored properties rather than a `[PlayerAttribute: Int]` dictionary.
+/// Stored properties rather than a `[PlayerAttribute: Int]` dictionary.
 /// The dictionary version corrupted its own storage once these were held in
 /// another dictionary — writes silently did nothing and reading `count` later
 /// segfaulted — and nothing here needed a dictionary in the first place: the
@@ -157,6 +311,13 @@ struct PlayerRatingScores: Equatable {
     var stamina: Int = 50
     var defending: Int = 50
     var awareness: Int = 50
+
+    var receiving: Int = 50
+    var setting: Int = 50
+    var attacking: Int = 50
+    var blocking: Int = 50
+    var serving: Int = 50
+    var courtAwareness: Int = 50
 
     /// The midpoint is where an unrated attribute starts, so the rater moves
     /// away from "average" in whichever direction they mean.
@@ -171,6 +332,12 @@ struct PlayerRatingScores: Equatable {
             case .stamina: stamina
             case .defending: defending
             case .awareness: awareness
+            case .receiving: receiving
+            case .setting: setting
+            case .attacking: attacking
+            case .blocking: blocking
+            case .serving: serving
+            case .courtAwareness: courtAwareness
             }
         }
         set {
@@ -182,6 +349,12 @@ struct PlayerRatingScores: Equatable {
             case .stamina: stamina = clamped
             case .defending: defending = clamped
             case .awareness: awareness = clamped
+            case .receiving: receiving = clamped
+            case .setting: setting = clamped
+            case .attacking: attacking = clamped
+            case .blocking: blocking = clamped
+            case .serving: serving = clamped
+            case .courtAwareness: courtAwareness = clamped
             }
         }
     }
@@ -189,7 +362,7 @@ struct PlayerRatingScores: Equatable {
     /// The weighted blend, rounded the same way the server rounds it.
     func overall(for position: PlayerPosition) -> Int {
         let weights = position.weightPercent
-        let weightedHundredths = PlayerAttribute.allCases.reduce(0) { total, attribute in
+        let weightedHundredths = position.sport.attributes.reduce(0) { total, attribute in
             total + self[attribute] * (weights[attribute] ?? 0)
         }
         // Scores are non-negative, so adding half a unit implements the same

@@ -19,6 +19,10 @@ struct ProfileSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var position = ""
+    /// The sport whose positions are showing. Football's choice is `position`;
+    /// the others are drafts saved with the rest of the profile.
+    @State private var sport: RatingSport = .football
+    @State private var sportPositions: [RatingSport: String] = [:]
     @State private var photoItem: PhotosPickerItem?
     @State private var avatarData: Data?
     /// Set by «حذف الصورة». Distinct from `avatarData == nil`, which is also
@@ -26,19 +30,23 @@ struct ProfileSettingsView: View {
     /// stored one should go.
     @State private var avatarRemoved = false
     @State private var showPhotoPicker = false
+    @State private var showsCardCreation = false
+    @State private var cardSummary: PlayerRatingSummary?
     @FocusState private var nameFocused: Bool
 
     /// Stored values, sent to the server as-is. Shown through `positionLabel`.
-    private let positions = ["حارس", "دفاع", "وسط", "هجوم"]
+    private let positions = PlayerPosition.football.map(\.rawValue)
 
     private func positionLabel(_ value: String) -> String {
-        switch value {
-        case "حارس": String(localized: "حارس")
-        case "دفاع": String(localized: "دفاع")
-        case "وسط": String(localized: "وسط")
-        case "هجوم": String(localized: "هجوم")
-        default: value
-        }
+        PlayerPosition(rawValue: value)?.title ?? value
+    }
+
+    /// The selected sport's choice, wherever it is kept.
+    private var selectedPosition: Binding<String> {
+        Binding(
+            get: { sport == .football ? position : (sportPositions[sport] ?? "") },
+            set: { if sport == .football { position = $0 } else { sportPositions[sport] = $0 } }
+        )
     }
 
     private var trimmedName: String {
@@ -50,11 +58,28 @@ struct ProfileSettingsView: View {
             if isPushed {
                 form
             } else {
-                NavigationStack { form }
-                    .fittedSheet(includesNavigationBar: true)
+                NavigationStack {
+                    ScrollView { form }
+                        .scrollBounceBehavior(.basedOnSize)
+                }
+                .presentationDetents([.height(initialSheetHeight)])
+                .presentationBackground(TamrinTheme.sheet)
+                .presentationDragIndicator(.visible)
+                .sheetPresentationHaptic()
             }
         }
         .environment(\.layoutDirection, .tamrin)
+        .fullScreenCover(isPresented: $showsCardCreation) {
+            PlayerCardPage(feed: feed)
+                .verticalBarHost()
+                .presentationBackground {
+                    ZStack {
+                        Rectangle().fill(.ultraThinMaterial)
+                        Color.black.opacity(0.3)
+                    }.environment(\.colorScheme, .dark)
+                }
+        }
+        .task { cardSummary = try? await feed.myPlayerRating() }
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoItem, matching: .images)
         .task(id: photoItem) {
             guard let photoItem, let data = await photoItem.loadAvatarData() else { return }
@@ -74,12 +99,44 @@ struct ProfileSettingsView: View {
             // replaces it with one of the four.
             let saved = feed.playerPosition
             if positions.contains(saved) { position = saved }
+            for other in RatingSport.allCases where other != .football {
+                if let saved = feed.position(in: other) { sportPositions[other] = saved }
+            }
         }
+    }
+
+    // Resolve the initial detent before presentation. Measuring the expanding
+    // NavigationStack after it appears made the sheet open tall, then shrink.
+    private var initialSheetHeight: CGFloat {
+        let window = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first?.keyWindow
+        let width = window?.bounds.width ?? 402
+        let columns = max(1, Int((width - 44 + 8) / (88 + 8)))
+        let rows = CGFloat((positions.count + columns - 1) / columns)
+        let labelHeight = TamrinFont.uiFont(size: 13, weight: .medium).lineHeight
+        let nameHeight = labelHeight + 8 + 56
+        // The sport tags, then the selected sport's positions. Volleyball's six
+        // fill the same two rows as football's four.
+        let positionHeight = 36 + 14 + labelHeight + 10 + rows * 44 + (rows - 1) * 8
+        let settingsHeight = max(28, TamrinFont.uiFont(size: 17, weight: .medium).lineHeight) + 30
+        let createHeight: CGFloat = PlayerCardLibrary.shared.portrait(for: feed.currentUserID) == nil
+            ? TamrinFont.uiFont(size: 14, weight: .medium).lineHeight + 10 : 0
+        let contentHeight = 150 / PlayerCardView.aspectRatio + createHeight
+            + nameHeight + positionHeight + settingsHeight + 60 + 30
+        let navigationHeight = UINavigationBar().sizeThatFits(CGSize(width: width, height: 100)).height
+        return min(contentHeight + navigationHeight, (window?.bounds.height ?? 874) * 0.92)
     }
 
     private var form: some View {
         VStack(spacing: 20) {
-            avatarPicker
+            PlayerCardThumbnail(
+                name: feed.profileName.isEmpty ? String(localized: "لاعب") : feed.profileName,
+                // The card shows the selected group's rating, so it wears that sport's position.
+                position: feed.position(in: feed.currentRatingSport) ?? "",
+                overall: cardSummary?.averageOverall ?? LineupStrength.neutral,
+                scores: cardSummary?.average ?? .neutral,
+                portrait: PlayerCardLibrary.shared.portrait(for: feed.currentUserID),
+                create: { showsCardCreation = true }
+            )
             nameField
             positionPicker
             // Settings live behind the profile photo, one level in: how the app
@@ -95,7 +152,7 @@ struct ProfileSettingsView: View {
         // pushed: the settings sheet reduces these heights with max() and allows
         // expansion, so it grows to fit this form and shrinks back on pop.
         .sheetContentHeight()
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, alignment: .top)
         .navigationTitle("حسابي")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -247,18 +304,24 @@ struct ProfileSettingsView: View {
 
     private var positionPicker: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("مركزك في الملعب")
+            sportTags
+                .padding(.bottom, 4)
+
+            Text(sport.positionPrompt)
                 .font(TamrinFont.font(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 88), spacing: 8)], spacing: 8) {
-                ForEach(positions, id: \.self) { value in
+                ForEach(sport.positions.map(\.rawValue), id: \.self) { value in
+                    let position = selectedPosition.wrappedValue
                     Button {
-                        position = value
+                        selectedPosition.wrappedValue = value
                         Haptics.selection()
                     } label: {
                         Text(positionLabel(value))
                             .font(TamrinFont.font(size: 14, weight: .bold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                             .foregroundStyle(position == value ? .white : .primary)
                             .frame(maxWidth: .infinity)
                             .frame(height: 44)
@@ -276,7 +339,66 @@ struct ProfileSettingsView: View {
 
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .animation(.snappy(duration: 0.22), value: position)
+        .animation(.snappy(duration: 0.22), value: selectedPosition.wrappedValue)
+        .animation(.snappy(duration: 0.22), value: sport)
+    }
+
+    /// One tag per sport I play, then «إضافة رياضة» for the ones I don't yet.
+    private var sportTags: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(feed.profileSports) { item in
+                    sportTag(item)
+                }
+                if !feed.addableSports.isEmpty {
+                    Menu {
+                        ForEach(feed.addableSports) { item in
+                            Button(item.title, systemImage: item.symbol) {
+                                feed.addSport(item)
+                                sport = item
+                                Haptics.selection()
+                            }
+                        }
+                    } label: {
+                        Label("إضافة رياضة", systemImage: "plus")
+                            .font(TamrinFont.font(size: 14, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 14)
+                            .frame(height: 36)
+                            .overlay(Capsule().strokeBorder(.secondary.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+                    }
+                }
+            }
+        }
+        .scrollClipDisabled()
+    }
+
+    private func sportTag(_ item: RatingSport) -> some View {
+        let selected = sport == item
+        return Button {
+            sport = item
+            Haptics.selection()
+        } label: {
+            Label(item.title, systemImage: item.symbol)
+                .font(TamrinFont.font(size: 14, weight: .bold))
+                .foregroundStyle(selected ? .white : .primary)
+                .padding(.horizontal, 14)
+                .frame(height: 36)
+                .background(selected ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(TamrinTheme.secondary),
+                            in: .capsule)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .contextMenu {
+            // A sport I play through a group stays while I am in it.
+            if !feed.playsThroughGroup(item) {
+                Button("إزالة الرياضة", systemImage: "minus.circle", role: .destructive) {
+                    feed.removeSport(item)
+                    sportPositions[item] = nil
+                    if sport == item { sport = .football }
+                }
+            }
+        }
     }
 
     /// `avatarData` alone can't tell "left alone" from "cleared" — it is nil in
@@ -292,6 +414,9 @@ struct ProfileSettingsView: View {
             avatar: avatarEdit,
             playerPosition: position
         )
+        for (other, value) in sportPositions where feed.profileSports.contains(other) && !value.isEmpty {
+            if value != feed.position(in: other) { feed.saveSportPosition(other, position: value) }
+        }
         Haptics.success()
         dismiss()
     }

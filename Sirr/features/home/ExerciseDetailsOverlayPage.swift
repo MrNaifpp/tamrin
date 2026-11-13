@@ -15,6 +15,7 @@ struct ExerciseDetailsOverlayPage: View {
     let onLeave: () -> Void
     let onClose: () -> Void
 
+    @Environment(\.hasVerticalBar) private var hasVerticalBar
     @State private var memberInDetails: FeedTeamMember?
     @State private var showsTemplateEditor = false
 
@@ -49,6 +50,7 @@ struct ExerciseDetailsOverlayPage: View {
     private var usesFootballFeatures: Bool {
         LineupSportStyle(sport: team?.sport).usesFootballFeatures
     }
+    private var usesRatings: Bool { LineupSportStyle(sport: team?.sport).usesRatings }
 
     private var plans: [FeedPlan] {
         feed.plans(for: teamID)
@@ -177,6 +179,15 @@ struct ExerciseDetailsOverlayPage: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             topBar.padding(.top, screenTopInset)
         }
+        // iPhone Duo's cover screen: the bar's buttons would sit under the
+        // camera, so the system places them in its vertical bar instead. The
+        // page that drew this overlay steps its own items aside meanwhile.
+        .toolbar {
+            if hasVerticalBar {
+                ToolbarItem(placement: .cancellationAction) { closeButton }
+                ToolbarItem(placement: .primaryAction) { optionsMenu }
+            }
+        }
         .task {
             await feed.loadGroupDetails(teamID)
             hasLoadedGroupDetails = true
@@ -248,12 +259,13 @@ struct ExerciseDetailsOverlayPage: View {
                 member: player,
                 avatarImageData: member.id == feed.currentUserID ? feed.avatarData : nil,
                 share: 0,
-                loadRating: usesFootballFeatures && player.userId != nil
+                loadRating: usesRatings && player.userId != nil
                     ? { try await feed.playerRating(for: player) }
                     : nil,
-                submitRating: usesFootballFeatures && feed.canRate(player)
+                submitRating: usesRatings && feed.canRate(player)
                     ? { try await feed.submitPlayerRating($0, for: player) }
-                    : nil
+                    : nil,
+                ratingSport: feed.currentRatingSport
             )
         }
         .fullScreenCover(isPresented: $showsTemplateEditor) {
@@ -284,67 +296,20 @@ struct ExerciseDetailsOverlayPage: View {
             // Close sits where the exercise page's back button was (leading)
             // and the options menu where its details button was (trailing),
             // so the page opens with each control in the place it was tapped.
-            HStack {
-                Button {
-                    onClose()
-                } label: {
-                    Label("إغلاق", systemImage: "xmark")
-                        .labelStyle(.iconOnly)
-                        .font(.system(size: 17, weight: .semibold))
-                        .frame(
-                            width: TamrinControlMetrics.glassIconContent,
-                            height: TamrinControlMetrics.glassIconContent
-                        )
-                }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .controlSize(.regular)
-                .accessibilityLabel("إغلاق تفاصيل التمرين")
-                .disabled(isLeaving)
+            if !hasVerticalBar {
+                HStack {
+                    closeButton
+                        .buttonStyle(.glass)
+                        .buttonBorderShape(.circle)
+                        .controlSize(.regular)
 
-                Spacer(minLength: 0)
+                    Spacer(minLength: 0)
 
-                Menu {
-                    if isOwner {
-                        if canEditTemplate {
-                            Button("تعديل التمرين", systemImage: "pencil") {
-                                Haptics.impact(.light)
-                                showsTemplateEditor = true
-                            }
-                        }
-                        if canSkipOccurrence {
-                            Button("تخطي هذا الموعد", systemImage: "forward.end.fill") {
-                                Haptics.impact(.light)
-                                showsSkipSheet = true
-                            }
-                        }
-                        Button("حذف التمرين", systemImage: "trash", role: .destructive) {
-                            showsDeleteConfirm = true
-                        }
-                    } else {
-                        Button("الخروج من التمرين", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
-                            showsLeaveConfirm = true
-                        }
-                    }
-                } label: {
-                    Group {
-                        if isLeaving {
-                            ProgressView().tint(.white)
-                        } else {
-                            Label("خيارات التمرين", systemImage: "ellipsis")
-                                .labelStyle(.iconOnly)
-                                .font(.system(size: 17, weight: .semibold))
-                        }
-                    }
-                    .frame(width: TamrinControlMetrics.glassIconContent,
-                           height: TamrinControlMetrics.glassIconContent)
+                    optionsMenu
+                        .buttonStyle(.glass)
+                        .buttonBorderShape(.circle)
+                        .controlSize(.regular)
                 }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .controlSize(.regular)
-                .accessibilityLabel("خيارات التمرين")
-                .accessibilityHint(isOwner ? String(localized: "تعديل التمرين أو حذفه") : String(localized: "الخروج من التمرين"))
-                .disabled(isLeaving)
             }
         }
         .padding(.horizontal, 20)
@@ -364,6 +329,63 @@ struct ExerciseDetailsOverlayPage: View {
             }
             .ignoresSafeArea(edges: .top)
         }
+    }
+
+    private var closeButton: some View {
+        Button {
+            onClose()
+        } label: {
+            Label("إغلاق", systemImage: "xmark")
+                .labelStyle(.iconOnly)
+                .font(.system(size: 17, weight: .semibold))
+                .frame(
+                    width: TamrinControlMetrics.glassIconContent,
+                    height: TamrinControlMetrics.glassIconContent
+                )
+        }
+        .accessibilityLabel("إغلاق تفاصيل التمرين")
+        .disabled(isLeaving)
+    }
+
+    private var optionsMenu: some View {
+        Menu {
+            if isOwner {
+                if canEditTemplate {
+                    Button("تعديل التمرين", systemImage: "pencil") {
+                        Haptics.impact(.light)
+                        showsTemplateEditor = true
+                    }
+                }
+                if canSkipOccurrence {
+                    Button("تخطي هذا الموعد", systemImage: "forward.end.fill") {
+                        Haptics.impact(.light)
+                        showsSkipSheet = true
+                    }
+                }
+                Button("حذف التمرين", systemImage: "trash", role: .destructive) {
+                    showsDeleteConfirm = true
+                }
+            } else {
+                Button("الخروج من التمرين", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
+                    showsLeaveConfirm = true
+                }
+            }
+        } label: {
+            Group {
+                if isLeaving {
+                    ProgressView().tint(.white)
+                } else {
+                    Label("خيارات التمرين", systemImage: "ellipsis")
+                        .labelStyle(.iconOnly)
+                        .font(.system(size: 17, weight: .semibold))
+                }
+            }
+            .frame(width: TamrinControlMetrics.glassIconContent,
+                   height: TamrinControlMetrics.glassIconContent)
+        }
+        .accessibilityLabel("خيارات التمرين")
+        .accessibilityHint(isOwner ? String(localized: "تعديل التمرين أو حذفه") : String(localized: "الخروج من التمرين"))
+        .disabled(isLeaving)
     }
 
     private var templateSection: some View {

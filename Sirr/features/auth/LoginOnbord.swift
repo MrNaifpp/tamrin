@@ -113,6 +113,7 @@ struct LoginOnbord: View {
                         .padding(.horizontal, 24)
                         .padding(.bottom, 16)
 
+                        #if !TAMRIN_PERSONAL_TEAM
                         Button {
                             Task { await vm.signInWithApple() }
                         } label: {
@@ -141,6 +142,7 @@ struct LoginOnbord: View {
                         .disabled(vm.isLoading)
                         .padding(.horizontal, 24)
                         .padding(.bottom, 24)
+                        #endif
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }

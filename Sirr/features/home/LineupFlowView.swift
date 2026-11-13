@@ -13,6 +13,22 @@
 import SwiftUI
 
 struct LineupFlowView: View {
+    let feed: HomeStore
+    let occurrence: FeedOccurrence
+    var artName: String = "ExerciseArt1"
+    var onFinish: (LineupPlan?) -> Void
+
+    var body: some View {
+        // The stack exists for iPhone Duo's vertical bar, where the page's
+        // close and options buttons live. Everywhere else its bar stays hidden
+        // and the page draws its own. Hosted here rather than at each cover so
+        // every place that opens the editor gets it.
+        LineupFlowPage(feed: feed, occurrence: occurrence, artName: artName, onFinish: onFinish)
+            .verticalBarHost()
+    }
+}
+
+private struct LineupFlowPage: View {
     @Bindable var feed: HomeStore
     let occurrence: FeedOccurrence
     /// The exercise's artwork, blurred behind this page the way it sits behind
@@ -25,6 +41,8 @@ struct LineupFlowView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.hasVerticalBar) private var hasVerticalBar
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     @State private var candidates: [LineupPlayer] = []
     @State private var teams = LineupTeams()
@@ -39,6 +57,12 @@ struct LineupFlowView: View {
     /// People who took a seat after the last split was saved.
     @State private var unplaced: [LineupPlayer] = []
     @State private var showDeleteConfirm = false
+    /// The split as it was last kept, on the server or as a draft. Nil for a
+    /// fresh split nobody has kept yet.
+    @State private var keptSides: [[UUID]]?
+    @State private var confirmsLeaving = false
+    @State private var isSavingDraft = false
+    @State private var draftError: String?
     /// A player is in hand. The page holds still while he is: otherwise the
     /// scroll view takes the vertical half of the drag and cancels it.
     @State private var isDraggingPlayer = false
@@ -82,21 +106,21 @@ struct LineupFlowView: View {
     }
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 14) {
-                lineupContent
+        GeometryReader { proxy in
+            if let fold = proxy.tabletopFold, !isLoading, candidates.count >= 2 {
+                tabletopBoard(fold: fold)
+            } else {
+                standardBoard
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 10)
-            .padding(.bottom, 30)
         }
-        // Held still while a player is in hand. A move along one band is short
-        // and sideways and the scroll view let it pass, but reaching another
-        // band means travelling up or down — the one movement it claims for
-        // itself, cancelling the drag mid-flight and losing the drop.
-        .scrollDisabled(isDraggingPlayer)
-        .safeAreaInset(edge: .top) { topBar }
-        .safeAreaInset(edge: .bottom) { bottomBar }
+        // iPhone Duo's cover screen: the bar's buttons would sit under the
+        // camera, so the system places them in its vertical bar instead.
+        .toolbar {
+            if hasVerticalBar {
+                ToolbarItem(placement: .cancellationAction) { closeButton }
+                ToolbarItem(placement: .primaryAction) { optionsMenu }
+            }
+        }
         // Painted by the page rather than left to `presentationBackground`. A
         // cover with a see-through background gives the zoom transition nothing
         // solid to grow, and UIKit quietly falls back to a slide — so the card
@@ -115,6 +139,17 @@ struct LineupFlowView: View {
         .colorScheme(.dark)
         .task { await load() }
         .confirmationDialog(
+            "تحفظ التشكيلة قبل ما تطلع؟",
+            isPresented: $confirmsLeaving,
+            titleVisibility: .visible
+        ) {
+            Button("حفظ كمسودة") { saveDraft() }
+            Button("تجاهل التغييرات", role: .destructive) { dismiss() }
+            Button("تراجع", role: .cancel) {}
+        } message: {
+            Text("المسودة تبقى عندك وحدك لين تنشرها.")
+        }
+        .confirmationDialog(
             "حذف التشكيلة؟",
             isPresented: $showDeleteConfirm,
             titleVisibility: .visible
@@ -124,6 +159,131 @@ struct LineupFlowView: View {
         } message: {
             Text("سيعود التمرين بلا تشكيلة، ويبقى المسجلون كما هم.")
         }
+    }
+
+    private var standardBoard: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 14) {
+                lineupContent
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 10)
+            .padding(.bottom, 30)
+        }
+        // Held still while a player is in hand. A move along one band is short
+        // and sideways and the scroll view let it pass, but reaching another
+        // band means travelling up or down — the one movement it claims for
+        // itself, cancelling the drag mid-flight and losing the drop.
+        .scrollDisabled(isDraggingPlayer)
+        .safeAreaInset(edge: .top) { topBar }
+        .safeAreaInset(edge: .bottom) { bottomBar }
+    }
+
+    // MARK: - Tactics board
+
+    /// iPhone Duo standing half-open on a table: a tactics board. The pitches
+    /// fill the raised half, where the whole group can read them, and every
+    /// control moves to the half lying on the table, where a tap doesn't rock
+    /// the phone. Nothing is placed across the fold itself.
+    private func tabletopBoard(fold: CGRect) -> some View {
+        VStack(spacing: 0) {
+            ScrollView(showsIndicators: false) {
+                teamsBoard
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+            }
+            .scrollDisabled(isDraggingPlayer)
+            .safeAreaInset(edge: .top) { topBar }
+            .frame(height: max(fold.minY, 0))
+
+            Color.clear.frame(height: fold.height)
+
+            ScrollView(showsIndicators: false) {
+                tabletopDeck
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+    }
+
+    private var tabletopDeck: some View {
+        VStack(spacing: 12) {
+            if usesFootballFeatures {
+                balanceSummary
+            } else {
+                randomSplitSummary
+            }
+
+            if !unplaced.isEmpty {
+                unplacedNotice
+            }
+
+            ForEach(LineupSide.allCases) { side in
+                benchRow(side)
+            }
+
+            ZStack {
+                if reduceMotion {
+                    bottomActionControls
+                        .id(bottomActionKey)
+                        .transition(.opacity)
+                } else {
+                    bottomActionControls
+                        .id(bottomActionKey)
+                        .transition(.blurReplace)
+                }
+            }
+            .animation(reduceMotion ? nil : .smooth(duration: 0.24), value: bottomActionKey)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+    }
+
+    /// A team as a row of chips on the table half. Tapping one arms him the
+    /// same way tapping him on the pitch does, so a trade can be made without
+    /// reaching up to the raised half.
+    private func benchRow(_ side: LineupSide) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(side.title)
+                .font(TamrinFont.font(size: 12, weight: .bold))
+                .foregroundStyle(side.tint)
+                .padding(.horizontal, 4)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(teams[side]) { player in
+                        benchChip(player, side: side)
+                    }
+                }
+                .padding(.horizontal, 2)
+            }
+            .scrollClipDisabled()
+        }
+    }
+
+    private func benchChip(_ player: LineupPlayer, side: LineupSide) -> some View {
+        let isSelected = tradeCandidateID == player.id
+        return Button {
+            tap(player)
+        } label: {
+            HStack(spacing: 6) {
+                MemberAvatar(name: player.name, size: 26, imageUrl: player.avatarUrl)
+                Text(player.displayName)
+                    .font(TamrinFont.font(size: 13, weight: .medium))
+                    .lineLimit(1)
+            }
+            .padding(.leading, 4)
+            .padding(.trailing, 12)
+            .padding(.vertical, 4)
+            .foregroundStyle(isSelected ? .black : .white)
+            .background(
+                Capsule().fill(isSelected ? AnyShapeStyle(side.tint) : AnyShapeStyle(.white.opacity(0.12)))
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(player.name)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .accessibilityHint("يحدده، ثم اختر لاعبًا من الفريق الآخر للتبديل")
     }
 
     // MARK: - Loading
@@ -148,6 +308,7 @@ struct LineupFlowView: View {
             if !resolved.teams.allPlayers.isEmpty {
                 teams = resolved.teams
                 unplaced = resolved.unplaced
+                keptSides = [plan.first, plan.second]
                 restoredSavedPlan = true
                 isLoading = false
             }
@@ -206,47 +367,57 @@ struct LineupFlowView: View {
                 .font(TamrinFont.font(size: 17, weight: .bold))
                 .foregroundStyle(.white)
 
-            HStack {
-                Menu {
-                    Button("حذف التشكيلة", systemImage: "trash", role: .destructive) {
-                        showDeleteConfirm = true
-                    }
-                } label: {
-                    Label("خيارات", systemImage: "ellipsis")
-                        .labelStyle(.iconOnly)
-                        .font(.system(size: 17, weight: .semibold))
-                        .frame(
-                            width: TamrinControlMetrics.glassIconContent,
-                            height: TamrinControlMetrics.glassIconContent
-                        )
-                }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .controlSize(.regular)
-                .accessibilityLabel("خيارات التشكيلة")
+            if !hasVerticalBar {
+                HStack {
+                    optionsMenu
+                        .buttonStyle(.glass)
+                        .buttonBorderShape(.circle)
+                        .controlSize(.regular)
 
-                Spacer(minLength: 0)
+                    Spacer(minLength: 0)
 
-                Button {
-                    dismiss()
-                } label: {
-                    Label("إغلاق", systemImage: "xmark")
-                        .labelStyle(.iconOnly)
-                        .font(.system(size: 17, weight: .semibold))
-                        .frame(
-                            width: TamrinControlMetrics.glassIconContent,
-                            height: TamrinControlMetrics.glassIconContent
-                        )
+                    closeButton
+                        .buttonStyle(.glass)
+                        .buttonBorderShape(.circle)
+                        .controlSize(.regular)
                 }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .controlSize(.regular)
-                .accessibilityLabel("إغلاق")
             }
         }
         .padding(.horizontal, 20)
         .padding(.top, 4)
         .padding(.bottom, 16)
+    }
+
+    private var optionsMenu: some View {
+        Menu {
+            Button("حذف التشكيلة", systemImage: "trash", role: .destructive) {
+                showDeleteConfirm = true
+            }
+        } label: {
+            Label("خيارات", systemImage: "ellipsis")
+                .labelStyle(.iconOnly)
+                .font(.system(size: 17, weight: .semibold))
+                .frame(
+                    width: TamrinControlMetrics.glassIconContent,
+                    height: TamrinControlMetrics.glassIconContent
+                )
+        }
+        .accessibilityLabel("خيارات التشكيلة")
+    }
+
+    private var closeButton: some View {
+        Button {
+            close()
+        } label: {
+            Label("إغلاق", systemImage: "xmark")
+                .labelStyle(.iconOnly)
+                .font(.system(size: 17, weight: .semibold))
+                .frame(
+                    width: TamrinControlMetrics.glassIconContent,
+                    height: TamrinControlMetrics.glassIconContent
+                )
+        }
+        .accessibilityLabel("إغلاق")
     }
 
     private var bottomBar: some View {
@@ -306,9 +477,14 @@ struct LineupFlowView: View {
                     title: source.other == .first
                         ? String(localized: "نقل للفريق الأول")
                         : String(localized: "نقل للفريق الثاني"),
-                    // The team cards are stacked, so the arrow should point at
-                    // the destination the player will move to.
-                    systemImage: source == .first ? "arrow.down" : "arrow.up"
+                    // The arrow points at the destination the player will move
+                    // to: down or up while the cards are stacked, and across to
+                    // the other pitch when they stand side by side. The first
+                    // side leads, and the directional arrows follow the
+                    // language, so this reads right in Arabic and English.
+                    systemImage: teamsSideBySide
+                        ? (source == .first ? "arrow.forward" : "arrow.backward")
+                        : (source == .first ? "arrow.down" : "arrow.up")
                 ) {
                     move(selectedPlayer)
                 }
@@ -326,15 +502,46 @@ struct LineupFlowView: View {
                 .accessibilityLabel("إلغاء اختيار \(selectedPlayer.displayName)")
             }
         } else {
-            HStack(spacing: 10) {
-                TamrinActionButton(
-                    title: String(localized: "إعادة التوزيع"),
-                    systemImage: "arrow.trianglehead.2.clockwise",
-                    prominent: false,
-                    action: splitTeams
-                )
+            VStack(spacing: 8) {
+                if let draftError {
+                    Label(draftError, systemImage: "exclamationmark.circle.fill")
+                        .font(TamrinFont.font(size: 12, weight: .medium))
+                        .foregroundStyle(.orange)
+                }
+                HStack(spacing: 10) {
+                    Button(action: splitTeams) {
+                        Label("إعادة التوزيع", systemImage: "arrow.trianglehead.2.clockwise")
+                            .labelStyle(.iconOnly)
+                            .font(.system(size: 18, weight: .semibold))
+                            .frame(width: 30, height: 30)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.large)
+                    .accessibilityLabel("إعادة التوزيع")
 
-                TamrinActionButton(title: String(localized: "نشر"), action: publishLineup)
+                    // A published lineup has no draft to go back to: every
+                    // change to it reaches the players.
+                    if !isPublished {
+                        TamrinActionButton(
+                            title: String(localized: "حفظ كمسودة"),
+                            isLoading: isSavingDraft,
+                            prominent: false,
+                            action: saveDraft
+                        )
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .disabled(isSavingDraft)
+                    }
+
+                    TamrinActionButton(
+                        title: isPublished ? String(localized: "نشر التعديلات") : String(localized: "نشر"),
+                        action: publishLineup
+                    )
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .disabled(isSavingDraft)
+                }
             }
         }
     }
@@ -452,11 +659,18 @@ struct LineupFlowView: View {
         }
     }
 
-    @ViewBuilder
+    /// iPhone Duo open, or any screen as wide: the two pitches face each
+    /// other like the two halves of one match, instead of one under the other.
+    private var teamsSideBySide: Bool { horizontalSizeClass == .regular }
+
     private var teamsBoard: some View {
-        VStack(spacing: 12) {
+        let layout = teamsSideBySide
+            ? AnyLayout(HStackLayout(alignment: .top, spacing: 12))
+            : AnyLayout(VStackLayout(spacing: 12))
+        return layout {
             ForEach(LineupSide.allCases) { side in
                 editableTeamCard(side)
+                    .frame(maxWidth: .infinity)
             }
         }
     }
@@ -636,6 +850,40 @@ struct LineupFlowView: View {
         dismiss()
     }
 
+    private var isPublished: Bool { LineupStore.isPublished(eventID: occurrence.id) }
+
+    /// True when the split on screen is not the one last kept.
+    private var hasUnsavedChanges: Bool {
+        guard candidates.count >= 2, !teams.allPlayers.isEmpty else { return false }
+        return keptSides != [teams.first.map(\.id), teams.second.map(\.id)]
+    }
+
+    private func close() {
+        if hasUnsavedChanges { confirmsLeaving = true } else { dismiss() }
+    }
+
+    /// Keeps the split for later without telling anyone. It opens again
+    /// exactly as it was left, and players see nothing until «نشر».
+    private func saveDraft() {
+        guard !isSavingDraft else { return }
+        let plan = LineupPlan(teams: teams)
+        isSavingDraft = true
+        draftError = nil
+        Task {
+            let saved = await LineupStore.saveDraft(plan, positions: positions, eventID: occurrence.id)
+            isSavingDraft = false
+            guard saved else {
+                Haptics.error()
+                draftError = String(localized: "ما انحفظت المسودة. تأكد من الاتصال وحاول مجددًا.")
+                return
+            }
+            keptSides = [plan.first, plan.second]
+            onFinish(plan)
+            Haptics.success()
+            dismiss()
+        }
+    }
+
     private func deleteLineup() {
         LineupStore.clear(eventID: occurrence.id)
         onFinish(nil)
@@ -657,7 +905,7 @@ struct LineupRowTag: View {
     var body: some View {
         if let onChoose {
             Menu {
-                ForEach(PlayerPosition.allCases, id: \.rawValue) { position in
+                ForEach(PlayerPosition.football, id: \.rawValue) { position in
                     Button {
                         onChoose(position)
                     } label: {

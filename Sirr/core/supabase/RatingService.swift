@@ -64,17 +64,17 @@ final class RatingService {
     private let client = SupabaseClientManager.shared.client
 
     /// One player's rating inside one workspace.
-    func getPlayerRating(workspaceId: UUID, userId: UUID) async throws -> PlayerRatingSummary {
+    func getPlayerRating(workspaceId: UUID, userId: UUID, sport: RatingSport = .football) async throws -> PlayerRatingSummary {
         let params: [String: String] = [
             "p_workspace_id": workspaceId.uuidString,
             "p_user_id": userId.uuidString
         ]
 
         let response = try await client
-            .rpc("get_player_rating", params: params)
+            .rpc(sport == .volleyball ? "get_volleyball_rating" : "get_player_rating", params: params)
             .execute()
 
-        let summary = try Self.decodeSummary(response.data)
+        let summary = try Self.decodeSummary(response.data, sport: sport)
         ratingLogger.info(
             "API getPlayerRating succeeded (user: \(userId), rated: \(summary.hasRated), raters: \(summary.ratingsCount))"
         )
@@ -85,18 +85,19 @@ final class RatingService {
     func submitPlayerRating(
         workspaceId: UUID,
         userId: UUID,
-        scores: PlayerRatingScores
+        scores: PlayerRatingScores,
+        sport: RatingSport = .football
     ) async throws -> SubmitRatingResult {
         var params: [String: AnyJSON] = [
             "p_workspace_id": .string(workspaceId.uuidString),
             "p_user_id": .string(userId.uuidString)
         ]
-        for attribute in PlayerAttribute.allCases {
-            params["p_\(attribute.rawValue)"] = .integer(scores[attribute])
+        for attribute in sport.attributes {
+            params["p_\(attribute.serverKey)"] = .integer(scores[attribute])
         }
 
         let response = try await client
-            .rpc("submit_player_rating", params: params)
+            .rpc(sport == .volleyball ? "submit_volleyball_rating" : "submit_player_rating", params: params)
             .execute()
 
         guard
@@ -121,7 +122,7 @@ final class RatingService {
                     userInfo: [NSLocalizedDescriptionKey: String(localized: "تعذر قراءة التقييم بعد حفظه.")]
                 )
             }
-            return .saved(Self.summary(from: rating))
+            return .saved(Self.summary(from: rating, sport: sport))
         case "is_self": return .isSelf
         case "not_a_member": return .notAMember
         case "position_required": return .positionRequired
@@ -137,7 +138,7 @@ final class RatingService {
 
     // MARK: - Decoding
 
-    private static func decodeSummary(_ data: Data) throws -> PlayerRatingSummary {
+    private static func decodeSummary(_ data: Data, sport: RatingSport) throws -> PlayerRatingSummary {
         guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw NSError(
                 domain: "RatingService",
@@ -145,16 +146,16 @@ final class RatingService {
                 userInfo: [NSLocalizedDescriptionKey: String(localized: "تعذر قراءة التقييم.")]
             )
         }
-        return summary(from: payload)
+        return summary(from: payload, sport: sport)
     }
 
-    private static func summary(from payload: [String: Any]) -> PlayerRatingSummary {
+    private static func summary(from payload: [String: Any], sport: RatingSport) -> PlayerRatingSummary {
         PlayerRatingSummary(
             position: payload["position"] as? String ?? "",
             hasRated: payload["has_rated"] as? Bool ?? false,
             ratingsCount: (payload["ratings_count"] as? NSNumber)?.intValue ?? 0,
-            mine: scores(from: payload["mine"]),
-            average: scores(from: payload["average"]),
+            mine: scores(from: payload["mine"], sport: sport),
+            average: scores(from: payload["average"], sport: sport),
             averageOverall: overall(from: payload["average"]),
             myOverall: overall(from: payload["mine"]),
             change: change(from: payload["trend"])
@@ -185,13 +186,42 @@ final class RatingService {
 
     /// The averages arrive as numbers Postgres already rounded, but they cross
     /// as JSON numbers rather than integers, so both are accepted.
-    private static func scores(from raw: Any?) -> PlayerRatingScores? {
+    private static func scores(from raw: Any?, sport: RatingSport) -> PlayerRatingScores? {
         guard let dictionary = raw as? [String: Any] else { return nil }
         var scores = PlayerRatingScores.neutral
-        for attribute in PlayerAttribute.allCases {
-            guard let number = dictionary[attribute.rawValue] as? NSNumber else { return nil }
+        for attribute in sport.attributes {
+            guard let number = dictionary[attribute.serverKey] as? NSNumber else { return nil }
             scores[attribute] = Int(number.doubleValue.rounded())
         }
         return scores
+    }
+}
+
+// MARK: - Sports a player plays
+
+/// One sport on my profile, with my position in it if I have chosen one.
+struct MySport: Decodable, Equatable {
+    let sport: String
+    var position: String?
+}
+
+extension RatingService {
+    func mySports() async throws -> [MySport] {
+        let response = try await client.rpc("get_my_sports").execute()
+        return try JSONDecoder().decode([MySport].self, from: response.data)
+    }
+
+    /// Nil position adds the sport without choosing yet.
+    func setMySport(_ sport: RatingSport, position: String?) async throws -> [MySport] {
+        let response = try await client.rpc("set_my_sport_position", params: [
+            "p_sport": AnyJSON.string(sport.rawValue),
+            "p_position": position.map(AnyJSON.string) ?? .null
+        ]).execute()
+        return try JSONDecoder().decode([MySport].self, from: response.data)
+    }
+
+    func removeMySport(_ sport: RatingSport) async throws -> [MySport] {
+        let response = try await client.rpc("remove_my_sport", params: ["p_sport": sport.rawValue]).execute()
+        return try JSONDecoder().decode([MySport].self, from: response.data)
     }
 }

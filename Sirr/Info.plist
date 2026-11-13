@@ -26,6 +26,8 @@
 	</array>
 	<key>ApplePayMerchantID</key>
 	<string>$(APPLE_PAY_MERCHANT_ID)</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>نحفظ صورة بطاقتك في ألبوم الصور عندما تختار حفظها للمشاركة.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>SUPABASE_ANON_KEY</key>
@@ -38,6 +40,11 @@
 		<string>ThmanyahSans-Regular.ttf</string>
 		<string>ThmanyahSans-Medium.ttf</string>
 		<string>ThmanyahSans-Bold.ttf</string>
+		<string>PlayerCardThmanyahSans-Bold.otf</string>
+		<string>TheYearofHandicrafts-Regular.otf</string>
+		<string>TheYearofHandicrafts-SemiBold.otf</string>
+		<string>IBMPlexSansArabic-Medium.otf</string>
+		<string>IBMPlexSansArabic-SemiBold.otf</string>
 	</array>
 </dict>
 </plist>

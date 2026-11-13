@@ -79,7 +79,8 @@ enum LineupRow: Int, CaseIterable, Identifiable {
         case .midfielder: self = .midfield
         case .defender: self = .defense
         case .goalkeeper: self = .goalkeeper
-        case nil: self = .midfield
+        // The football pitch has no place for a volleyball position.
+        case nil, .some(_): self = .midfield
         }
     }
 
@@ -548,6 +549,9 @@ enum LineupStore {
     /// this reader is not entitled to yet.
     @discardableResult
     static func load(eventID: UUID) async -> LineupPlan? {
+        #if DEBUG
+        if eventID == HomeDebugMemberFixture.matchAwardEventID { return plans[eventID] }
+        #endif
         let fetched: LineupRecord?
         do {
             fetched = try await LineupService.shared.get(eventID: eventID)
@@ -563,7 +567,7 @@ enum LineupStore {
             return nil
         }
 
-        var positions = LineupPositions(byPlayer: record.positions)
+        var positions = LineupPositions(byPlayer: record.appPositions)
         // Values written by a build that offered «غير محدد» are canonicalized
         // on the way in, the same as they were when this read from the device.
         positions.normalizeLegacyValues()
@@ -582,6 +586,12 @@ enum LineupStore {
     static func save(_ plan: LineupPlan, positions: LineupPositions, eventID: UUID) {
         plans[eventID] = plan
         positionsByEvent[eventID] = positions
+        #if DEBUG
+        if eventID == HomeDebugMemberFixture.matchAwardEventID {
+            published.insert(eventID)
+            return
+        }
+        #endif
         Task {
             _ = try? await LineupService.shared.save(
                 eventID: eventID,
@@ -589,6 +599,25 @@ enum LineupStore {
                 second: plan.second,
                 positions: positions.rawValues
             )
+        }
+    }
+
+    /// Keeps the split without handing it to anyone. Unlike `save`, the caller
+    /// waits: a draft the organizer believes is kept must actually be kept.
+    /// A published lineup stays published; there is no taking it back.
+    static func saveDraft(_ plan: LineupPlan, positions: LineupPositions, eventID: UUID) async -> Bool {
+        plans[eventID] = plan
+        positionsByEvent[eventID] = positions
+        #if DEBUG
+        // The fixture exercises live on no server; the cache is their draft.
+        if HomeDebugMemberFixture.isEnabled { return true }
+        #endif
+        do {
+            try await LineupService.shared.save(eventID: eventID, first: plan.first,
+                                                second: plan.second, positions: positions.rawValues)
+            return true
+        } catch {
+            return false
         }
     }
 

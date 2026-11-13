@@ -153,7 +153,25 @@ Deno.test("lineup_published copy interpolates the event name", () => {
   const c = copyFor("lineup_published", "تمرين الخميس");
   assertEquals(c, {
     title: "نزلت التشكيلة🔥",
-    body: "ادخل التطبيق وشف فريقك ومركزك",
+    body: "ادخل التطبيق وشف فريقك ومركزك، واكتب خاطرتك عن التشكيلة",
+  });
+});
+
+Deno.test("registration_reacted copy names the exercise", () => {
+  assertEquals(copyFor("registration_reacted", "تمرين الخميس"), {
+    title: "تفاعلوا مع تسجيلك 👏",
+    body: "وصلك تفاعل على تسجيلك في تمرين الخميس",
+  });
+});
+
+Deno.test("lineup thought copy names the exercise and has no em dash", () => {
+  assertEquals(copyFor("lineup_thought_reacted", "تمرين الخميس"), {
+    title: "تفاعلوا مع خاطرتك 🔥",
+    body: "وصلك تفاعل على خاطرتك في تشكيلة تمرين الخميس",
+  });
+  assertEquals(copyFor("lineup_thought_replied", "تمرين الخميس"), {
+    title: "رد على خاطرتك 💬",
+    body: "وصلك رد على خاطرتك في تشكيلة تمرين الخميس",
   });
 });
 
@@ -243,4 +261,22 @@ Deno.test("added_to_event names the organizer and the event", () => {
 Deno.test("added_to_event falls back when the organizer has no name", () => {
   const c = copyFor("added_to_event", "تمرين الخميس", { actorName: "  " });
   assertEquals(c?.body, "المشرف أضافك إلى «تمرين الخميس». سجّل مكانك 👍");
+});
+
+Deno.test("match award notifications cover nomination, secret voting and results", () => {
+  assertEquals(copyFor("match_award_nominate", "الخميس"), {
+    title: "من كان نجمها؟ 🏆", body: "انتهى الخميس. رشّح ثلاثة لاعبين لرجل المباراة وخلّ الفريق يختار.",
+  });
+  assertEquals(copyFor("match_award_vote", "الخميس"), {
+    title: "صوّت لرجل المباراة 🏆", body: "وصلت ترشيحات الخميس. اختر نجمك؛ صوتك سرّي والتصويت مفتوح ساعة واحدة.",
+  });
+  assertEquals(copyFor("match_award_result", "الخميس"), {
+    title: "رجل المباراة انكشف 🏆", body: "انتهى تصويت الخميس. افتح وشوف مين طلع.",
+  });
+  assertEquals(copyFor("match_award_won", "الخميس"), {
+    title: "أنت رجل المباراة 🏆", body: "اختارك الفريق نجم الخميس. افتح وشوف بطاقتك.",
+  });
+  assertEquals(copyFor("match_award_cheered", "الخميس"), {
+    title: "الفريق يهنّيك 👏", body: "وصلتك تهاني على رجل المباراة في الخميس.",
+  });
 });

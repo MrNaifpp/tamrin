@@ -11,3 +11,7 @@
 DEVELOPMENT_TEAM =
 PRODUCT_BUNDLE_IDENTIFIER =
 TAMRIN_LIVE_ACTIVITY_BUNDLE_IDENTIFIER =
+
+// Optional free Personal Team support, Debug only. Uncomment both together.
+// TAMRIN_DEBUG_ENTITLEMENTS = Sirr/PersonalTeam.entitlements
+// TAMRIN_DEBUG_SWIFT_FLAGS = TAMRIN_PERSONAL_TEAM

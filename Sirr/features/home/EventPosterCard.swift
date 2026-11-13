@@ -24,6 +24,8 @@ struct EventPosterCard: View {
     /// The photo Home picked from the sport's folder. Nil keeps the card on the
     /// artwork the app ships with.
     let art: String?
+    let exerciseTitle: String?
+    let scheduleCount: Int
     let action: () -> Void
 
     init(
@@ -36,6 +38,8 @@ struct EventPosterCard: View {
         attendees: [FeedMember] = [],
         currentUserID: UUID? = nil,
         art: String? = nil,
+        scheduleCount: Int = 1,
+        exerciseTitle: String? = nil,
         action: @escaping () -> Void
     ) {
         self.occurrence = occurrence
@@ -47,6 +51,8 @@ struct EventPosterCard: View {
         self.attendees = attendees
         self.currentUserID = currentUserID
         self.art = art
+        self.scheduleCount = scheduleCount
+        self.exerciseTitle = exerciseTitle
         self.action = action
     }
 
@@ -66,9 +72,9 @@ struct EventPosterCard: View {
         // poster, then springs back when the gesture becomes a scroll. Keeping
         // the card plain lets ScrollView own the pan without a competing scale.
         .buttonStyle(.plain)
-        .accessibilityLabel("\(occurrence.title)، \(occurrence.startAt.arabicDay)، الساعة \(occurrence.startAt.arabicTime)")
+        .accessibilityLabel("\(exerciseTitle ?? occurrence.title)، \(occurrence.startAt.arabicDay)، الساعة \(occurrence.startAt.arabicTime)")
         .accessibilityValue("\(registeredCount) من \(occurrence.capacity) مسجلين")
-        .accessibilityHint(String(localized: "يفتح تفاصيل الموعد"))
+        .accessibilityHint(scheduleCount > 1 ? String(localized: "يفتح مواعيد التمرين") : String(localized: "يفتح تفاصيل الموعد"))
         .clipShape(.rect(cornerRadius: 36, style: .continuous))
         // The reference uses a wide, barely-there elevation shadow. Cast it
         // from one simple shape behind the opaque poster instead of shadowing
@@ -123,6 +129,13 @@ struct EventPosterCard: View {
             ], startPoint: .top, endPoint: .bottom)
 
             VStack(spacing: 8) {
+                if scheduleCount > 1 {
+                    Label(scheduleCount.counted(.session), systemImage: "rectangle.stack")
+                        .font(TamrinFont.font(size: 13, weight: .medium))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(.ultraThinMaterial, in: .capsule)
+                }
                 if occurrence.isCancelled {
                     Text("متخطّى")
                         .font(TamrinFont.font(size: 13, weight: .bold))
@@ -140,7 +153,7 @@ struct EventPosterCard: View {
                     fallbackImageUrl: profileImageUrl
                 )
 
-                Text(occurrence.title)
+                Text(exerciseTitle ?? occurrence.title)
                     .font(TamrinFont.font(size: 31, weight: .bold))
                     .foregroundStyle(.white)
                     .lineLimit(1).minimumScaleFactor(0.7)
@@ -185,7 +198,7 @@ struct EventPosterCard: View {
 
 }
 
-private struct EventSupervisorTagView: View {
+struct EventSupervisorTagView: View {
     /// The artwork under the tag. Nil where there is none — the empty card —
     /// which reads as dark, the same as it always did.
     var artName: String?
