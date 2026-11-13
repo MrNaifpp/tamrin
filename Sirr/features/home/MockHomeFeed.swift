@@ -1383,8 +1383,8 @@ final class HomeStore {
                teams.contains(where: { isDebugMemberFixtureTeam($0.id) }) {
                 // The flag was passed to test the fixture, so open on it rather
                 // than on whichever real workspace happens to sort first.
-                selectedTeamID = HomeDebugMemberFixture.teamID
-                onSelectWorkspace?(HomeDebugMemberFixture.teamID)
+                selectedTeamID = HomeDebugMemberFixture.landingTeamID
+                onSelectWorkspace?(HomeDebugMemberFixture.landingTeamID)
                 hasAuthoritativeUpcomingSnapshot = true
                 return
             }
@@ -1409,8 +1409,8 @@ final class HomeStore {
             installDebugMemberFixtureIfNeeded()
             if HomeDebugMemberFixture.isEnabled,
                teams.contains(where: { $0.id == HomeDebugMemberFixture.teamID }) {
-                selectedTeamID = HomeDebugMemberFixture.teamID
-                onSelectWorkspace?(HomeDebugMemberFixture.teamID)
+                selectedTeamID = HomeDebugMemberFixture.landingTeamID
+                onSelectWorkspace?(HomeDebugMemberFixture.landingTeamID)
             } else if let preferred,
                teams.contains(where: { $0.id == preferred }) {
                 selectedTeamID = preferred

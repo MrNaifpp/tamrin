@@ -10,8 +10,30 @@ enum HomeDebugMemberFixture {
     /// The dedicated `.local` bundle is the installable QA copy, so it also
     /// enables the fixture when opened directly from the iPhone home screen.
     /// Neither path exists in a Release build because this whole file is DEBUG-only.
-    static let isEnabled = CommunityScheduleFixture.isEnabled || ProcessInfo.processInfo.arguments.contains("-demoMemberFixture")
-        || Bundle.main.bundleIdentifier?.hasSuffix(".tamrin.local") == true
+    ///
+    /// The Demo configuration is the same QA copy for TestFlight, where no
+    /// launch argument can be passed: DEMO_DATA turns the fixture on outright.
+    static let isEnabled: Bool = {
+        #if DEMO_DATA
+        return true
+        #else
+        return CommunityScheduleFixture.isEnabled || ProcessInfo.processInfo.arguments.contains("-demoMemberFixture")
+            || Bundle.main.bundleIdentifier?.hasSuffix(".tamrin.local") == true
+        #endif
+    }()
+
+    /// A demo build opens where the man-of-the-match walk-through starts:
+    /// the organizer's group, on its played exercises.
+    static let opensOnMatchAward: Bool = {
+        #if DEMO_DATA
+        return true
+        #else
+        return ProcessInfo.processInfo.arguments.contains("-demoMatchAwardJourney")
+        #endif
+    }()
+    /// The group Home lands on when the fixture is on.
+    static var landingTeamID: UUID { opensOnMatchAward ? ownerTeamID : teamID }
+
     /// Starts the member already registered after the organizer requested the
     /// contribution, so the persistent T-40 entry point can be checked on a
     /// simulator without touching Supabase data.

@@ -67,7 +67,7 @@ struct DesignerHomeView: View {
         self.appState = appState
         _feed = State(initialValue: feed ?? HomeStore())
         #if DEBUG
-        _showsPast = State(initialValue: ProcessInfo.processInfo.arguments.contains("-demoMatchAwardJourney"))
+        _showsPast = State(initialValue: HomeDebugMemberFixture.opensOnMatchAward)
         #endif
     }
 
@@ -289,7 +289,13 @@ struct DesignerHomeView: View {
             // After the shelf is up, so it opens over Home rather than over a
             // loading screen — and only where there is a group to rate anyone
             // in, which is not the case on a fresh signup.
+            #if DEMO_DATA
+            // A demo install is opened to walk one feature; the rating cards
+            // would stand between the tester and it on the first launch.
+            let introducesRating = false
+            #else
             let introducesRating = !RatingOnboarding.hasSeen && !feed.teams.isEmpty
+            #endif
             if introducesRating { showRatingOnboarding = true }
             await openDeepLinkedEventIfNeeded()
             // The system's notification prompt waits for the introduction to

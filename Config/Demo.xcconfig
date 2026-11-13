@@ -1,0 +1,24 @@
+#include "Staging.xcconfig"
+
+// A Release-grade build that carries the local fixtures, so a feature can be
+// walked through on TestFlight by someone who has no account, no group and no
+// Xcode. Everything it shows is the fixed data in HomeDebugMemberFixture;
+// nothing a tester does in the fixture groups reaches Supabase or sends a push.
+//
+// Its own bundle id, for the same reasons staging has one: a separate App
+// Store Connect record, a separate TestFlight, and an install that cannot
+// overwrite a tester's real app.
+PRODUCT_BUNDLE_IDENTIFIER = com.businessech.tmrin.demo
+TAMRIN_LIVE_ACTIVITY_BUNDLE_IDENTIFIER = com.businessech.tmrin.demo.liveactivity
+
+// STAGING is restated because this assignment replaces the one in
+// Staging.xcconfig: a real sign-in from this build must land in the sandbox,
+// never in production.
+//
+// DEBUG compiles the fixtures in. Every `#if DEBUG` in the app guards fixture,
+// preview or logging code, so this adds nothing a tester should not see.
+// DEMO_DATA turns the fixture on without a launch argument, which a TestFlight
+// install has no way to pass.
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = $(inherited) STAGING DEBUG DEMO_DATA
+
+INFOPLIST_KEY_CFBundleDisplayName = تمرين تجربة
