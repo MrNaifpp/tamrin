@@ -387,16 +387,6 @@ struct ExerciseScheduleView: View {
     }
 }
 
-/// Keep the native glass untinted so each control adapts to the artwork beneath it.
-struct ExerciseChromeButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(.primary)
-            .glassEffect(.regular.interactive(), in: .capsule)
-            .contentShape(.capsule)
-    }
-}
-
 private struct ScheduleArtworkPreparation: Equatable {
     let names: [String]
     let size: CGSize

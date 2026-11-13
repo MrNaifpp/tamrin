@@ -659,7 +659,6 @@ private struct LineupFlowPage: View {
         }
     }
 
-    @ViewBuilder
     /// iPhone Duo open, or any screen as wide: the two pitches face each
     /// other like the two halves of one match, instead of one under the other.
     private var teamsSideBySide: Bool { horizontalSizeClass == .regular }

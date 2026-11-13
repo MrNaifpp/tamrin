@@ -202,23 +202,3 @@ struct UnscheduledExerciseView: View {
         .colorScheme(.dark)
     }
 }
-
-extension PlanDraft {
-    func newSessionValidationError(now: Date = .now) -> String? {
-        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !locationName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return String(localized: "حدد اسم التمرين والملعب.")
-        }
-        guard capacity > 0, totalVenueCost >= 0 else { return String(localized: "راجع عدد اللاعبين وقيمة الملعب.") }
-        if scheduleKind == .oneOff {
-            let calendar = Calendar.current
-            let time = calendar.dateComponents([.hour, .minute], from: startTime)
-            guard let start = calendar.date(bySettingHour: time.hour ?? 0,
-                                            minute: time.minute ?? 0, second: 0, of: oneOffDate),
-                  start > now else { return String(localized: "اختر وقتًا قادمًا للموعد.") }
-        } else if weekdays.isEmpty {
-            return String(localized: "اختر يومًا واحدًا على الأقل.")
-        }
-        return nil
-    }
-}

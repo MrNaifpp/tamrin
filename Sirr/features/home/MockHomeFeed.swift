@@ -1105,7 +1105,10 @@ final class HomeStore {
         firstDraft.teamName = initialPlan.name
         firstDraft.teamSymbol = "figure.pickleball"
         firstDraft.plans = [initialPlan]
-        let firstTeam = try await store.createTeam(from: firstDraft)
+        guard case .newTeam(let firstTeam) = try await store.createTeam(from: firstDraft) else {
+            throw NSError(domain: "CommunityChecks", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "first creation makes a new group"])
+        }
         try check(store.occurrencesByTeam[firstTeam.id]?.count == 1, "first creation includes its first date")
         try check(store.members(for: firstTeam.id).count == 1, "first creation keeps group membership separate")
         let teamID = CommunityScheduleFixture.id(1)
