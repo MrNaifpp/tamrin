@@ -29,6 +29,18 @@ enum RatingOnboarding {
 struct RatingOnboardingSheet: View {
     let onDone: () -> Void
 
+    // Hosted here rather than at each presentation, so every cover that
+    // shows these cards gives «تخطٍ» a bar to move into on iPhone Duo.
+    var body: some View {
+        RatingOnboardingPage(onDone: onDone)
+            .verticalBarHost()
+    }
+}
+
+private struct RatingOnboardingPage: View {
+    let onDone: () -> Void
+
+    @Environment(\.hasVerticalBar) private var hasVerticalBar
     @State private var step = 0
 
     private static let steps: [RatingOnboardingStep] = [
@@ -158,6 +170,10 @@ struct RatingOnboardingSheet: View {
             )
             .ignoresSafeArea()
         }
+    }
+
+    private var skipButton: some View {
+        Button("تخطٍ") { finish() }
     }
 
     private func finish() {

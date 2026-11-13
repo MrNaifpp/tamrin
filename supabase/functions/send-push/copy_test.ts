@@ -268,9 +268,15 @@ Deno.test("match award notifications cover nomination, secret voting and results
     title: "من كان نجمها؟ 🏆", body: "انتهى الخميس. رشّح ثلاثة لاعبين لرجل المباراة وخلّ الفريق يختار.",
   });
   assertEquals(copyFor("match_award_vote", "الخميس"), {
-    title: "صوّت لرجل المباراة 🏆", body: "وصلت ترشيحات الخميس. اختر نجمك؛ صوتك سرّي والتصويت مفتوح ٢٤ ساعة.",
+    title: "صوّت لرجل المباراة 🏆", body: "وصلت ترشيحات الخميس. اختر نجمك؛ صوتك سرّي والتصويت مفتوح ساعة واحدة.",
   });
   assertEquals(copyFor("match_award_result", "الخميس"), {
-    title: "نتيجة رجل المباراة جاهزة 🏆", body: "انتهى تصويت الخميس. افتح وشوف النتيجة.",
+    title: "رجل المباراة انكشف 🏆", body: "انتهى تصويت الخميس. افتح وشوف مين طلع.",
+  });
+  assertEquals(copyFor("match_award_won", "الخميس"), {
+    title: "أنت رجل المباراة 🏆", body: "اختارك الفريق نجم الخميس. افتح وشوف بطاقتك.",
+  });
+  assertEquals(copyFor("match_award_cheered", "الخميس"), {
+    title: "الفريق يهنّيك 👏", body: "وصلتك تهاني على رجل المباراة في الخميس.",
   });
 });

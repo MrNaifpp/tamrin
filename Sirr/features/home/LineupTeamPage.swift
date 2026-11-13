@@ -34,6 +34,7 @@ struct LineupTeamPage: View {
     var onFinish: (LineupPlan?) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.hasVerticalBar) private var hasVerticalBar
 
     /// Seeded by the card that was pressed, then owned by the page: its header
     /// is the switch between the two sides.
@@ -174,6 +175,22 @@ struct LineupTeamPage: View {
             .padding(.bottom, 40)
         }
         .safeAreaInset(edge: .top) { topBar }
+        // iPhone Duo's cover screen: the bar's buttons would sit under the
+        // camera, so the system places them in its vertical bar instead. They
+        // come and go with the page's details, as the floating ones do; the
+        // exercise page steps its own items aside while this one is open.
+        .toolbar {
+            if hasVerticalBar && detailsVisible {
+                ToolbarItem(placement: .cancellationAction) {
+                    closeButton.disabled(!interactionEnabled)
+                }
+                if canEditLineup {
+                    ToolbarItem(placement: .primaryAction) {
+                        editButton.disabled(!interactionEnabled)
+                    }
+                }
+            }
+        }
         .background {
             ZStack {
                 Image(exerciseArt: artName)
@@ -358,6 +375,40 @@ struct LineupTeamPage: View {
         }
     }
 
+    private var closeButton: some View {
+        Button {
+            closePage()
+        } label: {
+            Label("إغلاق", systemImage: "xmark")
+                .labelStyle(.iconOnly)
+                .font(.system(size: 17, weight: .semibold))
+                .frame(
+                    width: TamrinControlMetrics.glassIconContent,
+                    height: TamrinControlMetrics.glassIconContent
+                )
+        }
+        .accessibilityLabel("إغلاق")
+    }
+
+    /// Sized like the bar button iOS puts in the same corner — the Clock's
+    /// «تعديل» — rather than a small pill: the system's 17pt bar-button text,
+    /// and enough width around it that the capsule reads as a sibling of the
+    /// circle across from it.
+    private var editButton: some View {
+        Button {
+            showEditor = true
+        } label: {
+            Text("تعديل")
+                .font(TamrinFont.font(size: 17, weight: .medium))
+                // Five points on each side on top of the style's own insets
+                // is what lands the capsule on the width iOS gives the same
+                // word in its own bar.
+                .padding(.horizontal, 5)
+                .frame(height: TamrinControlMetrics.glassIconContent)
+        }
+        .accessibilityHint("يفتح تعديل التشكيلة وتبديل اللاعبين")
+    }
+
     /// Close on the leading edge, edit on the trailing one — the reverse of the
     /// editor's bar, because here the way out is the ordinary thing to press.
     private var topBar: some View {
@@ -366,45 +417,21 @@ struct LineupTeamPage: View {
                 .font(TamrinFont.font(size: 17, weight: .bold))
                 .foregroundStyle(.white)
 
-            HStack {
-                Button {
-                    closePage()
-                } label: {
-                    Label("إغلاق", systemImage: "xmark")
-                        .labelStyle(.iconOnly)
-                        .font(.system(size: 17, weight: .semibold))
-                        .frame(
-                            width: TamrinControlMetrics.glassIconContent,
-                            height: TamrinControlMetrics.glassIconContent
-                        )
-                }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .controlSize(.regular)
-                .accessibilityLabel("إغلاق")
+            if !hasVerticalBar {
+                HStack {
+                    closeButton
+                        .buttonStyle(.glass)
+                        .buttonBorderShape(.circle)
+                        .controlSize(.regular)
 
-                Spacer(minLength: 0)
+                    Spacer(minLength: 0)
 
-                // Sized like the bar button iOS puts in the same corner — the
-                // Clock's «تعديل» — rather than a small pill: the system's
-                // 17pt bar-button text, and enough width around it that the
-                // capsule reads as a sibling of the circle across from it.
-                if canEditLineup {
-                    Button {
-                        showEditor = true
-                    } label: {
-                        Text("تعديل")
-                            .font(TamrinFont.font(size: 17, weight: .medium))
-                            // Five points on each side on top of the style's
-                            // own insets is what lands the capsule on the width
-                            // iOS gives the same word in its own bar.
-                            .padding(.horizontal, 5)
-                            .frame(height: TamrinControlMetrics.glassIconContent)
+                    if canEditLineup {
+                        editButton
+                            .buttonStyle(.glass)
+                            .buttonBorderShape(.capsule)
+                            .controlSize(.regular)
                     }
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.capsule)
-                    .controlSize(.regular)
-                    .accessibilityHint("يفتح تعديل التشكيلة وتبديل اللاعبين")
                 }
             }
         }

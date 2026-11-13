@@ -147,9 +147,10 @@ struct PlayerCardView: View {
                 .offset(y: -Self.panelTop)
             Color(white: 0.9895344972610474).opacity(0.8)
             HStack(alignment: .top, spacing: 55.62327575683594) {
-                statColumn(.shooting, .awareness, width: 67, alignment: .trailing)
-                statColumn(.passing, .defending, width: 51, alignment: .center)
-                statColumn(.pace, .stamina, width: 50, alignment: .center)
+                let columns = Self.statColumns(for: sport)
+                statColumn(columns[0].0, columns[0].1, width: 67, alignment: .trailing)
+                statColumn(columns[1].0, columns[1].1, width: 51, alignment: .center)
+                statColumn(columns[2].0, columns[2].1, width: 50, alignment: .center)
             }
             .offset(x: 45.20746994018555, y: 27.071353912353516)
         }
@@ -186,14 +187,16 @@ struct PlayerCardView: View {
         }
     }
 
-    private static func label(_ attribute: PlayerAttribute) -> String {
-        switch attribute {
-        case .pace: String(localized: "السرعــة")
-        case .passing: String(localized: "التمريــر")
-        case .shooting: String(localized: "التسديــد")
-        case .stamina: String(localized: "اللياقــة")
-        case .defending: String(localized: "الدفــاع")
-        case .awareness: String(localized: "وعي كروي")
+    private static func label(_ attribute: PlayerAttribute) -> String { attribute.cardLabel }
+
+    /// The sport is the position's: a volleyball position draws volleyball's six.
+    private var sport: RatingSport { PlayerPosition.exact(from: position)?.sport ?? .football }
+
+    /// Three columns of two, read right to left the way the card is lettered.
+    static func statColumns(for sport: RatingSport) -> [(PlayerAttribute, PlayerAttribute)] {
+        switch sport {
+        case .football: [(.shooting, .awareness), (.passing, .defending), (.pace, .stamina)]
+        case .volleyball: [(.attacking, .courtAwareness), (.setting, .blocking), (.receiving, .serving)]
         }
     }
 

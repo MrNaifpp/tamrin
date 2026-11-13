@@ -6,6 +6,7 @@ struct PlayerCardPage: View {
     @Bindable var feed: HomeStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.hasVerticalBar) private var hasVerticalBar
     @State private var stage: Stage = .instructions
     @State private var summary: PlayerRatingSummary?
     @State private var photoItem: PhotosPickerItem?
@@ -53,6 +54,17 @@ struct PlayerCardPage: View {
             }.padding(.horizontal, 24).padding(.vertical, stage == .result ? 16 : 28).frame(maxWidth: .infinity)
         }
         .safeAreaInset(edge: .top) { topBar }
+        // On iPhone Duo's cover screen the top bar's buttons would sit under
+        // the camera, so they move here and the system places them in its
+        // vertical bar. The title stays in the top bar.
+        .toolbar {
+            if hasVerticalBar {
+                if showsBackButton {
+                    ToolbarItem(placement: .navigation) { backButton }
+                }
+                ToolbarItem(placement: .cancellationAction) { closeButton }
+            }
+        }
         .safeAreaInset(edge: .bottom) {
             if stage != .processing {
                 bottomAction.padding(.horizontal, 24).padding(.vertical, 12)
@@ -105,22 +117,35 @@ struct PlayerCardPage: View {
         ZStack {
             Text(stage == .saved ? String(localized: "معاينة بطاقتك") : stage == .result ? String(localized: "بطاقتك جاهزة") : String(localized: "أنشئ بطاقتك"))
                 .font(TamrinFont.font(size: 17, weight: .bold))
-            HStack {
-                if stage == .result || stage == .photo {
-                    Button {
-                        if stage == .result { chooseAnotherPhoto() }
-                        else { move(to: .instructions) }
-                    } label: { Image(systemName: "chevron.backward").frame(width: 28, height: 28) }
-                    .buttonStyle(.glass).buttonBorderShape(.circle)
-                    .accessibilityLabel(stage == .result ? String(localized: "العودة لاختيار صورة أخرى") : String(localized: "رجوع"))
+            if !hasVerticalBar {
+                HStack {
+                    if showsBackButton {
+                        backButton
+                            .buttonStyle(.glass).buttonBorderShape(.circle)
+                    }
+                    Spacer()
+                    closeButton
+                        .buttonStyle(.glass).buttonBorderShape(.circle)
                 }
-                Spacer()
-                Button {
-                    if sourcePortrait != nil && stage != .saved { confirmsExit = true } else { dismiss() }
-                } label: { Image(systemName: "xmark").frame(width: 28, height: 28) }
-                .buttonStyle(.glass).buttonBorderShape(.circle).accessibilityLabel("إغلاق")
             }
         }.padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 12)
+    }
+
+    private var showsBackButton: Bool { stage == .result || stage == .photo }
+
+    private var backButton: some View {
+        Button {
+            if stage == .result { chooseAnotherPhoto() }
+            else { move(to: .instructions) }
+        } label: { Image(systemName: "chevron.backward").frame(width: 28, height: 28) }
+        .accessibilityLabel(stage == .result ? String(localized: "العودة لاختيار صورة أخرى") : String(localized: "رجوع"))
+    }
+
+    private var closeButton: some View {
+        Button {
+            if sourcePortrait != nil && stage != .saved { confirmsExit = true } else { dismiss() }
+        } label: { Image(systemName: "xmark").frame(width: 28, height: 28) }
+        .accessibilityLabel("إغلاق")
     }
 
     private var instructions: some View {

@@ -29,6 +29,8 @@ struct PlayerDetailsSheet: View {
     /// already declared this way for the same reason.
     var loadRating: (@MainActor () async throws -> PlayerRatingSummary)?
     var submitRating: (@MainActor (PlayerRatingScores) async throws -> SubmitRatingResult)?
+    /// The sport the rating above belongs to: the group's.
+    var ratingSport: RatingSport = .football
     /// Guests have no account of their own; this names the member who reserved
     /// their seat instead of leaving the relationship hidden behind an id.
     var registeredByName: String?
@@ -76,6 +78,7 @@ struct PlayerDetailsSheet: View {
         showsPayment: Bool = false,
         loadRating: (@MainActor () async throws -> PlayerRatingSummary)? = nil,
         submitRating: (@MainActor (PlayerRatingScores) async throws -> SubmitRatingResult)? = nil,
+        ratingSport: RatingSport = .football,
         registeredByName: String? = nil,
         removeTitle: String = String(localized: "إزالة اللاعب من التمرين"),
         onRemind: (@MainActor () async -> HomeStore.PaymentReminderOutcome)? = nil,
@@ -89,6 +92,7 @@ struct PlayerDetailsSheet: View {
         self.removeTitle = removeTitle
         self.loadRating = loadRating
         self.submitRating = submitRating
+        self.ratingSport = ratingSport
         self.registeredByName = registeredByName
         self.onRemind = onRemind
         self.onRemove = onRemove
@@ -116,7 +120,10 @@ struct PlayerDetailsSheet: View {
 
     private var canViewRating: Bool { loadRating != nil }
     private var canSubmitRating: Bool { submitRating != nil }
-    private var ratingPosition: PlayerPosition? { PlayerPosition.exact(from: positionText) }
+    /// Only a position of this group's sport can weigh a rating here.
+    private var ratingPosition: PlayerPosition? {
+        PlayerPosition.exact(from: positionText).flatMap { $0.sport == ratingSport ? $0 : nil }
+    }
 
     /// The freshly fetched position wins over the roster's copy, which may be
     /// a screen old.
@@ -301,6 +308,7 @@ struct PlayerDetailsSheet: View {
         if revealsRating, let rating, let average = rating.average,
            let overall = rating.averageOverall {
             RatedPanel(
+                sport: ratingSport,
                 average: average,
                 overall: overall,
                 ratersCount: rating.ratingsCount,
@@ -492,6 +500,7 @@ struct PlayerDetailsSheet: View {
 /// The group's anonymous Overall in a crest, the six averages beneath, and a
 /// quiet way back into the caller's own rating flow when editing is allowed.
 private struct RatedPanel: View {
+    let sport: RatingSport
     let average: PlayerRatingScores
     let overall: Int
     let ratersCount: Int
@@ -524,7 +533,7 @@ private struct RatedPanel: View {
                 Spacer(minLength: 0)
             }
 
-            AttributeGrid(scores: average)
+            AttributeGrid(scores: average, sport: sport)
 
             if let actionTitle, let onAction {
                 Button(action: onAction) {
@@ -678,6 +687,7 @@ struct RatingCrest: View {
 /// being 150pt wide, which a radar chart does not.
 struct AttributeGrid: View {
     let scores: PlayerRatingScores
+    var sport: RatingSport = .football
     /// Passed by the rating flow's summary, where every bar is a way back to
     /// the step that set it. Nil elsewhere: the panel is a readout, not a
     /// control.
@@ -690,7 +700,7 @@ struct AttributeGrid: View {
 
     var body: some View {
         LazyVGrid(columns: columns, spacing: 7) {
-            ForEach(PlayerAttribute.allCases) { attribute in
+            ForEach(sport.attributes) { attribute in
                 if let onSelect {
                     Button { onSelect(attribute) } label: {
                         AttributeBar(

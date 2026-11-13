@@ -4,6 +4,9 @@ import Combine
 struct MatchAwardFlowView: View {
     @State private var model: MatchAwardModel
     @State private var nominated: [UUID] = []
+    @State private var regions: [UUID: String] = [:]
+    @State private var winnerStats: MatchAwardPlayerStats?
+    @State private var revealed = false
     @State private var focusedID: UUID?
     @State private var isChangingVote = false
     @Namespace private var cardTransition
@@ -70,13 +73,19 @@ struct MatchAwardFlowView: View {
                     }
                 }
                 #endif
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("تحديث", systemImage: "arrow.clockwise") { Task { await model.load() } }
-                        .tint(accent).disabled(model.isLoading || model.isSaving)
+                // The walkout carries its own replay; a second circular arrow there reads as the same button.
+                if model.award?.winner == nil {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("تحديث", systemImage: "arrow.clockwise") { Task { await model.load() } }
+                            .tint(accent).disabled(model.isLoading || model.isSaving)
+                    }
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
+            // This bar is always shown, so only the flag is needed: the
+            // walkout hands its floating control to it on iPhone Duo.
+            .modifier(PublishesVerticalBar())
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if let award = model.award { bottomAction(award) }
             }
@@ -106,9 +115,15 @@ struct MatchAwardFlowView: View {
             focusedID = model.award.flatMap { initialCardID($0) }
         }
         .confirmationDialog("نشر المرشحين الثلاثة؟", isPresented: $confirmsNomination, titleVisibility: .visible) {
-            Button("نشر وفتح التصويت") { Task { await model.nominate(nominated) } }
+            Button("نشر وفتح التصويت") { Task { await model.nominate(nominated, regions: nominated.map { regions[$0] }) } }
         } message: {
-            Text("سيصل تنبيه للاعبين المسجلين. يستمر التصويت 24 ساعة، ولا يمكن تغيير المرشحين بعد النشر.")
+            Text("سيصل تنبيه للاعبين المسجلين. يستمر التصويت ساعة، وينتهي قبلها إذا صوّت الجميع. لا يمكن تغيير المرشحين بعد النشر.")
+        }
+        .task(id: "\(model.award?.winner?.id.uuidString ?? "")\(workspaceID?.uuidString ?? "")") {
+            // The rating needs the workspace; wait for it so the walkout counts to the real number.
+            guard let award = model.award, let winner = award.winner,
+                  model.isDemo || workspaceID != nil else { return }
+            winnerStats = await MatchAwardPlayerStats.load(for: winner, workspaceID: workspaceID, isDemo: model.isDemo)
         }
     }
 
@@ -161,6 +176,17 @@ struct MatchAwardFlowView: View {
             nomination(award)
         } else if let player = chosenPlayer(award) {
             chosenCard(player)
+        } else if let winner = award.winner {
+            if let winnerStats {
+                MatchAwardWalkoutView(player: winner, stats: winnerStats, workspaceID: workspaceID,
+                                      isDemo: model.isDemo, startsRevealed: hasSeenWalkout(award)) {
+                    markWalkoutSeen(award)
+                    withAnimation(.smooth(duration: 0.5)) { revealed = true }
+                }
+                .id(winner.id)
+            } else {
+                ProgressView().tint(accent)
+            }
         } else if award.status == .open || award.status == .closed {
             ballot(award)
         } else {
@@ -189,7 +215,7 @@ struct MatchAwardFlowView: View {
                         ForEach(0..<3) { index in
                             let player = nominated.indices.contains(index)
                                 ? award.players.first { $0.id == nominated[index] } : nil
-                            VStack(spacing: 8) {
+                            VStack(spacing: 6) {
                                 ZStack {
                                     Circle().strokeBorder(accent.opacity(0.18), lineWidth: 3)
                                     if let player {
@@ -200,9 +226,10 @@ struct MatchAwardFlowView: View {
                                 }.frame(width: 64, height: 64)
                                 Text(player?.name.components(separatedBy: " ").first ?? String(localized: "مرشّح"))
                                     .font(TamrinFont.font(size: 12, weight: .medium)).lineLimit(1)
-                            }.frame(maxWidth: .infinity)
+                                if let player { regionMenu(for: player.id) }
+                            }.frame(maxWidth: .infinity, alignment: .top)
                         }
-                    }.padding(.horizontal, 32)
+                    }.padding(.horizontal, 24)
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                         ForEach(award.players) { player in nominationTile(player) }
                     }.padding(.horizontal, 20)
@@ -211,11 +238,45 @@ struct MatchAwardFlowView: View {
         }
     }
 
+    /// The walkout opens on the winner's region, so the organizer tags each nominee.
+    private func regionMenu(for id: UUID) -> some View {
+        Menu {
+            Picker("المنطقة", selection: Binding(get: { regions[id] }, set: { regions[id] = $0 })) {
+                ForEach(SaudiRegionMap.shared.regions) { region in
+                    Text(region.label).tag(Optional(region.id))
+                }
+            }
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: regions[id] == nil ? "mappin.and.ellipse" : "mappin")
+                Text(SaudiRegionMap.label(for: regions[id]) ?? String(localized: "المنطقة"))
+                    .lineLimit(1).minimumScaleFactor(0.7)
+            }
+            .font(TamrinFont.font(size: 11, weight: .medium))
+            .foregroundStyle(regions[id] == nil ? .black : .white.opacity(0.8))
+            .padding(.horizontal, 8).padding(.vertical, 5)
+            .background(regions[id] == nil ? accent : .white.opacity(0.12), in: .capsule)
+        }
+        .accessibilityLabel("منطقة اللاعب")
+        .accessibilityValue(SaudiRegionMap.label(for: regions[id]) ?? String(localized: "غير محددة"))
+    }
+
+    private func hasSeenWalkout(_ award: MatchAward) -> Bool {
+        UserDefaults.standard.bool(forKey: "matchAward.walkoutSeen.\(award.eventId)")
+    }
+
+    private func markWalkoutSeen(_ award: MatchAward) {
+        #if DEBUG
+        guard !model.isDemo else { return }
+        #endif
+        UserDefaults.standard.set(true, forKey: "matchAward.walkoutSeen.\(award.eventId)")
+    }
+
     private func nominationTile(_ player: MatchAwardPlayer) -> some View {
         let selected = nominated.contains(player.id)
         return Button {
             withAnimation(reduceMotion ? nil : .snappy(duration: 0.22)) {
-                if selected { nominated.removeAll { $0 == player.id } }
+                if selected { nominated.removeAll { $0 == player.id }; regions[player.id] = nil }
                 else if nominated.count < 3 { nominated.append(player.id) }
             }
             Haptics.selection()
@@ -311,15 +372,6 @@ struct MatchAwardFlowView: View {
                                     MatchAwardPlayerCard(player: player, workspaceID: workspaceID, isDemo: model.isDemo)
                                         .frame(width: cardWidth, height: cardWidth / PlayerCardView.aspectRatio)
                                         .matchedGeometryEffect(id: player.id, in: cardTransition)
-                                        .overlay(alignment: .top) {
-                                            if award.winners.contains(where: { $0.id == player.id }) {
-                                                Label("رجل المباراة", systemImage: "trophy.fill")
-                                                    .font(TamrinFont.font(size: 13, weight: .bold))
-                                                    .padding(.horizontal, 14).padding(.vertical, 9)
-                                                    .foregroundStyle(.black).background(accent, in: .capsule)
-                                                    .offset(y: -10)
-                                            }
-                                        }
                                     if let votes = player.votes, award.status == .closed {
                                         Text("\(votes) أصوات").font(TamrinFont.font(size: 15, weight: .bold)).foregroundStyle(accent)
                                     }
@@ -349,10 +401,7 @@ struct MatchAwardFlowView: View {
                         }
                     }.environment(\.layoutDirection, .leftToRight).accessibilityHidden(true)
                     if award.status == .open, let closes = award.closesAt {
-                        HStack(spacing: 5) {
-                            Text("ينتهي")
-                            Text(closes, style: .relative)
-                        }.font(TamrinFont.font(size: 12, weight: .regular)).foregroundStyle(.white.opacity(0.45))
+                        votingProgress(award, closes: closes)
                     }
                     Spacer(minLength: 24)
                 }.frame(minHeight: proxy.size.height).padding(.bottom, 16)
@@ -360,15 +409,31 @@ struct MatchAwardFlowView: View {
         }
     }
 
+    /// Who has voted so far, never for whom. The poll ends at the hour or at the last ballot.
+    private func votingProgress(_ award: MatchAward, closes: Date) -> some View {
+        VStack(spacing: 8) {
+            if let voted = award.votedCount, let voters = award.voterCount, voters > 0 {
+                ProgressView(value: Double(voted), total: Double(voters))
+                    .tint(accent)
+                    .frame(width: 160)
+                Text("صوّت \(voted.tamrinNumber) من \(voters.tamrinNumber)")
+                    .font(TamrinFont.font(size: 13, weight: .medium)).foregroundStyle(.white.opacity(0.7))
+            }
+            HStack(spacing: 5) {
+                Text("ينتهي")
+                Text(closes, style: .relative)
+            }.font(TamrinFont.font(size: 12, weight: .regular)).foregroundStyle(.white.opacity(0.45))
+        }
+    }
+
     private func initialCardID(_ award: MatchAward) -> UUID? {
         if let voted = award.myVoteId { return voted }
-        if let winner = award.winners.first { return winner.id }
+        if let winner = award.winner { return winner.id }
         return award.players.count > 1 ? award.players[1].id : award.players.first?.id
     }
 
     private func resultTitle(_ award: MatchAward) -> String {
-        if award.winners.isEmpty { return String(localized: "انتهى التصويت") }
-        return award.winners.count > 1 ? String(localized: "نجوم المباراة") : String(localized: "نجمها باختياركم")
+        award.winner == nil ? String(localized: "انتهى التصويت") : String(localized: "نجمها باختياركم")
     }
 
     private func bottomAction(_ award: MatchAward) -> some View {
@@ -381,8 +446,12 @@ struct MatchAwardFlowView: View {
                     .font(TamrinFont.font(size: 12, weight: .medium)).foregroundStyle(accent)
             }
             if award.canNominate {
-                actionButton(String(localized: "نشر المرشحين · \(nominated.count)/3"), disabled: nominated.count != 3) { confirmsNomination = true }
-                Text("التصويت سرّي. النتيجة تظهر بعد 24 ساعة.").font(TamrinFont.font(size: 12, weight: .regular)).foregroundStyle(.white.opacity(0.5))
+                let tagged = nominated.filter { regions[$0] != nil }.count
+                actionButton(String(localized: "نشر المرشحين · \(nominated.count)/3"),
+                             disabled: nominated.count != 3 || tagged != 3) { confirmsNomination = true }
+                Text(nominated.count == 3 && tagged != 3
+                     ? String(localized: "حدّد منطقة كل مرشح؛ منها يبدأ إعلان الفائز.")
+                     : String(localized: "التصويت سرّي ومدته ساعة، وينتهي قبلها إذا صوّت الجميع.")).font(TamrinFont.font(size: 12, weight: .regular)).foregroundStyle(.white.opacity(0.5))
             } else if let chosen = chosenPlayer(award) {
                 actionButton(String(localized: "تم")) { dismiss() }
                 if award.canVote {
@@ -430,6 +499,12 @@ struct MatchAwardFlowView: View {
                     Text("التصويت للمسجلين في الموعد فقط")
                         .font(TamrinFont.font(size: 12, weight: .regular)).foregroundStyle(.secondary)
                 }
+            } else if award.winner != nil {
+                if revealed {
+                    MatchAwardCheersView(award: award, model: model)
+                        .padding(.horizontal, -4)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             } else if award.status == .closed {
                 Text(award.totalVotes == 0 ? String(localized: "لم تُسجّل أصوات هذه المرة.") : String(localized: "\(award.totalVotes ?? 0) أصوات · شكرًا لكل من شارك"))
                     .font(TamrinFont.font(size: 14, weight: .medium)).foregroundStyle(accent)
@@ -452,87 +527,25 @@ struct MatchAwardFlowView: View {
     }
 }
 
-private struct MatchAwardPlayerCard: View {
-    let player: MatchAwardPlayer
-    var workspaceID: UUID?
-    var isDemo = false
-    var backgroundOnly = false
-    @State private var localPortrait: UIImage?
-    @State private var rating: PlayerRatingSummary?
-
-    private var demoAsset: String? {
-        guard isDemo else { return nil }
-        switch player.name {
-        case "أحمد رشوان": return "MatchAwardDemoAhmed"
-        case "لؤي الزهراني": return "MatchAwardDemoLoai"
-        case "مراد الجهني": return "MatchAwardDemoMorad"
-        default: return nil
-        }
-    }
-    private var demoScores: PlayerRatingScores? {
-        switch demoAsset {
-        case "MatchAwardDemoAhmed": return PlayerRatingScores(pace: 71, passing: 61, shooting: 63, stamina: 78, defending: 89, awareness: 63)
-        case "MatchAwardDemoLoai": return PlayerRatingScores(pace: 81, passing: 86, shooting: 91, stamina: 77, defending: 62, awareness: 85)
-        case "MatchAwardDemoMorad": return PlayerRatingScores(pace: 90, passing: 82, shooting: 84, stamina: 81, defending: 71, awareness: 83)
-        default: return nil
-        }
-    }
-    var body: some View {
-        Group {
-            if let demoAsset {
-                card(Image(demoAsset))
-            } else if let localPortrait {
-                card(Image(uiImage: localPortrait))
-            } else if let raw = player.portraitURL, let url = URL(string: raw) {
-                AsyncImage(url: url) { phase in
-                    card(phase.image)
-                }
-            } else {
-                card(nil)
-            }
-        }
-        .task(id: player.id) {
-            localPortrait = PlayerCardLibrary.shared.portrait(for: player.userId)
-            #if DEBUG
-            // Demo portraits stay in the bundle and never generate paid images.
-            if localPortrait == nil, let raw = player.avatarURL, let url = URL(string: raw), url.isFileURL {
-                localPortrait = UIImage(contentsOfFile: url.path)
-            }
-            #endif
-        }
-        .task(id: workspaceID) {
-            guard !backgroundOnly, !isDemo, let workspaceID, let userID = player.userId else { return }
-            rating = try? await RatingService.shared.getPlayerRating(workspaceId: workspaceID, userId: userID)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("بطاقة \(player.name)، \(PlayerCardView.positionTitle(player.position))")
-    }
+/// Publishes `hasVerticalBar` inside a navigation stack whose bar is already
+/// visible, without touching that bar the way `verticalBarAware()` does.
+private struct PublishesVerticalBar: ViewModifier {
     @ViewBuilder
-    private func card(_ portrait: Image?) -> some View {
-        if backgroundOnly {
-            GeometryReader { proxy in
-                ZStack {
-                    Color(white: 0.96)
-                    if let portrait {
-                        portrait.resizable().scaledToFill()
-                            .frame(width: proxy.size.width, height: proxy.size.height)
-                            .clipped()
-                    }
-                }
-            }
+    func body(content: Content) -> some View {
+        if #available(iOS 27.1, *) {
+            content.modifier(SystemEdge())
         } else {
-        PlayerCardView(name: player.name, position: player.position,
-            overall: demoScores != nil ? (demoAsset == "MatchAwardDemoAhmed" ? 74 : 82) : (rating?.averageOverall ?? 50),
-            scores: demoScores ?? rating?.average ?? .neutral,
-            portrait: portrait, showsScores: demoScores != nil || rating?.average != nil,
-            portraitRect: demoAsset != nil ? CGRect(x: 0.1, y: 0.045, width: 0.8, height: 0.875) : nil)
-            .overlay {
-                if portrait == nil {
-                    Image(systemName: "person.fill")
-                        .resizable().scaledToFit().foregroundStyle(.black.opacity(0.08))
-                        .padding(60).offset(y: -20).allowsHitTesting(false)
-                }
-            }
+            content
+        }
     }
+
+    @available(iOS 27.1, *)
+    private struct SystemEdge: ViewModifier {
+        /// Nil wherever the system never uses a vertical bar.
+        @Environment(\.toolbarVerticalEdge) private var edge
+
+        func body(content: Content) -> some View {
+            content.environment(\.hasVerticalBar, edge != nil)
+        }
     }
 }

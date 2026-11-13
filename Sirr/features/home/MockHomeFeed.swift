@@ -397,6 +397,9 @@ final class HomeStore {
     var membersByTeam: [UUID: [FeedTeamMember]] = [:]
     var profileName: String = ""
     var playerPosition: String = ""
+    /// Sports I added on my profile and my position in each. Football's
+    /// position also lives in `playerPosition`; see `HomeStore+Sports`.
+    var mySports: [MySport] = []
     var avatarData: Data? = nil
     var stcPayNumber: String? = nil
     var paymentMethodsByTeam: [UUID: [PaymentMethodRecord]] = [:]
@@ -1338,6 +1341,7 @@ final class HomeStore {
             stcPayNumber = profile.stcPayNumber
             avatarUrl = profile.avatarUrl
         }
+        if let sports = try? await RatingService.shared.mySports() { mySports = sports }
     }
 
     /// Full refresh — workspace list + the selected team's events / members /
@@ -2843,13 +2847,14 @@ final class HomeStore {
 
         #if DEBUG
         if HomeDebugMemberFixture.isFixturePlayer(userId) {
-            return debugRatingSummary(for: userId, position: member.position)
+            return debugRatingSummary(for: userId, position: member.position, sport: currentRatingSport)
         }
         #endif
 
         return try await RatingService.shared.getPlayerRating(
             workspaceId: selectedTeamID,
-            userId: userId
+            userId: userId,
+            sport: currentRatingSport
         )
     }
 
@@ -2869,13 +2874,15 @@ final class HomeStore {
 
         #if DEBUG
         if HomeDebugMemberFixture.isEnabled {
-            return debugRatingSummary(for: currentUserID, position: playerPosition)
+            return debugRatingSummary(for: currentUserID, position: position(in: currentRatingSport) ?? "",
+                                      sport: currentRatingSport)
         }
         #endif
 
         return try await RatingService.shared.getPlayerRating(
             workspaceId: selectedTeamID,
-            userId: currentUserID
+            userId: currentUserID,
+            sport: currentRatingSport
         )
     }
 
@@ -2887,21 +2894,23 @@ final class HomeStore {
 
         #if DEBUG
         if HomeDebugMemberFixture.isFixturePlayer(userId) {
-            let before = debugRatingSummary(for: userId, position: member.position).averageOverall
+            let sport = currentRatingSport
+            let before = debugRatingSummary(for: userId, position: member.position, sport: sport).averageOverall
             HomeDebugMemberFixture.submittedRatings[userId] = scores
-            let after = debugRatingSummary(for: userId, position: member.position).averageOverall
+            let after = debugRatingSummary(for: userId, position: member.position, sport: sport).averageOverall
             if let before, let after, before != after {
                 debugRatingChanges[userId] = PlayerRatingChange(previousOverall: before,
                                                                currentOverall: after, changedAt: .now)
             }
-            return .saved(debugRatingSummary(for: userId, position: member.position))
+            return .saved(debugRatingSummary(for: userId, position: member.position, sport: sport))
         }
         #endif
 
         return try await RatingService.shared.submitPlayerRating(
             workspaceId: selectedTeamID,
             userId: userId,
-            scores: scores
+            scores: scores,
+            sport: currentRatingSport
         )
     }
 
@@ -2910,9 +2919,10 @@ final class HomeStore {
     /// life of the session, blended with the seeded ratings so the average is
     /// a crowd's. Same shape and same arithmetic as the RPC, so the sheet
     /// cannot tell the two apart.
-    private func debugRatingSummary(for playerID: UUID, position: String) -> PlayerRatingSummary {
-        let resolved = PlayerPosition.resolved(from: position)
-        let seeded = HomeDebugMemberFixture.seededRatings(for: playerID)
+    private func debugRatingSummary(for playerID: UUID, position: String,
+                                    sport: RatingSport = .football) -> PlayerRatingSummary {
+        let resolved = PlayerPosition.resolved(from: position, in: sport)
+        let seeded = HomeDebugMemberFixture.seededRatings(for: playerID, sport: sport)
         let mine = HomeDebugMemberFixture.submittedRatings[playerID]
 
         let all = seeded + (mine.map { [$0] } ?? [])
@@ -2930,7 +2940,7 @@ final class HomeStore {
         }
 
         var averaged = PlayerRatingScores.neutral
-        for attribute in PlayerAttribute.allCases {
+        for attribute in sport.attributes {
             let total = all.reduce(0) { $0 + $1[attribute] }
             averaged[attribute] = roundedMean(total: total, count: all.count)
         }

@@ -121,6 +121,7 @@ enum HomeDebugMemberFixture {
         id: volleyTeamID,
         name: "طائرة الشاطئ",
         symbol: "figure.volleyball",
+        sport: "volleyball",
         color: .blue,
         avatarData: nil,
         memberCount: 14,
@@ -574,9 +575,9 @@ enum HomeDebugMemberFixture {
     /// of «حارس» and «وسط» would read as football with the picture swapped,
     /// which is the thing these groups exist to stop.
     private static let volleySeed: [(name: String, position: String)] = [
-        ("فيصل الدوسري", "معد"), ("عبدالله القرني", "ضارب"), ("سعود المالكي", "ليبرو"),
-        ("بندر الحارثي", "صد"), ("مشعل العنزي", "ضارب"), ("تركي الرشيد", "معد"),
-        ("راكان الجهني", "صد"), ("عمر الصاعدي", "ليبرو"), ("نايف البلوي", "ضارب")
+        ("فيصل الدوسري", "معدّ"), ("عبدالله القرني", "ضارب يسار"), ("سعود المالكي", "ليبرو"),
+        ("بندر الحارثي", "صادّ"), ("مشعل العنزي", "ضارب يمين"), ("تركي الرشيد", "مستقبل"),
+        ("راكان الجهني", "صادّ"), ("عمر الصاعدي", "مستقبل"), ("نايف البلوي", "ضارب يسار")
     ]
 
     private static let basketSeed: [(name: String, position: String)] = [
@@ -820,9 +821,21 @@ enum HomeDebugMemberFixture {
         return UUID(uuidString: String(format: "F3B00000-0000-4000-8000-%012d", index + 10))!
     }
 
+    /// Position in the volleyball rosters (open game first, league second).
+    static func volleyPlayerIndex(_ id: UUID) -> Int? {
+        for base in [200, 220] {
+            for index in volleySeed.indices
+            where UUID(uuidString: String(format: "F3B00000-0000-4000-8000-%012d", base + index)) == id {
+                return index
+            }
+        }
+        return nil
+    }
+
     static func isFixturePlayer(_ id: UUID) -> Bool {
         guard isEnabled else { return false }
         return CommunityScheduleFixture.isPlayer(id)
+            || volleyPlayerIndex(id) != nil
             || (0..<rosterSeed.count).contains { playerID(at: $0) == id }
             || (0..<ownerAccountSeed.count).contains { ownerPlayerID(at: $0) == id }
     }
@@ -844,7 +857,19 @@ enum HomeDebugMemberFixture {
     /// Ratings other people already left, so the average the flow reveals is a
     /// crowd's rather than an echo of the one rating just submitted. Two per
     /// player, deterministic, spread wide enough that the six bars differ.
-    static func seededRatings(for player: UUID) -> [PlayerRatingScores] {
+    static func seededRatings(for player: UUID, sport: RatingSport = .football) -> [PlayerRatingScores] {
+        if sport == .volleyball {
+            // The volleyball group's players, rated on volleyball's six by the
+            // same spiral. The first has nobody's rating yet.
+            guard let index = volleyPlayerIndex(player), index != 0 else { return [] }
+            return (0..<2).map { rater in
+                var scores = PlayerRatingScores.neutral
+                for (offset, attribute) in sport.attributes.enumerated() {
+                    scores[attribute] = 52 + ((index * 13) + (offset * 17) + (rater * 9)) % 44
+                }
+                return scores
+            }
+        }
         if CommunityScheduleFixture.isPlayer(player) {
             return [CommunityScheduleFixture.scores(70), CommunityScheduleFixture.scores(70)]
         }

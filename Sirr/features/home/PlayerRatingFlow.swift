@@ -131,11 +131,13 @@ struct PlayerRatingFlowView: View {
         _stepIndex = State(initialValue: initial == nil ? 0 : Self.summaryIndex)
     }
 
-    private static var summaryIndex: Int { PlayerAttribute.allCases.count }
+    /// Every rated sport has six attributes, so the summary is always the seventh step.
+    private static var summaryIndex: Int { RatingSport.football.attributes.count }
+    private var attributes: [PlayerAttribute] { position.sport.attributes }
 
     private var isSummary: Bool { stepIndex >= Self.summaryIndex }
     private var attribute: PlayerAttribute? {
-        isSummary ? nil : PlayerAttribute.allCases[stepIndex]
+        isSummary ? nil : attributes[stepIndex]
     }
     private var overall: Int { scores.overall(for: position) }
 
@@ -183,13 +185,13 @@ struct PlayerRatingFlowView: View {
 
                 Text(isSummary
                      ? String(localized: "النتيجة")
-                     : String(localized: "\((stepIndex + 1).tamrinNumber) من \(PlayerAttribute.allCases.count.tamrinNumber)"))
+                     : String(localized: "\((stepIndex + 1).tamrinNumber) من \(attributes.count.tamrinNumber)"))
                     .font(TamrinFont.font(size: 13, weight: .bold))
                     .foregroundStyle(.secondary)
                     .contentTransition(.numericText())
             }
 
-            StepTrack(current: stepIndex, total: PlayerAttribute.allCases.count)
+            StepTrack(current: stepIndex, total: attributes.count)
         }
     }
 
@@ -261,9 +263,9 @@ struct PlayerRatingFlowView: View {
                 Spacer(minLength: 0)
             }
 
-            AttributeGrid(scores: scores, onSelect: { attribute in
+            AttributeGrid(scores: scores, sport: position.sport, onSelect: { attribute in
                 Haptics.selection()
-                stepIndex = PlayerAttribute.allCases.firstIndex(of: attribute) ?? 0
+                stepIndex = attributes.firstIndex(of: attribute) ?? 0
             })
 
             Label(
@@ -320,7 +322,7 @@ struct PlayerRatingFlowView: View {
 
     private var primaryTitle: String {
         if isSummary { return isSubmitting ? String(localized: "يُحفظ…") : String(localized: "قدّم التقييم") }
-        if stepIndex == PlayerAttribute.allCases.count - 1 { return String(localized: "شوف النتيجة") }
+        if stepIndex == attributes.count - 1 { return String(localized: "شوف النتيجة") }
         return String(localized: "التالي")
     }
 

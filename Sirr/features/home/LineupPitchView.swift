@@ -32,6 +32,8 @@ enum LineupSportStyle: Equatable {
     }
 
     var usesFootballFeatures: Bool { self == .football }
+    /// Peer ratings exist for every sport that has positions to weigh them by.
+    var usesRatings: Bool { self != .generic }
 }
 
 // MARK: - Pitch

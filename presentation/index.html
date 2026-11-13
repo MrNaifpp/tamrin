@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>تمرين</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-scene="intro">
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></symbol>
+    <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="currentColor"/><path d="M7 12.4l3.4 3.4L17 9" stroke="#1c1c1c" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-dir" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3.4" transform="rotate(45 12 12)" fill="currentColor"/><path d="M9 15v-3.2a1.3 1.3 0 0 1 1.3-1.3H15M13 8.2l2.3 2.3-2.3 2.3" stroke="#222" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-seal" viewBox="0 0 24 24"><path fill="currentColor" d="M12 1.5l2.6 1.9 3.2-.1 1 3 2.6 1.9-1 3 1 3-2.6 1.9-1 3-3.2-.1L12 22.5l-2.6-1.9-3.2.1-1-3-2.6-1.9 1-3-1-3 2.6-1.9 1-3 3.2.1z"/><path d="M8 12.2l2.8 2.8L16 9.6" stroke="#111" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-hourglass" viewBox="0 0 24 24"><path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" fill="currentColor"/><circle cx="12" cy="12" r="3" fill="#1c1c1c"/><path d="M4 3.5l16 17" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M5.6 2.4l16 17" stroke="#1c1c1c" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><rect x="5" y="2.5" width="14" height="19" rx="3" stroke="currentColor" stroke-width="2" fill="none"/><path d="M9 8h6M9 12h6M9 16h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-equal" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="currentColor"/><path d="M7.5 9.6h9M7.5 14.4h9" stroke="#111" stroke-width="2.3" stroke-linecap="round"/></symbol>
+    <symbol id="i-faceid" viewBox="0 0 48 48"><g fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15V10a6 6 0 0 1 6-6h5M33 4h5a6 6 0 0 1 6 6v5M44 33v5a6 6 0 0 1-6 6h-5M15 44h-5a6 6 0 0 1-6-6v-5"/><path class="fi" d="M16 18v4M32 18v4M24 18v8c0 1.5-1 2.5-2.5 2.5M16.500 32.500c4.500 3.800 10.500 3.800 15 0"/><path class="fc" d="M14 24.500l7 7L34.500 17"/></g></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.5a6.500 6.500 0 0 0-6.500 6.500v3.600L3.600 16.300c-.4.800.2 1.700 1.100 1.700h14.600c.9 0 1.500-.9 1.100-1.700L18.500 12.600V9A6.500 6.500 0 0 0 12 2.500zM9.500 19.500a2.500 2.500 0 0 0 5 0z"/></symbol>
+  </defs>
+</svg>
+
+<div id="stage">
+  <div id="bg"><img src="assets/art/IMG_7839.JPG" alt=""></div>
+  <div id="grain"></div>
+
+  <!-- المقدمة -->
+  <section id="intro" class="layer">
+    <div class="mark"><img src="assets/icons/glyph.png" alt=""></div>
+    <div class="word">تمرين</div>
+  </section>
+
+  <!-- ضوضاء القروب -->
+  <section id="chaos" class="layer"></section>
+
+  <!-- الكاميرا: البوستر وصفحة التمرين -->
+  <div id="cam">
+    <div id="poster">
+      <img class="p-art" src="assets/art/IMG_7839.JPG" alt="">
+      <img class="p-art p-blur" src="assets/art/IMG_7839.JPG" alt="">
+      <div class="p-tint"></div>
+      <div class="p-body">
+        <div class="cluster" id="cluster"></div>
+        <h2>كورة الثلاثاء</h2>
+        <p class="p-date">الثلاثاء، 17 نوفمبر، 9:00 م</p>
+        <p class="p-venue">ملعب الياسمين</p>
+      </div>
+    </div>
+
+    <div id="page">
+      <img class="art" src="assets/art/IMG_7839.JPG" alt="">
+      <img class="art blur" src="assets/art/IMG_7839.JPG" alt="">
+      <div class="shade"></div>
+      <div class="chrome">
+        <span class="gcircle"><svg style="transform:scaleX(-1)"><use href="#i-chev"/></svg></span>
+        <span class="gcircle"><svg><use href="#i-list"/></svg></span>
+      </div>
+      <div class="panel">
+        <div class="hero">
+          <h1>كورة الثلاثاء</h1>
+          <p>يوم الثلاثاء، الساعة 9:00 م</p>
+        </div>
+
+        <div class="cta">
+          <div class="applepay" id="applepay"><span class="ap-logo"></span>Pay</div>
+          <div class="state paidrow"><svg><use href="#i-seal"/></svg><b>القطة مدفوعة</b></div>
+          <div class="regbtn" id="regbtn"><svg><use href="#i-plus"/></svg>سجل في التمرين</div>
+          <div class="state seat"><svg><use href="#i-check-circle"/></svg><b>مكانك محفوظ</b><i>اعتذر</i></div>
+        </div>
+
+        <div class="dirwrap">
+          <div class="dir gcard" id="dir">
+            <svg class="d-ico"><use href="#i-dir"/></svg>
+            <span>ملعب الياسمين</span>
+            <svg class="d-chev"><use href="#i-chev"/></svg>
+          </div>
+          <div class="menu" id="menu">
+            <div class="mi" id="mi-hudhud"><span>هدهد</span><img src="assets/icons/MapAppHudhudDark.svg" alt=""></div>
+            <div class="mi"><span>خرائط قوقل</span><img src="assets/icons/MapAppGoogleMapsDark.svg" alt=""></div>
+          </div>
+        </div>
+
+        <div class="prog gcard">
+          <div class="pr-top"><span>المسجلون في الموعد</span><b><span id="count">9</span> من 14</b></div>
+          <div class="pr-bar"><i id="bar"></i></div>
+        </div>
+
+        <h3>القائمة</h3>
+        <div class="roster" id="roster"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- مسار الخرائط -->
+  <svg id="route" viewBox="0 0 1000 400" preserveAspectRatio="none">
+    <path d="M620 250 C 520 250, 470 120, 360 150 S 220 300, 130 190" />
+  </svg>
+  <div id="pin"><svg viewBox="79.28 79.28 241.44 241.44"><path fill-rule="evenodd" fill="currentColor" d="M199.999 79.2812C252.279 79.2812 294.655 121.657 294.655 173.937C294.655 193.348 288.811 211.401 278.783 226.422C258.946 256.136 227.929 278.469 211.948 310.419L209.835 314.63C207.805 318.691 203.895 320.721 199.985 320.721C196.076 320.721 192.18 318.691 190.15 314.63L188.037 310.419C172.055 278.469 141.052 256.136 121.216 226.422C111.188 211.401 105.344 193.348 105.344 173.937C105.344 121.657 147.719 79.2812 199.999 79.2812ZM199.999 123.166C171.973 123.166 149.242 145.897 149.242 173.923C149.242 201.949 171.959 224.68 199.999 224.68C228.025 224.68 250.756 201.949 250.756 173.923C250.756 145.897 228.025 123.166 199.999 123.166Z"/></svg><b>ملعب الياسمين</b><span>12 دقيقة</span></div>
+
+  <!-- التقييم -->
+  <section id="rate" class="layer">
+    <div class="r-head">
+      <div class="r-who"><span class="av">ف</span><b>فهد العتيبي</b><span class="ptag mid">وسط</span></div>
+      <div class="r-step" id="rstep">1 من 6</div>
+    </div>
+    <div class="track" id="track"></div>
+
+    <div class="r-attr" id="rattr">
+      <div class="r-label" id="rlabel">السرعة</div>
+      <div class="r-num" id="rnum">50</div>
+      <div class="ruler" id="ruler" dir="ltr"><div class="ticks" id="ticks"></div><i class="needle"></i></div>
+    </div>
+
+    <div class="r-sum" id="rsum">
+      <div class="sum-card">
+        <div class="sum-top">
+          <div class="crest" id="crest"><b id="ovr">0</b><span>الإجمالي</span></div>
+          <div class="sum-txt"><b id="band">جيد جدًا</b><span id="sumnote">محسوب بأوزان مركز وسط</span></div>
+        </div>
+        <div class="grid" id="grid"></div>
+        <div class="anon"><svg><use href="#i-eye"/></svg>التقييمات مجهولة، واللاعب يشوف متوسط تقييمه فقط.</div>
+      </div>
+      <div class="crowd" id="crowd"></div>
+    </div>
+  </section>
+
+  <!-- المعادلات -->
+  <section id="math" class="layer">
+    <div class="float" id="float"></div>
+    <div class="eqs" id="eqs"></div>
+  </section>
+
+  <!-- التشكيلة -->
+  <section id="lineup" class="layer">
+    <div class="lu-top">
+      <div class="lu-sum gcard" id="lusum"><svg><use href="#i-equal"/></svg><div><b>الفريقان متكافئان تقريبًا</b><span>قوة كل فريق موضحة من 100</span></div></div>
+      <div class="gap" id="gapbox" dir="ltr"><span>Δ = | <i id="sa">0</i> − <i id="sb">0</i> | =</span><b id="gap">0</b></div>
+    </div>
+    <div class="teams">
+      <div class="team gcard" data-t="0">
+        <div class="t-head"><i style="background:#E85C3D"></i><b>الفريق الأول</b><span class="t-n">7 لاعبين</span><span class="t-score"><b id="sc0">0</b> من 100</span></div>
+        <div class="pitch"><svg class="lines" viewBox="0 0 400 288" preserveAspectRatio="none"><rect x="2" y="2" width="396" height="284" rx="18"/><path d="M132 2a68 68 0 0 0 136 0"/><rect x="96" y="234" width="208" height="52"/><rect x="148" y="266" width="104" height="20"/></svg><div class="bands"><div class="band" data-r="3"></div><div class="band" data-r="2"></div><div class="band" data-r="1"></div><div class="band" data-r="0"></div></div></div>
+      </div>
+      <div class="team gcard" data-t="1">
+        <div class="t-head"><i style="background:#F5C740"></i><b>الفريق الثاني</b><span class="t-n">7 لاعبين</span><span class="t-score"><b id="sc1">0</b> من 100</span></div>
+        <div class="pitch"><svg class="lines" viewBox="0 0 400 288" preserveAspectRatio="none"><rect x="2" y="2" width="396" height="284" rx="18"/><path d="M132 2a68 68 0 0 0 136 0"/><rect x="96" y="234" width="208" height="52"/><rect x="148" y="266" width="104" height="20"/></svg><div class="bands"><div class="band" data-r="3"></div><div class="band" data-r="2"></div><div class="band" data-r="1"></div><div class="band" data-r="0"></div></div></div>
+      </div>
+    </div>
+    <div class="lu-bar"><span class="gpill">حفظ كمسودة</span><span class="gpill pub">نشر</span></div>
+  </section>
+
+  <!-- Apple Pay -->
+  <section id="pay" class="layer">
+    <div class="sidebtn"><i></i><span>اضغط مرتين<br>للدفع</span></div>
+    <div class="sheet">
+      <div class="sh-head"><span class="ap"><span class="ap-logo"></span>Pay</span><span class="x">✕</span></div>
+      <div class="sh-card"><span class="cardart">mada</span><div><b>مدى</b><span>•••• 4821</span></div></div>
+      <div class="sh-row"><span>كورة الثلاثاء · مقعدين</span><b>50.00 ر.س</b></div>
+      <div class="sh-row total"><span>الدفع لـ تمرين</span><b>50.00 ر.س</b></div>
+      <div class="sh-foot">
+        <svg class="face"><use href="#i-faceid"/></svg>
+        <span class="f-hint">أكّد بالزر الجانبي</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- كل اللاعبين -->
+  <section id="wall" class="layer"><div class="wallgrid" id="wallgrid"></div></section>
+
+  <!-- المشرف -->
+  <section id="admin" class="layer">
+    <div class="amount"><span>وصلت القطة</span><b><i id="money">0</i> ر.س</b><em>14 من 14 لاعب</em><div class="remindbtn gpill"><svg><use href="#i-bell"/></svg>تذكير الأعضاء بدفع القطة</div></div>
+    <div class="notes" id="notes"></div>
+  </section>
+
+  <!-- الختام -->
+  <section id="outro" class="layer">
+    <div class="next" id="next"></div>
+  </section>
+
+  <div id="caption"><span class="k"></span><h2></h2><p></p></div>
+  <div id="hud"><i id="prog"></i></div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

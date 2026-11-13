@@ -21,6 +21,7 @@ struct TeamDetailView: View {
     private var usesFootballFeatures: Bool {
         LineupSportStyle(sport: team?.sport).usesFootballFeatures
     }
+    private var usesRatings: Bool { LineupSportStyle(sport: team?.sport).usesRatings }
     private var teamPlans: [FeedPlan] { feed.teamPlans }
     private var plan: FeedPlan? { teamPlans.first { $0.id == selectedPlanID } ?? teamPlans.first }
     private var members: [FeedTeamMember] {
@@ -170,12 +171,13 @@ struct TeamDetailView: View {
                 member: shape,
                 avatarImageData: member.id == feed.currentUserID ? feed.avatarData : nil,
                 share: 0,
-                loadRating: usesFootballFeatures && shape.userId != nil
+                loadRating: usesRatings && shape.userId != nil
                     ? { try await feed.playerRating(for: shape) }
                     : nil,
-                submitRating: usesFootballFeatures && feed.canRate(shape)
+                submitRating: usesRatings && feed.canRate(shape)
                     ? { try await feed.submitPlayerRating($0, for: shape) }
                     : nil,
+                ratingSport: feed.currentRatingSport,
                 removeTitle: String(localized: "إزالة من المجموعة"),
                 onRemove: feed.isCurrentTeamOwner && member.id != feed.currentUserID
                     ? { memberAwaitingRemoval = member }

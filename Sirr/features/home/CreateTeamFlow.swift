@@ -187,6 +187,9 @@ struct CreateTeamFlow: View {
                 .animation(reduceMotion ? nil : .spring(response: 0.46, dampingFraction: 0.9), value: step)
             }
         }
+        // Gives the header's back button a bar to move into on iPhone Duo's
+        // cover screen; hidden everywhere else.
+        .verticalBarHost()
         .environment(\.layoutDirection, .tamrin)
         .interactiveDismissDisabled()
         .task {
@@ -308,22 +311,30 @@ private struct FlowHeader: View {
     let withPlayers: Bool
     let back: () -> Void
 
+    @Environment(\.hasVerticalBar) private var hasVerticalBar
+
+    private var backButton: some View {
+        Button(action: back) {
+            Image(systemName: step == .sport ? "xmark" : "chevron.backward")
+                .font(.system(size: TamrinControlMetrics.symbolSize, weight: .semibold))
+                .frame(width: TamrinControlMetrics.touchTarget, height: TamrinControlMetrics.touchTarget)
+        }
+        .accessibilityLabel(step == .sport ? String(localized: "إغلاق") : String(localized: "رجوع"))
+    }
+
     var body: some View {
         VStack(spacing: 14) {
             HStack {
                 // The last step has no way back: the exercise already exists.
+                // On iPhone Duo's cover screen the button moves to the toolbar
+                // below, and the empty slot keeps the title centred.
                 Group {
-                    if step == .invite {
+                    if step == .invite || hasVerticalBar {
                         Color.clear
                     } else {
-                        Button(action: back) {
-                            Image(systemName: step == .sport ? "xmark" : "chevron.backward")
-                                .font(.system(size: TamrinControlMetrics.symbolSize, weight: .semibold))
-                                .frame(width: TamrinControlMetrics.touchTarget, height: TamrinControlMetrics.touchTarget)
-                        }
-                        .buttonStyle(.plain)
-                        .background(TamrinTheme.glass, in: .circle)
-                        .accessibilityLabel(step == .sport ? String(localized: "إغلاق") : String(localized: "رجوع"))
+                        backButton
+                            .buttonStyle(.plain)
+                            .background(TamrinTheme.glass, in: .circle)
                     }
                 }
                 .frame(width: 58, height: TamrinControlMetrics.touchTarget)
@@ -356,6 +367,11 @@ private struct FlowHeader: View {
         .padding(.top, 12)
         .padding(.bottom, 18)
         .animation(.spring(response: 0.4, dampingFraction: 0.9), value: step)
+        .toolbar {
+            if hasVerticalBar && step != .invite {
+                ToolbarItem(placement: .cancellationAction) { backButton }
+            }
+        }
     }
 }
 

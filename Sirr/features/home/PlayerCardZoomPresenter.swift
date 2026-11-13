@@ -177,9 +177,61 @@ final class PlayerCardZoomController: UIViewController {
     }
 }
 
+/// The controls layer, hosted in a navigation stack only on iPhone Duo's cover
+/// screen. Everywhere else it stays the bare transparent layer it always was,
+/// so nothing can paint over the card host beneath it.
 private struct PlayerCardZoomControls: View {
     let close: () -> Void
     var edit: (() -> Void)?
+
+    var body: some View {
+        if #available(iOS 27.1, *) {
+            SystemEdge(close: close, edit: edit)
+        } else {
+            PlayerCardZoomControlsLayer(close: close, edit: edit)
+        }
+    }
+
+    @available(iOS 27.1, *)
+    private struct SystemEdge: View {
+        /// Nil wherever the system never uses a vertical bar.
+        @Environment(\.toolbarVerticalEdge) private var edge
+        let close: () -> Void
+        var edit: (() -> Void)?
+
+        var body: some View {
+            if edge != nil {
+                PlayerCardZoomControlsLayer(close: close, edit: edit)
+                    .verticalBarHost()
+            } else {
+                PlayerCardZoomControlsLayer(close: close, edit: edit)
+            }
+        }
+    }
+}
+
+private struct PlayerCardZoomControlsLayer: View {
+    let close: () -> Void
+    var edit: (() -> Void)?
+
+    @Environment(\.hasVerticalBar) private var hasVerticalBar
+
+    /// Floating, it carries its own glass disc; in the toolbar the system
+    /// draws the glass.
+    private func closeButton(floating: Bool) -> some View {
+        Button(action: close) {
+            let icon = Image(systemName: "xmark")
+                .font(.system(size: 18, weight: .medium))
+                .frame(width: 44, height: 44)
+            if floating {
+                icon.glassEffect(.regular.interactive(), in: .circle)
+            } else {
+                icon
+            }
+        }
+        .accessibilityLabel("إغلاق البطاقة")
+        .accessibilityIdentifier("player-card-close")
+    }
 
     var body: some View {
         ZStack {
@@ -187,22 +239,18 @@ private struct PlayerCardZoomControls: View {
                 .accessibilityHidden(true)
             VStack {
                 // Close sits on the trailing side in either language, like the
-                // create page's top bar.
-                HStack {
-                    Spacer()
-                    Button(action: close) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 18, weight: .medium))
-                            .frame(width: 44, height: 44)
-                            .glassEffect(.regular.interactive(), in: .circle)
+                // create page's top bar. On iPhone Duo's cover screen it would
+                // sit under the camera, so it moves to the toolbar below.
+                if !hasVerticalBar {
+                    HStack {
+                        Spacer()
+                        closeButton(floating: true)
+                            .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("إغلاق البطاقة")
-                    .accessibilityIdentifier("player-card-close")
+                    .environment(\.layoutDirection, .tamrin)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
                 }
-                .environment(\.layoutDirection, .tamrin)
-                .padding(.horizontal, 20)
-                .padding(.top, 12)
                 Spacer()
                 if let edit {
                     Button(action: edit) {
@@ -218,6 +266,11 @@ private struct PlayerCardZoomControls: View {
                     .environment(\.layoutDirection, .tamrin)
                     .accessibilityIdentifier("player-card-edit")
                 }
+            }
+        }
+        .toolbar {
+            if hasVerticalBar {
+                ToolbarItem(placement: .cancellationAction) { closeButton(floating: false) }
             }
         }
         .environment(\.layoutDirection, .leftToRight)

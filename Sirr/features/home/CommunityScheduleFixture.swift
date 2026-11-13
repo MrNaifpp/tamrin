@@ -21,7 +21,7 @@ enum CommunityScheduleFixture {
                                   displayName: index == 0 ? "مشرف التجربة" : firstNames[index % 10] + " " + lastNames[(index / 10) % 10] + (index >= 100 ? " \(index + 1)" : ""),
                                   role: index == 0 ? .admin : .member,
                                   isPending: false,
-                                  position: football ? PlayerPosition.allCases[index % 4].rawValue : "")
+                                  position: football ? PlayerPosition.football[index % 4].rawValue : "")
         }
     }
 

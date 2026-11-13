@@ -264,6 +264,16 @@ struct LineupVerdictBar: View {
 
 struct LineupThoughtComposer: View {
     let existing: String?
+    var title = String(localized: "خاطرتك")
+    var placeholder = String(localized: "وش في بالك عن التشكيلة؟")
+    var deleteTitle = String(localized: "حذف خاطرتي")
+    var suggestions = [
+        String(localized: "فريقنا أقوى 😤"),
+        String(localized: "جاهز 💪"),
+        String(localized: "أبي أكون حارس 🧤"),
+        String(localized: "الدفاع جدار 🧱"),
+        String(localized: "الليلة لنا 🔥")
+    ]
     /// Nil on success, or what to tell the person.
     let onSave: @MainActor (String?) async -> String?
 
@@ -273,16 +283,19 @@ struct LineupThoughtComposer: View {
     @State private var errorMessage: String?
     @FocusState private var focused: Bool
 
-    private let suggestions = [
-        String(localized: "فريقنا أقوى 😤"),
-        String(localized: "جاهز 💪"),
-        String(localized: "أبي أكون حارس 🧤"),
-        String(localized: "الدفاع جدار 🧱"),
-        String(localized: "الليلة لنا 🔥")
-    ]
-
     init(existing: String?, onSave: @escaping @MainActor (String?) async -> String?) {
         self.existing = existing
+        self.onSave = onSave
+        _text = State(initialValue: existing ?? "")
+    }
+
+    init(existing: String?, title: String, placeholder: String, deleteTitle: String,
+         suggestions: [String], onSave: @escaping @MainActor (String?) async -> String?) {
+        self.existing = existing
+        self.title = title
+        self.placeholder = placeholder
+        self.deleteTitle = deleteTitle
+        self.suggestions = suggestions
         self.onSave = onSave
         _text = State(initialValue: existing ?? "")
     }
@@ -293,7 +306,7 @@ struct LineupThoughtComposer: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 10) {
-                    TextField("وش في بالك عن التشكيلة؟", text: $text)
+                    TextField(placeholder, text: $text)
                         .font(TamrinFont.headline)
                         .focused($focused)
                         .submitLabel(.done)
@@ -335,7 +348,7 @@ struct LineupThoughtComposer: View {
                     Button(role: .destructive) {
                         save(nil)
                     } label: {
-                        Label("حذف خاطرتي", systemImage: "trash")
+                        Label(deleteTitle, systemImage: "trash")
                             .font(TamrinFont.font(size: 15, weight: .medium))
                             .frame(maxWidth: .infinity, minHeight: 44)
                     }
@@ -358,7 +371,7 @@ struct LineupThoughtComposer: View {
             .sheetContentHeight()
             .frame(maxHeight: .infinity, alignment: .top)
             .background(TamrinTheme.sheet)
-            .sheetTitle(String(localized: "خاطرتك"))
+            .sheetTitle(title)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("إلغاء", role: .cancel) { dismiss() }

@@ -62,7 +62,9 @@ struct EventDetailView: View {
     /// Captures the group behind this occurrence while its translucent details
     /// page is open. The optional itself drives the horizontal transition.
     @State private var exerciseDetailsTeamID: UUID?
+    @Environment(\.hasVerticalBar) private var hasVerticalBar
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     /// The saved split, held here so the section under the progress bar
     /// redraws the moment the lineup page closes.
     @State private var lineupPlan: LineupPlan?
@@ -185,14 +187,48 @@ struct EventDetailView: View {
     /// Nil only for a guest. A player can open their own sheet and read the
     /// anonymous group average; self-rating is prevented by the submitter.
     private func ratingLoader(for member: FeedMember) -> (@MainActor () async throws -> PlayerRatingSummary)? {
-        guard lineupSportStyle.usesFootballFeatures, member.userId != nil else { return nil }
+        guard lineupSportStyle.usesRatings, member.userId != nil else { return nil }
         return { try await feed.playerRating(for: member) }
+    }
+
+    /// Split out of `body`, which is too large for the type checker with it inline.
+    private func playerSheet(for member: FeedMember) -> PlayerDetailsSheet {
+        PlayerDetailsSheet(
+            member: member,
+            avatarImageData: avatarData(for: member),
+            share: occurrence.price,
+            seatNumber: seatNumber(of: member),
+            // A player's share and payment state are organizer-only.
+            showsPayment: feed.isCurrentTeamOwner,
+            loadRating: ratingLoader(for: member),
+            submitRating: ratingSubmitter(for: member),
+            ratingSport: feed.currentRatingSport,
+            registeredByName: registeredByName(for: member),
+            // A free exercise has nothing to chase, a guest or a manually
+            // seated player has no account to notify, and nobody needs to
+            // be reminded of their own share.
+            onRemind: feed.isCurrentTeamOwner
+                && occurrence.price > 0
+                && member.userId != nil
+                && member.userId != feed.currentUserID
+                ? { await feed.remindPayment(member, on: occurrence) }
+                : nil,
+            // The organizer may remove anyone. A member may remove a guest
+            // they added themselves, which is also what returns that seat's
+            // share to their card.
+            onRemove: feed.isCurrentTeamOwner
+                || (member.isGuest && !member.isManual
+                    && member.addedBy != nil
+                    && member.addedBy == feed.currentUserID)
+                ? { memberAwaitingRemoval = member }
+                : nil
+        )
     }
 
     private func ratingSubmitter(
         for member: FeedMember
     ) -> (@MainActor (PlayerRatingScores) async throws -> SubmitRatingResult)? {
-        guard lineupSportStyle.usesFootballFeatures, feed.canRate(member) else { return nil }
+        guard lineupSportStyle.usesRatings, feed.canRate(member) else { return nil }
         return { try await feed.submitPlayerRating($0, for: member) }
     }
 
@@ -256,7 +292,7 @@ struct EventDetailView: View {
                             .contentShape(.rect)
                             .onTapGesture { schedulePresentation?.expand() }
 
-                        contentPanel
+                        contentPanel(sideInsets: proxy.safeAreaInsets)
                             .simultaneousGesture(TapGesture().onEnded { schedulePresentation?.expand() })
                             .frame(
                                 minHeight: proxy.size.height - Self.artworkWindow,
@@ -326,61 +362,93 @@ struct EventDetailView: View {
         }
     }
 
+    /// A collapsed schedule card is one of several on screen and keeps its
+    /// floating buttons. A page drawn over this one (the exercise details or
+    /// a lineup card) brings its own toolbar items, so these step aside.
+    private var hostsChromeInVerticalBar: Bool {
+        hasVerticalBar
+            && schedulePresentation?.isExpanded != false
+            && exerciseDetailsTeamID == nil
+            && lineupCardPresentation == nil
+    }
+
+    private var closeButton: some View {
+        Button {
+            if let schedulePresentation { schedulePresentation.back() }
+            else { dismiss() }
+        } label: {
+            Label(schedulePresentation?.isExpanded == true ? String(localized: "المواعيد") : String(localized: "إغلاق"), systemImage: "chevron.backward")
+                .labelStyle(.iconOnly)
+                .font(.system(size: 17, weight: .semibold))
+                .frame(width: TamrinControlMetrics.roundButton, height: TamrinControlMetrics.roundButton)
+        }
+        .accessibilityLabel(schedulePresentation?.isExpanded == true ? String(localized: "العودة للمواعيد") : String(localized: "إغلاق"))
+    }
+
+    private var exerciseDetailsButton: some View {
+        Button {
+            guard let teamID = feed.teamID(for: occurrence) else {
+                Haptics.error()
+                return
+            }
+            feed.focusTeam(for: occurrence)
+            schedulePresentation?.expand()
+            Haptics.impact(.light)
+            withAnimation(reduceMotion ? .easeOut(duration: 0.18) : .smooth(duration: 0.36)) {
+                exerciseDetailsTeamID = teamID
+            }
+        } label: {
+            // A page of listed details, which is literally what opens:
+            // the day and time, the pitch, the money, who is in it.
+            //
+            // Not «i», which in system language means "here is a note
+            // about this screen" rather than "here is a page of its
+            // particulars". And not a clipboard: in software that glyph
+            // belongs to copy and paste before it belongs to anything a
+            // coach carries.
+            Label("تفاصيل التمرين", systemImage: "list.bullet.rectangle.portrait")
+                .labelStyle(.iconOnly)
+                .font(.system(size: 18, weight: .semibold))
+                .frame(
+                    width: TamrinControlMetrics.roundButton,
+                    height: TamrinControlMetrics.roundButton
+                )
+        }
+        .accessibilityLabel("تفاصيل التمرين")
+        .accessibilityHint("يفتح قالب التمرين وأعضاءه وطرق الدفع")
+        .disabled(feed.teamID(for: occurrence) == nil)
+    }
+
     var body: some View {
         ZStack {
             detailCanvas
                 .ignoresSafeArea()
         }
         .overlay(alignment: .topLeading) {
-            Button {
-                if let schedulePresentation { schedulePresentation.back() }
-                else { dismiss() }
-            } label: {
-                Label(schedulePresentation?.isExpanded == true ? String(localized: "المواعيد") : String(localized: "إغلاق"), systemImage: "chevron.backward")
-                    .labelStyle(.iconOnly)
-                    .font(.system(size: 17, weight: .semibold))
-                    .frame(width: TamrinControlMetrics.roundButton, height: TamrinControlMetrics.roundButton)
+            if !hostsChromeInVerticalBar {
+                closeButton
+                    .buttonStyle(ExerciseChromeButtonStyle())
+                    .padding(.horizontal, 20)
+                    .padding(.top, 6 + (schedulePresentation?.topInset ?? 0))
             }
-            .buttonStyle(ExerciseChromeButtonStyle())
-            .padding(.horizontal, 20)
-            .padding(.top, 6 + (schedulePresentation?.topInset ?? 0))
-            .accessibilityLabel(schedulePresentation?.isExpanded == true ? String(localized: "العودة للمواعيد") : String(localized: "إغلاق"))
         }
         .overlay(alignment: .topTrailing) {
-            Button {
-                guard let teamID = feed.teamID(for: occurrence) else {
-                    Haptics.error()
-                    return
-                }
-                feed.focusTeam(for: occurrence)
-                schedulePresentation?.expand()
-                Haptics.impact(.light)
-                withAnimation(reduceMotion ? .easeOut(duration: 0.18) : .smooth(duration: 0.36)) {
-                    exerciseDetailsTeamID = teamID
-                }
-            } label: {
-                // A page of listed details, which is literally what opens:
-                // the day and time, the pitch, the money, who is in it.
-                //
-                // Not «i», which in system language means "here is a note
-                // about this screen" rather than "here is a page of its
-                // particulars". And not a clipboard: in software that glyph
-                // belongs to copy and paste before it belongs to anything a
-                // coach carries.
-                Label("تفاصيل التمرين", systemImage: "list.bullet.rectangle.portrait")
-                    .labelStyle(.iconOnly)
-                    .font(.system(size: 18, weight: .semibold))
-                    .frame(
-                        width: TamrinControlMetrics.roundButton,
-                        height: TamrinControlMetrics.roundButton
-                    )
+            if !hostsChromeInVerticalBar {
+                exerciseDetailsButton
+                    .buttonStyle(ExerciseChromeButtonStyle())
+                    .padding(.horizontal, 20)
+                    .padding(.top, 6 + (schedulePresentation?.topInset ?? 0))
             }
-            .buttonStyle(ExerciseChromeButtonStyle())
-            .padding(.horizontal, 20)
-            .padding(.top, 6 + (schedulePresentation?.topInset ?? 0))
-            .accessibilityLabel("تفاصيل التمرين")
-            .accessibilityHint("يفتح قالب التمرين وأعضاءه وطرق الدفع")
-            .disabled(feed.teamID(for: occurrence) == nil)
+        }
+        // On iPhone Duo's cover screen the system keeps navigation in a
+        // vertical bar beside the camera. Floating buttons would sit under
+        // the sensor housing, so the expanded page hands them to the toolbar
+        // and the system places them in that bar.
+        .toolbar {
+            if hostsChromeInVerticalBar {
+                ToolbarItem(placement: .cancellationAction) { closeButton }
+                ToolbarItem(placement: .primaryAction) { exerciseDetailsButton }
+            }
         }
         .overlay(alignment: .top) {
             if let reminderToast {
@@ -646,6 +714,7 @@ struct EventDetailView: View {
                 responses: declinedResponses,
                 reasonDisplay: declineReasonDisplay(for:)
             )
+            .verticalBarHost()
             // A cover is opaque by default. Clearing it is what lets the page
             // sit over the exercise artwork as a blurred, dimmed overlay.
             //
@@ -740,37 +809,7 @@ struct EventDetailView: View {
                 return nil
             }
         }
-        .sheet(item: $memberInDetails) { member in
-            PlayerDetailsSheet(
-                member: member,
-                avatarImageData: avatarData(for: member),
-                share: occurrence.price,
-                seatNumber: seatNumber(of: member),
-                // A player's share and payment state are organizer-only.
-                showsPayment: feed.isCurrentTeamOwner,
-                loadRating: ratingLoader(for: member),
-                submitRating: ratingSubmitter(for: member),
-                registeredByName: registeredByName(for: member),
-                // A free exercise has nothing to chase, a guest or a manually
-                // seated player has no account to notify, and nobody needs to
-                // be reminded of their own share.
-                onRemind: feed.isCurrentTeamOwner
-                    && occurrence.price > 0
-                    && member.userId != nil
-                    && member.userId != feed.currentUserID
-                    ? { await feed.remindPayment(member, on: occurrence) }
-                    : nil,
-                // The organizer may remove anyone. A member may remove a guest
-                // they added themselves, which is also what returns that seat's
-                // share to their card.
-                onRemove: feed.isCurrentTeamOwner
-                    || (member.isGuest && !member.isManual
-                        && member.addedBy != nil
-                        && member.addedBy == feed.currentUserID)
-                    ? { memberAwaitingRemoval = member }
-                    : nil
-            )
-        }
+        .sheet(item: $memberInDetails) { member in playerSheet(for: member) }
         .alert("إزالة اللاعب؟", isPresented: Binding(
             get: { memberAwaitingRemoval != nil },
             set: { if !$0 { memberAwaitingRemoval = nil } }
@@ -807,97 +846,154 @@ struct EventDetailView: View {
     /// the blur is that container's own background rather than a band painted
     /// on the screen. Add rows or scroll and the frosted surface travels with
     /// them, so no card is ever left sitting on bare artwork.
-    private var contentPanel: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            heroTitle
-                .padding(.bottom, 6)
+    /// iPhone Duo's inner screen is wide enough for the page to stop being a
+    /// stretched phone page: the session and its actions on one side, the
+    /// people in it on the other. A collapsed schedule card is a preview and
+    /// stays a single column.
+    private var usesTwoColumns: Bool {
+        horizontalSizeClass == .regular && schedulePresentation?.isExpanded != false
+    }
 
-            if schedulePresentation == nil, feed.isOwner(of: occurrence), !isHistorical {
-                CreateSessionButton { showCreateSession = true }
-            }
+    /// The artwork runs edge to edge, but the panel keeps the screen's side
+    /// insets: on iPhone Duo's cover screen the vertical bar sits along one
+    /// side, and without them the cards slide under it and lose the even
+    /// margins they have on any other phone. Zero on an upright iPhone.
+    private func contentPanel(sideInsets: EdgeInsets) -> some View {
+        Group {
+            if usesTwoColumns {
+                VStack(alignment: .leading, spacing: 14) {
+                    heroTitle
+                        .padding(.bottom, 6)
 
-            if occurrence.isCancelled {
-                cancellationPanel
-            } else if showsOverduePaymentAction {
-                overduePaymentCTA
-            } else if isHistorical {
-                historicalStatusPanel
-            } else if !feed.isCurrentTeamOwner {
-                participationCTA
-            }
+                    // Both sides at full size, next to each other: the inner
+                    // screen has room for the whole answer at once.
+                    if showsLineup {
+                        lineupSection(sideBySide: true)
+                    }
 
-            // One row of square tiles rather than a wall of full-width rows.
-            // Whichever tiles apply share the width between them.
-            if actionTileCount > 0 {
-                HStack(spacing: 10) {
-                    if !declinedResponses.isEmpty { declinedResponsesButton }
-                    if canRemindMembers { remindMembersButton }
-                    if canShareJoinLink { shareButton }
-                    if canEditSettings { settingsButton }
+                    twoColumns
                 }
-                // Four to a row makes each tile narrow, and the full card
-                // radius turns them into near-circles; three keep the card's.
-                .environment(\.actionTileCornerRadius, actionTileCount >= 4 ? 18 : TamrinCard.cornerRadius)
-            }
-
-            // Full width under the tiles, and titled with the venue itself when
-            // we know its name: getting there is one destination, not a choice
-            // among three, and the pitch's name says more than "الاتجاهات".
-            if hasDirections { directionsButton }
-
-            // Nobody can register yet, so a member has no count to read.
-            if pendingOpening == nil || feed.isCurrentTeamOwner {
-                progressPanel
-            }
-
-            if isHistorical, !occurrence.isCancelled {
-                MatchAwardEntryView(eventID: occurrence.id, artName: artName) { EmptyView() }
-            }
-
-            // Between the count and the names: the split is what the organizer
-            // does once he knows how many showed up, and before he reads the
-            // list person by person.
-            if showsLineup {
-                lineupSection
-            }
-
-            // Until registration opens, the time left stands where the list
-            // will be. The organizer keeps the list under it.
-            if let opensAt = pendingOpening {
-                RegistrationCountdownPanel(
-                    opensAt: opensAt,
-                    isOpening: isOpeningRegistration,
-                    onOpenNow: openNowAction
-                )
-                .padding(.top, 8)
-                .transition(.blurReplace)
-            }
-
-            if pendingOpening == nil || feed.isCurrentTeamOwner {
-                registrationRequestsSection
-
-                Text("القائمة")
-                    .font(TamrinFont.font(size: 15, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.75))
-                    .padding(.top, 8)
-                    .padding(.horizontal, 4)
-
-                // Above the names, not after them: the organizer reaches it
-                // without scrolling past a full roster.
-                if canRegisterManually {
-                    manualAddButton
+            } else {
+                VStack(alignment: .leading, spacing: 14) {
+                    summaryColumn
+                    listColumn
                 }
-
-                rosterRows
-
-                waitlistSection
             }
         }
         .animation(.smooth(duration: 0.35), value: pendingOpening)
         .padding(.horizontal, 20)
+        .padding(.leading, sideInsets.leading)
+        .padding(.trailing, sideInsets.trailing)
         .padding(.top, 26)
         .padding(.bottom, 40)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var twoColumns: some View {
+        HStack(alignment: .top, spacing: 28) {
+            VStack(alignment: .leading, spacing: 14) {
+                summaryColumn
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 14) {
+                listColumn
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private var summaryColumn: some View {
+        // In two columns the title spans both, above them.
+        if !usesTwoColumns {
+            heroTitle
+                .padding(.bottom, 6)
+        }
+
+        if schedulePresentation == nil, feed.isOwner(of: occurrence), !isHistorical {
+            CreateSessionButton { showCreateSession = true }
+        }
+
+        if occurrence.isCancelled {
+            cancellationPanel
+        } else if showsOverduePaymentAction {
+            overduePaymentCTA
+        } else if isHistorical {
+            historicalStatusPanel
+        } else if !feed.isCurrentTeamOwner {
+            participationCTA
+        }
+
+        // One row of square tiles rather than a wall of full-width rows.
+        // Whichever tiles apply share the width between them.
+        if actionTileCount > 0 {
+            HStack(spacing: 10) {
+                if !declinedResponses.isEmpty { declinedResponsesButton }
+                if canRemindMembers { remindMembersButton }
+                if canShareJoinLink { shareButton }
+                if canEditSettings { settingsButton }
+            }
+            // Four to a row makes each tile narrow, and the full card
+            // radius turns them into near-circles; three keep the card's.
+            .environment(\.actionTileCornerRadius, actionTileCount >= 4 ? 18 : TamrinCard.cornerRadius)
+        }
+
+        // Full width under the tiles, and titled with the venue itself when
+        // we know its name: getting there is one destination, not a choice
+        // among three, and the pitch's name says more than "الاتجاهات".
+        if hasDirections { directionsButton }
+
+        // Nobody can register yet, so a member has no count to read.
+        if pendingOpening == nil || feed.isCurrentTeamOwner {
+            progressPanel
+        }
+
+        if isHistorical, !occurrence.isCancelled {
+            MatchAwardEntryView(eventID: occurrence.id, artName: artName) { EmptyView() }
+        }
+
+        // Between the count and the names: the split is what the organizer
+        // does once he knows how many showed up, and before he reads the
+        // list person by person.
+        if showsLineup, !usesTwoColumns {
+            lineupSection(sideBySide: false)
+        }
+
+        // Until registration opens, the time left stands where the list
+        // will be. The organizer keeps the list under it.
+        if let opensAt = pendingOpening {
+            RegistrationCountdownPanel(
+                opensAt: opensAt,
+                isOpening: isOpeningRegistration,
+                onOpenNow: openNowAction
+            )
+            .padding(.top, 8)
+            .transition(.blurReplace)
+        }
+    }
+
+    @ViewBuilder
+    private var listColumn: some View {
+        if pendingOpening == nil || feed.isCurrentTeamOwner {
+            registrationRequestsSection
+
+            Text("القائمة")
+                .font(TamrinFont.font(size: 15, weight: .medium))
+                .foregroundStyle(.white.opacity(0.75))
+                .padding(.top, 8)
+                .padding(.horizontal, 4)
+
+            // Above the names, not after them: the organizer reaches it
+            // without scrolling past a full roster.
+            if canRegisterManually {
+                manualAddButton
+            }
+
+            rosterRows
+
+            waitlistSection
+        }
     }
 
     /// Transparent above the panel, then a long dissolve into full frost. The
@@ -1596,12 +1692,24 @@ struct EventDetailView: View {
     }
 
     @ViewBuilder
-    private var lineupSection: some View {
-        Text("التشكيلة")
-            .font(TamrinFont.font(size: 15, weight: .medium))
-            .foregroundStyle(.white.opacity(0.75))
-            .padding(.top, 8)
-            .padding(.horizontal, 4)
+    private func lineupSection(sideBySide: Bool) -> some View {
+        HStack(spacing: 8) {
+            Text("التشكيلة")
+                .font(TamrinFont.font(size: 15, weight: .medium))
+                .foregroundStyle(.white.opacity(0.75))
+            // Only the organizer can see a draft, so only he is told it is one.
+            if displayedLineup != nil, feed.isOwner(of: occurrence),
+               !LineupStore.isPublished(eventID: occurrence.id) {
+                Label("مسودة، ما يشوفها غيرك", systemImage: "eye.slash")
+                    .font(TamrinFont.font(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(.white.opacity(0.12), in: .capsule)
+            }
+        }
+        .padding(.top, 8)
+        .padding(.horizontal, 4)
 
         if let teams = displayedLineup {
             // Each side is one card you press to go in — one showing its pitch,
@@ -1615,35 +1723,43 @@ struct EventDetailView: View {
             // default for anyone not in the split — an organizer who is not
             // playing, or someone reading before he registers.
             let openSide = mySide(in: teams) ?? .first
-            ForEach(LineupSide.allCases) { side in
-                let card = LineupTeamCard(
-                    side: side,
-                    players: teams[side],
-                    isExpanded: side == openSide,
-                    sportStyle: lineupSportStyle,
-                    onOpen: { openLineup(from: .card(side)) },
-                    showsLevel: false,
-                    thoughts: feed.lineupThoughtsBySeat(for: occurrence)
-                )
-                .clipShape(TamrinCard.shape)
-
-                let isPresentedCard = lineupCardPresentation == side
-                card
-                    .matchedGeometryEffect(
-                        id: LineupZoomSource.card(side),
-                        in: lineupZoom,
-                        properties: .frame,
-                        anchor: .center,
-                        // Hand ownership to the always-visible overlay hero on
-                        // open, then back to this hidden anchor on close.
-                        isSource: !isPresentedCard || !lineupCardExpanded
+            // Side by side there is room for both pitches, so neither rests
+            // folded under the other.
+            let layout = sideBySide
+                ? AnyLayout(HStackLayout(alignment: .top, spacing: 12))
+                : AnyLayout(VStackLayout(spacing: 14))
+            layout {
+                ForEach(LineupSide.allCases) { side in
+                    let card = LineupTeamCard(
+                        side: side,
+                        players: teams[side],
+                        isExpanded: sideBySide || side == openSide,
+                        sportStyle: lineupSportStyle,
+                        onOpen: { openLineup(from: .card(side)) },
+                        showsLevel: false,
+                        thoughts: feed.lineupThoughtsBySeat(for: occurrence)
                     )
-                    // Keep the source's geometry alive without crossfading a
-                    // second card over the hero while either flight is moving.
-                    .opacity(isPresentedCard ? 0 : 1)
-                    // Wallet's stacked card is four points narrower per side
-                    // than the detail card, giving the flight a 1.023× breath.
-                    .padding(.horizontal, 4)
+                    .clipShape(TamrinCard.shape)
+
+                    let isPresentedCard = lineupCardPresentation == side
+                    card
+                        .matchedGeometryEffect(
+                            id: LineupZoomSource.card(side),
+                            in: lineupZoom,
+                            properties: .frame,
+                            anchor: .center,
+                            // Hand ownership to the always-visible overlay hero on
+                            // open, then back to this hidden anchor on close.
+                            isSource: !isPresentedCard || !lineupCardExpanded
+                        )
+                        // Keep the source's geometry alive without crossfading a
+                        // second card over the hero while either flight is moving.
+                        .opacity(isPresentedCard ? 0 : 1)
+                        // Wallet's stacked card is four points narrower per side
+                        // than the detail card, giving the flight a 1.023× breath.
+                        .padding(.horizontal, sideBySide ? 0 : 4)
+                        .frame(maxWidth: .infinity)
+                }
             }
         } else if canBuildLineup {
             buildLineupButton
@@ -2707,6 +2823,7 @@ private struct DeclinedResponsesPage: View {
     let reasonDisplay: (EventMemberResponseRecord) -> String
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.hasVerticalBar) private var hasVerticalBar
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -2724,8 +2841,34 @@ private struct DeclinedResponsesPage: View {
             .padding(.bottom, 40)
         }
         .safeAreaInset(edge: .top) { topBar }
+        // iPhone Duo's cover screen: the close button would sit under the
+        // camera, so the system places it in its vertical bar instead.
+        .toolbar {
+            if hasVerticalBar {
+                ToolbarItem(placement: .cancellationAction) { closeButton }
+            }
+        }
+        // The page sits in the vertical bar's navigation stack, which paints
+        // its own background. Clearing it keeps the cover's blurred, dimmed
+        // presentation background visible on every iPhone.
+        .containerBackground(.clear, for: .navigation)
         .environment(\.layoutDirection, .tamrin)
         .colorScheme(.dark)
+    }
+
+    private var closeButton: some View {
+        Button {
+            dismiss()
+        } label: {
+            Label("إغلاق", systemImage: "xmark")
+                .labelStyle(.iconOnly)
+                .font(.system(size: 17, weight: .semibold))
+                .frame(
+                    width: TamrinControlMetrics.glassIconContent,
+                    height: TamrinControlMetrics.glassIconContent
+                )
+        }
+        .accessibilityLabel("إغلاق")
     }
 
     private var topBar: some View {
@@ -2734,24 +2877,15 @@ private struct DeclinedResponsesPage: View {
                 .font(TamrinFont.font(size: 17, weight: .bold))
                 .foregroundStyle(.white)
 
-            HStack {
-                Spacer(minLength: 0)
+            if !hasVerticalBar {
+                HStack {
+                    Spacer(minLength: 0)
 
-                Button {
-                    dismiss()
-                } label: {
-                    Label("إغلاق", systemImage: "xmark")
-                        .labelStyle(.iconOnly)
-                        .font(.system(size: 17, weight: .semibold))
-                        .frame(
-                            width: TamrinControlMetrics.glassIconContent,
-                            height: TamrinControlMetrics.glassIconContent
-                        )
+                    closeButton
+                        .buttonStyle(.glass)
+                        .buttonBorderShape(.circle)
+                        .controlSize(.regular)
                 }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .controlSize(.regular)
-                .accessibilityLabel("إغلاق")
             }
         }
         .padding(.horizontal, 20)

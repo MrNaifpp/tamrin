@@ -8,7 +8,23 @@ struct MatchAwardPlayer: Codable, Identifiable, Equatable {
     var position: String = ""
     var portraitURL: String?
     var avatarURL: String?
+    /// One of the thirteen Saudi regions (`sa-01`…); the walkout opens on it.
+    var regionId: String?
     var votes: Int?
+}
+
+/// One per teammate: an emoji, a short note, or both.
+struct MatchAwardCheer: Codable, Identifiable, Equatable {
+    let userId: UUID
+    let name: String
+    var avatarURL: String?
+    var emoji: String?
+    var note: String?
+    var updatedAt: Date?
+    var id: UUID { userId }
+
+    static let emoji = ["👏", "🔥", "🐐", "💪", "😂", "❤️"]
+    static let maximumLength = 60
 }
 
 struct MatchAward: Codable, Identifiable {
@@ -22,10 +38,18 @@ struct MatchAward: Codable, Identifiable {
     var closesAt: Date?
     var totalVotes: Int?
     var myVoteId: UUID?
+    var votedCount: Int?
+    var voterCount: Int?
+    /// Decided on the server: most votes, and a tie goes to whoever got there first.
+    var winnerId: UUID?
+    var canCheer: Bool?
+    var cheers: [MatchAwardCheer]?
+    var myCheer: MyCheer?
+    struct MyCheer: Codable, Equatable { var emoji: String?; var note: String? }
     var id: UUID { eventId }
-    var winners: [MatchAwardPlayer] {
-        guard status == .closed, let highest = players.compactMap(\.votes).max(), highest > 0 else { return [] }
-        return players.filter { $0.votes == highest }
+    var winner: MatchAwardPlayer? {
+        guard status == .closed, let winnerId else { return nil }
+        return players.first { $0.id == winnerId }
     }
     var actionTitle: String {
         switch status {
@@ -53,10 +77,18 @@ final class MatchAwardService {
         let response = try await client.rpc("get_my_match_awards").execute()
         return try EventService.makePostgresDecoder().decode([MatchAward].self, from: response.data)
     }
-    func nominate(_ eventID: UUID, players: [UUID]) async throws -> MatchAward {
+    func nominate(_ eventID: UUID, players: [UUID], regions: [String?]) async throws -> MatchAward {
         try await call("nominate_match_award", params: [
             "p_event_id": .string(eventID.uuidString),
-            "p_participant_ids": .array(players.map { .string($0.uuidString) })
+            "p_participant_ids": .array(players.map { .string($0.uuidString) }),
+            "p_region_ids": .array(regions.map { $0.map(AnyJSON.string) ?? .null })
+        ])
+    }
+    func cheer(_ eventID: UUID, emoji: String?, note: String?) async throws -> MatchAward {
+        try await call("cheer_match_award", params: [
+            "p_event_id": .string(eventID.uuidString),
+            "p_emoji": emoji.map(AnyJSON.string) ?? .null,
+            "p_note": note.map(AnyJSON.string) ?? .null
         ])
     }
     func vote(_ eventID: UUID, player: UUID) async throws -> MatchAward {

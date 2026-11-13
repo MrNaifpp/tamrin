@@ -667,7 +667,9 @@ struct DesignerHomeView: View {
                     }
                 }
                 .environment(\.layoutDirection, .tamrin)
-                .toolbar(.hidden, for: .navigationBar)
+                // Hidden everywhere except iPhone Duo's cover screen, where
+                // the header hands its add and profile controls to this bar.
+                .verticalBarAware()
                 .overlay { paymentArchiveOverlay }
                 .onPreferenceChange(PaymentArchiveFrames.self) { archiveFrames = $0 }
                 .allowsHitTesting(!archiveReturned)
@@ -701,6 +703,7 @@ struct DesignerHomeView: View {
                                 },
                                 initiallyShowsRegistration: registrationEntryEventID == occ.id
                             )
+                                .verticalBarHost()
                                 .navigationTransition(.zoom(sourceID: occ.id, in: cardZoom))
                         }
                     case .workspace(let team, let createSession):
@@ -1187,8 +1190,109 @@ private struct HomeTopBar: View {
     let openPlan: () -> Void
     let openProfile: () -> Void
 
+    @Environment(\.hasVerticalBar) private var hasVerticalBar
+
     /// One size for both controls, so they read as a pair.
     private static let controlDiameter: CGFloat = 52
+
+    /// The avatar's size as a toolbar item in iPhone Duo's vertical bar.
+    private static let toolbarAvatarDiameter: CGFloat = 32
+
+    /// Drawn as the header's glass disc here, and as a plain symbol when the
+    /// system places it in the vertical bar.
+    private var addButton: some View {
+        Button(action: openAdd) {
+            Label("إضافة تمرين", systemImage: "plus")
+        }
+        .accessibilityLabel("إضافة تمرين")
+    }
+
+    /// The vertical bar takes only image items: a custom view (the avatar
+    /// drawn by `MemberAvatar`) stays behind in a horizontal bar. So in the
+    /// bar the photo travels as an already-cropped image.
+    @State private var toolbarAvatar: UIImage?
+
+    private var toolbarAvatarSource: String {
+        "\(hasVerticalBar)|\(profileImageData?.count ?? 0)|\(profileImageUrl ?? "")"
+    }
+
+    private var profileToolbarButton: some View {
+        Button(action: openProfile) {
+            Label {
+                Text("الملف الشخصي والإعدادات")
+            } icon: {
+                toolbarAvatar.map { Image(uiImage: $0).renderingMode(.original) }
+                    ?? Image(systemName: "person.crop.circle")
+            }
+        }
+        .accessibilityLabel("الملف الشخصي والإعدادات")
+    }
+
+    private func loadToolbarAvatar() async {
+        var photo: UIImage?
+        if let profileImageData {
+            photo = UIImage(data: profileImageData)
+        } else if let profileImageUrl, let url = URL(string: profileImageUrl) {
+            if url.isFileURL {
+                photo = UIImage(contentsOfFile: url.path)
+            } else if let (data, _) = try? await URLSession.shared.data(from: url) {
+                photo = UIImage(data: data)
+            }
+        }
+        toolbarAvatar = photo.map { Self.circular($0, diameter: Self.toolbarAvatarDiameter) }
+    }
+
+    private static func circular(_ image: UIImage, diameter: CGFloat) -> UIImage {
+        let size = CGSize(width: diameter, height: diameter)
+        return UIGraphicsImageRenderer(size: size).image { _ in
+            UIBezierPath(ovalIn: CGRect(origin: .zero, size: size)).addClip()
+            // Fill the circle, cropping the longer side, as the avatar does.
+            let scale = max(diameter / image.size.width, diameter / image.size.height)
+            let drawn = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+            image.draw(in: CGRect(
+                x: (diameter - drawn.width) / 2,
+                y: (diameter - drawn.height) / 2,
+                width: drawn.width,
+                height: drawn.height
+            ))
+        }
+    }
+
+    private func profileButton(diameter: CGFloat) -> some View {
+        Button(action: openProfile) {
+            Group {
+                if profileImageData != nil || profileImageUrl != nil {
+                    MemberAvatar(
+                        name: profileName,
+                        size: diameter,
+                        imageData: profileImageData,
+                        imageUrl: profileImageUrl
+                    )
+                } else {
+                    Circle()
+                        .fill(
+                            isOnArtwork
+                                ? Color.white.opacity(0.92)
+                                : Color(uiColor: .secondarySystemBackground)
+                        )
+                        .frame(width: diameter, height: diameter)
+                        .overlay {
+                            if profileName.isEmpty {
+                                Image(systemName: "person.fill")
+                                    .font(.system(size: diameter * 18 / Self.controlDiameter, weight: .semibold))
+                                    .foregroundStyle(TamrinTheme.ink.opacity(0.7))
+                            } else {
+                                Text(String(profileName.prefix(1)))
+                                    .font(TamrinFont.font(size: diameter * 18 / Self.controlDiameter, weight: .bold))
+                                    .foregroundStyle(TamrinTheme.ink)
+                            }
+                        }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("الملف الشخصي والإعدادات")
+    }
 
     var body: some View {
         // The section title sits on the leading edge (the right in Arabic,
@@ -1237,60 +1341,53 @@ private struct HomeTopBar: View {
 
             Spacer(minLength: 12)
 
-            // The system's own glass, not a tinted disc with a hairline drawn
-            // round it: it picks up what is behind it, and `interactive` gives
-            // it the platform's press response rather than a spring of ours.
-            //
-            // The material applied to a fixed frame, not `buttonStyle(.glass)`:
-            // that style pads its own label, so the control came out 57pt
-            // against the avatar's 44 and the two stopped reading as a pair.
-            Button(action: openAdd) {
-                Image(systemName: "plus")
-                    .font(.system(size: 22, weight: .semibold))
-                    .frame(width: Self.controlDiameter, height: Self.controlDiameter)
-                    .glassEffect(.regular.interactive(), in: .circle)
-                    .contentShape(.circle)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("إضافة تمرين")
+            // On iPhone Duo's cover screen both controls would sit under the
+            // camera, so they move to the toolbar below and the system places
+            // them in its vertical bar. The title stays where it is.
+            if !hasVerticalBar {
+                // The system's own glass, not a tinted disc with a hairline drawn
+                // round it: it picks up what is behind it, and `interactive` gives
+                // it the platform's press response rather than a spring of ours.
+                //
+                // The material applied to a fixed frame, not `buttonStyle(.glass)`:
+                // that style pads its own label, so the control came out 57pt
+                // against the avatar's 44 and the two stopped reading as a pair.
+                addButton
+                    .labelStyle(HomeGlassControlLabelStyle(diameter: Self.controlDiameter))
+                    .buttonStyle(.plain)
 
-            Button(action: openProfile) {
-                Group {
-                    if profileImageData != nil || profileImageUrl != nil {
-                        MemberAvatar(
-                            name: profileName,
-                            size: Self.controlDiameter,
-                            imageData: profileImageData,
-                            imageUrl: profileImageUrl
-                        )
-                    } else {
-                        Circle()
-                            .fill(
-                                isOnArtwork
-                                    ? Color.white.opacity(0.92)
-                                    : Color(uiColor: .secondarySystemBackground)
-                            )
-                            .frame(width: Self.controlDiameter, height: Self.controlDiameter)
-                            .overlay {
-                                if profileName.isEmpty {
-                                    Image(systemName: "person.fill")
-                                        .font(.system(size: 18, weight: .semibold))
-                                        .foregroundStyle(TamrinTheme.ink.opacity(0.7))
-                                } else {
-                                    Text(String(profileName.prefix(1)))
-                                        .font(TamrinFont.font(size: 18, weight: .bold))
-                                        .foregroundStyle(TamrinTheme.ink)
-                                }
-                            }
-                    }
-                }
+                profileButton(diameter: Self.controlDiameter)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("الملف الشخصي والإعدادات")
+        }
+        .toolbar {
+            if hasVerticalBar {
+                // Two separate controls, each on its own glass, with the
+                // photo right after the add button.
+                ToolbarItem(placement: .primaryAction) { addButton }
+                ToolbarSpacer(.fixed, placement: .primaryAction)
+                ToolbarItem(placement: .primaryAction) { profileToolbarButton }
+            }
+        }
+        .task(id: toolbarAvatarSource) {
+            guard hasVerticalBar else { return }
+            await loadToolbarAvatar()
         }
         .environment(\.layoutDirection, .tamrin)
         .contentTransition(.opacity)
         .animation(.easeInOut(duration: 0.25), value: sectionTitle)
+    }
+}
+
+/// The header's `+` as a glass disc the same size as the avatar beside it.
+private struct HomeGlassControlLabelStyle: LabelStyle {
+    let diameter: CGFloat
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.icon
+            .font(.system(size: 22, weight: .semibold))
+            .frame(width: diameter, height: diameter)
+            .glassEffect(.regular.interactive(), in: .circle)
+            .contentShape(.circle)
     }
 }
 

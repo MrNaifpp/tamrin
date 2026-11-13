@@ -102,10 +102,37 @@ struct UnscheduledExerciseView: View {
     let team: FeedTeam
     let artName: String
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.hasVerticalBar) private var hasVerticalBar
     @State private var showsDetails = false
     let onCreate: () -> Void
 
     var body: some View { emptyContent }
+
+    /// The details page drawn over this one brings its own toolbar items, so
+    /// these step aside while it is open.
+    private var hostsChromeInVerticalBar: Bool {
+        hasVerticalBar && !showsDetails
+    }
+
+    private var closeButton: some View {
+        Button { dismiss() } label: {
+            Label("إغلاق", systemImage: "chevron.backward")
+                .labelStyle(.iconOnly)
+                .frame(width: TamrinControlMetrics.glassIconContent,
+                       height: TamrinControlMetrics.glassIconContent)
+        }
+        .accessibilityLabel("إغلاق")
+    }
+
+    private var detailsButton: some View {
+        Button { showsDetails = true } label: {
+            Label("تفاصيل التمرين", systemImage: "list.bullet.rectangle.portrait")
+                .labelStyle(.iconOnly)
+                .frame(width: TamrinControlMetrics.glassIconContent,
+                       height: TamrinControlMetrics.glassIconContent)
+        }
+        .accessibilityLabel("تفاصيل التمرين")
+    }
 
     private var emptyContent: some View {
         GeometryReader { proxy in
@@ -150,27 +177,25 @@ struct UnscheduledExerciseView: View {
         }
         .ignoresSafeArea()
         .overlay(alignment: .topLeading) {
-            if !showsDetails {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.backward")
-                        .frame(width: TamrinControlMetrics.glassIconContent,
-                               height: TamrinControlMetrics.glassIconContent)
-                }
-                .buttonStyle(.glass).buttonBorderShape(.circle)
-                .accessibilityLabel("إغلاق")
-                .padding(.horizontal, 20).padding(.top, 6)
+            if !showsDetails && !hasVerticalBar {
+                closeButton
+                    .buttonStyle(.glass).buttonBorderShape(.circle)
+                    .padding(.horizontal, 20).padding(.top, 6)
             }
         }
         .overlay(alignment: .topTrailing) {
-            if !showsDetails {
-                Button { showsDetails = true } label: {
-                    Image(systemName: "list.bullet.rectangle.portrait")
-                        .frame(width: TamrinControlMetrics.glassIconContent,
-                               height: TamrinControlMetrics.glassIconContent)
-                }
-                .buttonStyle(.glass).buttonBorderShape(.circle)
-                .accessibilityLabel("تفاصيل التمرين")
-                .padding(.horizontal, 20).padding(.top, 6)
+            if !showsDetails && !hasVerticalBar {
+                detailsButton
+                    .buttonStyle(.glass).buttonBorderShape(.circle)
+                    .padding(.horizontal, 20).padding(.top, 6)
+            }
+        }
+        // iPhone Duo's cover screen: the floating buttons would sit under the
+        // camera, so the system places them in its vertical bar instead.
+        .toolbar {
+            if hostsChromeInVerticalBar {
+                ToolbarItem(placement: .cancellationAction) { closeButton }
+                ToolbarItem(placement: .primaryAction) { detailsButton }
             }
         }
         .environment(\.layoutDirection, .tamrin)

@@ -141,6 +141,13 @@ struct ExerciseScheduleView: View {
     }
 
     var body: some View {
+        // The stack exists for iPhone Duo's vertical bar, where the expanded
+        // date's toolbar items live. Everywhere else its bar stays hidden and
+        // the dates draw their own floating buttons.
+        scheduleCanvas.verticalBarHost()
+    }
+
+    private var scheduleCanvas: some View {
         GeometryReader { host in
             GeometryReader { geometry in
                 ZStack {

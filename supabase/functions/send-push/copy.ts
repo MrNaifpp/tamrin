@@ -11,9 +11,13 @@ export function copyFor(
     case "match_award_nominate":
       return { title: "من كان نجمها؟ 🏆", body: `انتهى ${eventName}. رشّح ثلاثة لاعبين لرجل المباراة وخلّ الفريق يختار.` };
     case "match_award_vote":
-      return { title: "صوّت لرجل المباراة 🏆", body: `وصلت ترشيحات ${eventName}. اختر نجمك؛ صوتك سرّي والتصويت مفتوح ٢٤ ساعة.` };
+      return { title: "صوّت لرجل المباراة 🏆", body: `وصلت ترشيحات ${eventName}. اختر نجمك؛ صوتك سرّي والتصويت مفتوح ساعة واحدة.` };
     case "match_award_result":
-      return { title: "نتيجة رجل المباراة جاهزة 🏆", body: `انتهى تصويت ${eventName}. افتح وشوف النتيجة.` };
+      return { title: "رجل المباراة انكشف 🏆", body: `انتهى تصويت ${eventName}. افتح وشوف مين طلع.` };
+    case "match_award_won":
+      return { title: "أنت رجل المباراة 🏆", body: `اختارك الفريق نجم ${eventName}. افتح وشوف بطاقتك.` };
+    case "match_award_cheered":
+      return { title: "الفريق يهنّيك 👏", body: `وصلتك تهاني على رجل المباراة في ${eventName}.` };
     case "payment_submitted":
       return {
         title: "طلب انضمام جديد 🎉",
